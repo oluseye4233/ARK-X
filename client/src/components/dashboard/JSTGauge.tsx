@@ -44,7 +44,7 @@ export function JSTGauge({ score, jobsScore, skillsScore, talentScore }: JSTGaug
         JST Index Valuation
       </h3>
 
-      <div className="relative w-64 h-64 flex items-center justify-center">
+      <div className="relative w-64 h-64 flex items-center justify-center group">
         {/* SVG Gauge */}
         <svg
           height={radius * 2}
@@ -72,11 +72,11 @@ export function JSTGauge({ score, jobsScore, skillsScore, talentScore }: JSTGaug
             strokeDasharray={`${arcLength} ${circumference}`}
             initial={{ strokeDashoffset: arcLength }}
             animate={{ strokeDashoffset }}
-            transition={{ duration: 1.5, ease: "easeOut" }}
+            transition={{ duration: 1.5, ease: "easeOut", delay: 0.2 }}
             r={normalizedRadius}
             cx={radius}
             cy={radius}
-            className="text-primary"
+            className="text-primary transition-all duration-300 group-hover:drop-shadow-[0_0_12px_hsl(var(--primary)_/_0.8)]"
             strokeLinecap="round"
             style={{ 
               filter: "drop-shadow(0 0 6px hsl(var(--primary) / 0.5))"
@@ -85,7 +85,7 @@ export function JSTGauge({ score, jobsScore, skillsScore, talentScore }: JSTGaug
         </svg>
 
         {/* Center Text */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center mt-4">
+        <div className="absolute inset-0 flex flex-col items-center justify-center mt-4 transition-transform duration-300 group-hover:scale-105">
           <span className="text-sm font-mono text-muted-foreground uppercase tracking-widest">Composite</span>
           <span className="text-6xl font-display font-black text-white neon-text leading-none">
             {animatedScore}
@@ -96,15 +96,15 @@ export function JSTGauge({ score, jobsScore, skillsScore, talentScore }: JSTGaug
 
       {/* Breakdown */}
       <div className="w-full mt-6 grid grid-cols-3 gap-4">
-        <div className="flex flex-col items-center">
+        <div className="flex flex-col items-center p-2 rounded hover:bg-white/5 transition-colors">
           <span className="text-xs font-mono text-muted-foreground mb-1">JOBS</span>
           <span className="font-display font-bold text-lg text-white">{jobsScore}</span>
         </div>
-        <div className="flex flex-col items-center border-x border-white/10">
+        <div className="flex flex-col items-center border-x border-white/10 p-2 hover:bg-white/5 transition-colors">
           <span className="text-xs font-mono text-muted-foreground mb-1">SKILLS</span>
           <span className="font-display font-bold text-lg text-white">{skillsScore}</span>
         </div>
-        <div className="flex flex-col items-center">
+        <div className="flex flex-col items-center p-2 rounded hover:bg-white/5 transition-colors">
           <span className="text-xs font-mono text-muted-foreground mb-1">TALENT</span>
           <span className="font-display font-bold text-lg text-white">{talentScore}</span>
         </div>

@@ -65,7 +65,7 @@ export function TransferabilityRadar({ data }: TransferabilityRadarProps) {
               fill="hsl(var(--primary))"
               fillOpacity={0.2}
               isAnimationActive={true}
-              animationBegin={200}
+              animationBegin={400}
               animationDuration={1500}
               animationEasing="ease-out"
             />

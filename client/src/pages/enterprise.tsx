@@ -97,11 +97,16 @@ export default function EnterprisePage() {
           </h3>
           <div className="space-y-4">
             {MOCK_ENTERPRISE_DATA.departmentHeatmap.map((dept, i) => (
-              <div key={i} className={`p-4 rounded-lg border flex items-center justify-between ${dept.color}`}>
+              <div key={i} className={`p-4 rounded-lg border flex items-center justify-between hover:scale-[1.02] transition-transform cursor-default ${dept.color}`}>
                 <span className="font-sans font-medium text-white">{dept.dept}</span>
                 <div className="flex items-center gap-4">
                   <div className="w-32 h-2 bg-black/40 rounded-full overflow-hidden">
-                    <div className="h-full bg-current opacity-80" style={{ width: `${dept.risk}%` }} />
+                    <motion.div 
+                      className="h-full bg-current opacity-80" 
+                      initial={{ width: "0%" }}
+                      animate={{ width: `${dept.risk}%` }}
+                      transition={{ duration: 1, delay: i * 0.1, ease: "easeOut" }}
+                    />
                   </div>
                   <span className="font-mono text-sm min-w-[3ch] text-right">{dept.risk}%</span>
                 </div>

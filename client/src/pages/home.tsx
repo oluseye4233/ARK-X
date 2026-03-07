@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 
 export default function Home() {
   return (
-    <div className="max-w-5xl mx-auto flex flex-col justify-center min-h-[80vh] space-y-12">
+    <div className="max-w-5xl mx-auto flex flex-col justify-center min-h-[80vh] space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="space-y-6">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-primary/30 bg-primary/5 text-primary text-xs font-mono uppercase tracking-widest">
           <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
@@ -24,11 +24,11 @@ export default function Home() {
 
         <div className="flex flex-col sm:flex-row gap-4 pt-8">
           <Link href="/upload">
-            <Button size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground font-mono uppercase tracking-wider rounded-none neon-border h-14 px-8">
+            <Button data-testid="button-start-assessment" size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground font-mono uppercase tracking-wider rounded-none neon-border h-14 px-8 transition-all hover:scale-[1.02]">
               Initialize Analysis <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
           </Link>
-          <Button variant="outline" size="lg" className="font-mono uppercase tracking-wider rounded-none border-primary/50 text-primary hover:bg-primary/10 h-14 px-8">
+          <Button data-testid="button-view-demo" variant="outline" size="lg" className="font-mono uppercase tracking-wider rounded-none border-primary/50 text-primary hover:bg-primary/10 h-14 px-8 transition-all hover:scale-[1.02]">
             View Enterprise Demo
           </Button>
         </div>
