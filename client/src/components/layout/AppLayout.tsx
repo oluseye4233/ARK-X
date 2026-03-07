@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { 
   BarChart3, 
@@ -5,7 +6,10 @@ import {
   Activity, 
   Map, 
   Users,
-  TerminalSquare
+  TerminalSquare,
+  Plug,
+  Loader2,
+  Check
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -15,8 +19,17 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const [location] = useLocation();
+  const [matrixStatus, setMatrixStatus] = useState<"idle" | "connecting" | "connected">("idle");
+  const [sphinxStatus, setSphinxStatus] = useState<"idle" | "connecting" | "connected">("idle");
 
-  // Hide sidebar for login
+  const handleConnect = (
+    target: "matrix" | "sphinx",
+    setStatus: (s: "idle" | "connecting" | "connected") => void
+  ) => {
+    setStatus("connecting");
+    setTimeout(() => setStatus("connected"), 2200);
+  };
+
   if (location === '/login') {
     return <main className="min-h-screen bg-background text-foreground font-sans">{children}</main>;
   }
@@ -63,7 +76,72 @@ export function AppLayout({ children }: AppLayoutProps) {
           })}
         </nav>
         
-        {/* System Status Mock */}
+        <div className="px-4 mt-4 space-y-2">
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-mono px-4 mb-2">Integrations</p>
+
+          <button
+            data-testid="button-connect-matrix-market"
+            onClick={() => handleConnect("matrix", setMatrixStatus)}
+            disabled={matrixStatus !== "idle"}
+            className={cn(
+              "w-full flex items-center gap-3 px-4 py-3 rounded-md transition-all duration-300 font-mono text-xs uppercase tracking-wide group",
+              matrixStatus === "connected"
+                ? "bg-secondary/10 text-secondary border border-secondary/30"
+                : matrixStatus === "connecting"
+                  ? "bg-amber-500/10 text-amber-500 border border-amber-500/30 animate-pulse"
+                  : "text-muted-foreground hover:bg-purple-500/10 hover:text-purple-400 border border-transparent hover:border-purple-500/30"
+            )}
+          >
+            {matrixStatus === "connecting" ? (
+              <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
+            ) : matrixStatus === "connected" ? (
+              <Check className="h-4 w-4 flex-shrink-0" />
+            ) : (
+              <Plug className="h-4 w-4 flex-shrink-0 opacity-70 group-hover:opacity-100" />
+            )}
+            <div className="flex flex-col items-start">
+              <span className="leading-none">Matrix Market</span>
+              <span className={cn(
+                "text-[9px] mt-0.5 tracking-wider",
+                matrixStatus === "connected" ? "text-secondary/70" : matrixStatus === "connecting" ? "text-amber-500/70" : "text-muted-foreground/50"
+              )}>
+                {matrixStatus === "connected" ? "SYNCED" : matrixStatus === "connecting" ? "ESTABLISHING..." : "CONNECT"}
+              </span>
+            </div>
+          </button>
+
+          <button
+            data-testid="button-connect-the-sphinx"
+            onClick={() => handleConnect("sphinx", setSphinxStatus)}
+            disabled={sphinxStatus !== "idle"}
+            className={cn(
+              "w-full flex items-center gap-3 px-4 py-3 rounded-md transition-all duration-300 font-mono text-xs uppercase tracking-wide group",
+              sphinxStatus === "connected"
+                ? "bg-secondary/10 text-secondary border border-secondary/30"
+                : sphinxStatus === "connecting"
+                  ? "bg-amber-500/10 text-amber-500 border border-amber-500/30 animate-pulse"
+                  : "text-muted-foreground hover:bg-amber-500/10 hover:text-amber-400 border border-transparent hover:border-amber-500/30"
+            )}
+          >
+            {sphinxStatus === "connecting" ? (
+              <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
+            ) : sphinxStatus === "connected" ? (
+              <Check className="h-4 w-4 flex-shrink-0" />
+            ) : (
+              <Plug className="h-4 w-4 flex-shrink-0 opacity-70 group-hover:opacity-100" />
+            )}
+            <div className="flex flex-col items-start">
+              <span className="leading-none">The Sphinx</span>
+              <span className={cn(
+                "text-[9px] mt-0.5 tracking-wider",
+                sphinxStatus === "connected" ? "text-secondary/70" : sphinxStatus === "connecting" ? "text-amber-500/70" : "text-muted-foreground/50"
+              )}>
+                {sphinxStatus === "connected" ? "SYNCED" : sphinxStatus === "connecting" ? "ESTABLISHING..." : "CONNECT"}
+              </span>
+            </div>
+          </button>
+        </div>
+
         <div className="absolute bottom-0 w-full p-4 border-t border-primary/20 bg-background/80 backdrop-blur-sm">
           <div className="flex items-center justify-between text-xs font-mono text-muted-foreground">
             <span>SYS.STATUS</span>
