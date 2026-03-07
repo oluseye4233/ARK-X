@@ -16,6 +16,11 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   const [location] = useLocation();
 
+  // Hide sidebar for login
+  if (location === '/login') {
+    return <main className="min-h-screen bg-background text-foreground font-sans">{children}</main>;
+  }
+
   const navigation = [
     { name: "Terminal", href: "/", icon: TerminalSquare },
     { name: "Upload CV", href: "/upload", icon: Upload },

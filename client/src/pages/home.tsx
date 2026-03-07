@@ -28,9 +28,11 @@ export default function Home() {
               Initialize Analysis <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
           </Link>
-          <Button data-testid="button-view-demo" variant="outline" size="lg" className="font-mono uppercase tracking-wider rounded-none border-primary/50 text-primary hover:bg-primary/10 h-14 px-8 transition-all hover:scale-[1.02]">
-            View Enterprise Demo
-          </Button>
+          <Link href="/login">
+            <Button data-testid="button-view-demo" variant="outline" size="lg" className="font-mono uppercase tracking-wider rounded-none border-primary/50 text-primary hover:bg-primary/10 h-14 px-8 transition-all hover:scale-[1.02]">
+              Enterprise Login
+            </Button>
+          </Link>
         </div>
       </div>
 

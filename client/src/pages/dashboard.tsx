@@ -2,7 +2,9 @@ import { MOCK_USER_DATA } from "@/lib/mockData";
 import { JSTGauge } from "@/components/dashboard/JSTGauge";
 import { VulnerabilityMeter } from "@/components/dashboard/VulnerabilityMeter";
 import { JnomicsCardList } from "@/components/dashboard/JnomicsCardList";
-import { Cpu } from "lucide-react";
+import { Cpu, FileText } from "lucide-react";
+import { Link } from "wouter";
+import { Button } from "@/components/ui/button";
 
 export default function Dashboard() {
   return (
@@ -19,12 +21,20 @@ export default function Dashboard() {
           </p>
         </div>
         
-        {/* Readiness Badge */}
-        <div className="glass px-4 py-2 flex items-center gap-3 rounded-lg border-primary/30">
-          <Cpu className="w-5 h-5 text-primary" />
-          <div>
-            <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono">Readiness Profile</p>
-            <p className="text-primary font-display font-bold uppercase tracking-wider">{MOCK_USER_DATA.readinessProfile}</p>
+        <div className="flex items-center gap-4">
+          <Link href="/report">
+            <Button variant="outline" className="border-primary/50 text-primary hover:bg-primary/10 font-mono text-xs uppercase tracking-widest h-10">
+              <FileText className="w-4 h-4 mr-2" /> Export Brief
+            </Button>
+          </Link>
+          
+          {/* Readiness Badge */}
+          <div className="glass px-4 py-2 flex items-center gap-3 rounded-lg border-primary/30">
+            <Cpu className="w-5 h-5 text-primary" />
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono">Readiness Profile</p>
+              <p className="text-primary font-display font-bold uppercase tracking-wider">{MOCK_USER_DATA.readinessProfile}</p>
+            </div>
           </div>
         </div>
       </div>

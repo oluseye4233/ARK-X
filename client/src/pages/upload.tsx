@@ -5,7 +5,7 @@ export default function UploadPage() {
   const [, setLocation] = useLocation();
 
   const handleComplete = () => {
-    setLocation("/dashboard");
+    setLocation("/assessment");
   };
 
   return (

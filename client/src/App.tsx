@@ -10,16 +10,22 @@ import UploadPage from "@/pages/upload";
 import Dashboard from "@/pages/dashboard";
 import PathwaysPage from "@/pages/pathways";
 import EnterprisePage from "@/pages/enterprise";
+import LoginPage from "@/pages/auth/login";
+import AssessmentPage from "@/pages/assessment";
+import ReportPage from "@/pages/report";
 
 function Router() {
   return (
     <AppLayout>
       <Switch>
         <Route path="/" component={Home} />
+        <Route path="/login" component={LoginPage} />
         <Route path="/upload" component={UploadPage} />
+        <Route path="/assessment" component={AssessmentPage} />
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/pathways" component={PathwaysPage} />
         <Route path="/enterprise" component={EnterprisePage} />
+        <Route path="/report" component={ReportPage} />
         {/* Fallback to 404 */}
         <Route component={NotFound} />
       </Switch>
