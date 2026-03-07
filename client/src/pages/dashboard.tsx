@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { JSTGauge } from "@/components/dashboard/JSTGauge";
 import { VulnerabilityMeter } from "@/components/dashboard/VulnerabilityMeter";
 import { JnomicsCardList } from "@/components/dashboard/JnomicsCardList";
+import { ArchetypeHandicap } from "@/components/dashboard/ArchetypeHandicap";
 import { Cpu, FileText, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,9 @@ interface AssessmentData {
   readinessProfile: string;
   riskModifiers: Array<{ task: string; automatable: number }> | null;
   matchedCardIds: string[] | null;
+  archetypeArchitect: number;
+  archetypeOrchestrator: number;
+  archetypeConductor: number;
   upskillingPlans: any[];
   pivotOpportunities: any[];
   transferabilityVectors: any[];
@@ -81,7 +85,7 @@ export default function Dashboard() {
           <div className="glass px-4 py-2 flex items-center gap-3 rounded-lg border-primary/30">
             <Cpu className="w-5 h-5 text-primary" />
             <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono">Readiness Profile</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono">Primary Archetype</p>
               <p className="text-primary font-display font-bold uppercase tracking-wider">{assessment.readinessProfile}</p>
             </div>
           </div>
@@ -114,6 +118,13 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      <ArchetypeHandicap
+        architect={assessment.archetypeArchitect}
+        orchestrator={assessment.archetypeOrchestrator}
+        conductor={assessment.archetypeConductor}
+        profile={assessment.readinessProfile}
+      />
 
       <JnomicsCardList matchedCardIds={assessment.matchedCardIds || []} />
 

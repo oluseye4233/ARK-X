@@ -109,6 +109,215 @@ function pickMatchedCards(scores: Record<string, number>): string[] {
   return cards.slice(0, 5);
 }
 
+const JST_ARCHETYPE_MAP: Record<string, "ARCHITECT" | "ORCHESTRATOR" | "CONDUCTOR"> = {
+  "financial analyst": "ARCHITECT", "budget analyst": "ORCHESTRATOR", "management analyst": "ARCHITECT",
+  "market research analyst": "ARCHITECT", "financial examiner": "CONDUCTOR", "credit analyst": "ORCHESTRATOR",
+  "insurance underwriter": "ARCHITECT", "loan officer": "ORCHESTRATOR", "tax examiner": "CONDUCTOR",
+  "accountant": "ORCHESTRATOR", "auditor": "CONDUCTOR", "cost estimator": "ARCHITECT",
+  "personal financial advisor": "ARCHITECT", "purchasing agent": "ORCHESTRATOR", "compliance officer": "CONDUCTOR",
+  "software developer": "ARCHITECT", "software engineer": "ARCHITECT", "web developer": "ORCHESTRATOR",
+  "database administrator": "ORCHESTRATOR", "network administrator": "ORCHESTRATOR",
+  "information security analyst": "ARCHITECT", "computer systems analyst": "ARCHITECT",
+  "computer programmer": "ARCHITECT", "programmer": "ARCHITECT", "computer support specialist": "CONDUCTOR",
+  "data scientist": "ARCHITECT", "devops engineer": "ORCHESTRATOR", "qa analyst": "CONDUCTOR",
+  "it project manager": "ORCHESTRATOR", "ux designer": "ARCHITECT", "ui designer": "ARCHITECT",
+  "ux/ui designer": "ARCHITECT", "cloud architect": "ARCHITECT", "data engineer": "ORCHESTRATOR",
+  "physician": "ARCHITECT", "surgeon": "ARCHITECT", "registered nurse": "CONDUCTOR", "nurse": "CONDUCTOR",
+  "pharmacist": "ORCHESTRATOR", "physical therapist": "CONDUCTOR", "radiologic technologist": "ORCHESTRATOR",
+  "medical lab technician": "CONDUCTOR", "respiratory therapist": "CONDUCTOR",
+  "diagnostic medical sonographer": "ORCHESTRATOR", "occupational therapist": "ARCHITECT",
+  "medical records specialist": "ORCHESTRATOR", "clinical laboratory scientist": "CONDUCTOR",
+  "physician assistant": "ORCHESTRATOR", "nurse practitioner": "ARCHITECT",
+  "health information manager": "ORCHESTRATOR",
+  "elementary school teacher": "CONDUCTOR", "secondary school teacher": "ARCHITECT", "teacher": "CONDUCTOR",
+  "special education teacher": "CONDUCTOR", "postsecondary teacher": "ARCHITECT", "professor": "ARCHITECT",
+  "instructional coordinator": "ARCHITECT", "training specialist": "ORCHESTRATOR",
+  "training and development specialist": "ORCHESTRATOR", "librarian": "ORCHESTRATOR",
+  "educational administrator": "ORCHESTRATOR", "school counselor": "ARCHITECT", "tutor": "CONDUCTOR",
+  "adult literacy teacher": "CONDUCTOR", "career counselor": "ARCHITECT",
+  "education technology specialist": "ORCHESTRATOR",
+  "lawyer": "ARCHITECT", "attorney": "ARCHITECT", "paralegal": "ORCHESTRATOR",
+  "legal secretary": "ORCHESTRATOR", "court reporter": "CONDUCTOR", "judge": "ARCHITECT",
+  "arbitrator": "CONDUCTOR", "title examiner": "CONDUCTOR", "legal researcher": "ORCHESTRATOR",
+  "contract specialist": "ARCHITECT", "compliance attorney": "ARCHITECT", "patent agent": "ARCHITECT",
+  "architect": "ARCHITECT", "civil engineer": "ARCHITECT", "mechanical engineer": "ARCHITECT",
+  "electrical engineer": "ARCHITECT", "industrial engineer": "ORCHESTRATOR", "chemical engineer": "ARCHITECT",
+  "environmental engineer": "ARCHITECT", "aerospace engineer": "ARCHITECT", "biomedical engineer": "ARCHITECT",
+  "structural engineer": "ARCHITECT", "cad technician": "ORCHESTRATOR", "engineering technician": "CONDUCTOR",
+  "surveyor": "ORCHESTRATOR", "urban planner": "ARCHITECT", "construction manager": "ORCHESTRATOR",
+  "sales manager": "ORCHESTRATOR", "sales representative": "ARCHITECT", "retail salesperson": "CONDUCTOR",
+  "real estate agent": "ORCHESTRATOR", "insurance sales agent": "ARCHITECT",
+  "advertising sales agent": "ORCHESTRATOR", "securities sales agent": "ARCHITECT",
+  "sales engineer": "ARCHITECT", "account executive": "ORCHESTRATOR",
+  "business development manager": "ARCHITECT", "customer success manager": "CONDUCTOR",
+  "marketing manager": "ARCHITECT", "public relations specialist": "ORCHESTRATOR",
+  "social media manager": "ORCHESTRATOR", "content marketing manager": "ARCHITECT",
+  "copywriter": "CONDUCTOR", "graphic designer": "ORCHESTRATOR", "brand manager": "ARCHITECT",
+  "event planner": "ORCHESTRATOR", "communications director": "ARCHITECT",
+  "seo specialist": "ORCHESTRATOR", "email marketing specialist": "ORCHESTRATOR",
+  "production manager": "ORCHESTRATOR", "quality control inspector": "CONDUCTOR",
+  "industrial production manager": "ORCHESTRATOR", "manufacturing engineer": "ARCHITECT",
+  "assembly line worker": "CONDUCTOR", "cnc machinist": "ORCHESTRATOR", "welder": "CONDUCTOR",
+  "maintenance technician": "ORCHESTRATOR", "production planner": "ORCHESTRATOR",
+  "process engineer": "ARCHITECT", "supply chain coordinator": "ORCHESTRATOR",
+  "warehouse manager": "ORCHESTRATOR",
+  "customer service representative": "CONDUCTOR", "call center manager": "ORCHESTRATOR",
+  "technical support specialist": "CONDUCTOR", "help desk analyst": "ORCHESTRATOR",
+  "account manager": "ORCHESTRATOR", "concierge": "CONDUCTOR",
+  "client relations specialist": "CONDUCTOR",
+  "human resources manager": "ARCHITECT", "hr manager": "ARCHITECT", "recruiter": "ORCHESTRATOR",
+  "training and development manager": "ARCHITECT", "compensation and benefits manager": "ARCHITECT",
+  "hr specialist": "ORCHESTRATOR", "talent development specialist": "CONDUCTOR",
+  "employee relations manager": "CONDUCTOR", "organizational development consultant": "ARCHITECT",
+  "hr analytics specialist": "ARCHITECT", "payroll manager": "ORCHESTRATOR",
+  "art director": "ARCHITECT", "multimedia artist": "ORCHESTRATOR", "film editor": "CONDUCTOR",
+  "music director": "CONDUCTOR", "photographer": "ARCHITECT", "video producer": "ORCHESTRATOR",
+  "sound engineer": "CONDUCTOR", "creative director": "ARCHITECT", "ux writer": "CONDUCTOR",
+  "game designer": "ARCHITECT", "animator": "ORCHESTRATOR",
+  "research scientist": "ARCHITECT", "researcher": "ARCHITECT", "chemist": "ARCHITECT",
+  "biologist": "ARCHITECT", "environmental scientist": "ARCHITECT",
+  "clinical research coordinator": "ORCHESTRATOR", "laboratory technician": "CONDUCTOR",
+  "statistician": "ARCHITECT", "materials scientist": "ARCHITECT", "microbiologist": "ARCHITECT",
+  "epidemiologist": "ARCHITECT",
+  "social worker": "CONDUCTOR", "counselor": "CONDUCTOR", "community health worker": "ORCHESTRATOR",
+  "case manager": "ORCHESTRATOR", "social service manager": "ARCHITECT",
+  "probation officer": "ORCHESTRATOR", "mental health counselor": "CONDUCTOR",
+  "substance abuse counselor": "CONDUCTOR", "youth counselor": "CONDUCTOR",
+  "executive assistant": "ORCHESTRATOR", "administrative assistant": "ORCHESTRATOR",
+  "office manager": "ORCHESTRATOR", "data entry clerk": "CONDUCTOR", "receptionist": "CONDUCTOR",
+  "bookkeeper": "ORCHESTRATOR", "scheduler": "ORCHESTRATOR", "file clerk": "CONDUCTOR",
+  "office clerk": "ORCHESTRATOR",
+  "logistician": "ORCHESTRATOR", "transportation manager": "ORCHESTRATOR",
+  "truck driver": "CONDUCTOR", "delivery driver": "CONDUCTOR", "airline pilot": "CONDUCTOR",
+  "air traffic controller": "ORCHESTRATOR", "ship captain": "ORCHESTRATOR",
+  "rail conductor": "CONDUCTOR", "dispatcher": "ORCHESTRATOR", "freight agent": "ORCHESTRATOR",
+  "hotel manager": "ORCHESTRATOR", "restaurant manager": "ORCHESTRATOR", "chef": "ARCHITECT",
+  "event coordinator": "ORCHESTRATOR", "sommelier": "CONDUCTOR", "catering manager": "ORCHESTRATOR",
+  "food service manager": "ORCHESTRATOR",
+  "real estate broker": "ARCHITECT", "property manager": "ORCHESTRATOR", "appraiser": "CONDUCTOR",
+  "leasing agent": "ORCHESTRATOR", "facilities manager": "ORCHESTRATOR",
+  "real estate analyst": "ARCHITECT",
+  "project manager": "ORCHESTRATOR", "program manager": "ORCHESTRATOR", "product manager": "ARCHITECT",
+  "scrum master": "ORCHESTRATOR", "business analyst": "ARCHITECT", "systems administrator": "ORCHESTRATOR",
+  "technical writer": "CONDUCTOR", "consultant": "ARCHITECT", "analyst": "ARCHITECT",
+  "coordinator": "ORCHESTRATOR", "specialist": "ORCHESTRATOR", "manager": "ORCHESTRATOR",
+  "director": "ARCHITECT", "vice president": "ARCHITECT", "chief": "ARCHITECT", "cto": "ARCHITECT",
+  "ceo": "ARCHITECT", "cfo": "ARCHITECT", "coo": "ORCHESTRATOR", "cio": "ARCHITECT",
+};
+
+const CARD_ARCHETYPE_MAP: Record<string, "ARCHITECT" | "ORCHESTRATOR" | "CONDUCTOR"> = {
+  "card-001": "ARCHITECT",
+  "card-002": "ARCHITECT",
+  "card-003": "ARCHITECT",
+  "card-004": "ORCHESTRATOR",
+  "card-005": "ORCHESTRATOR",
+  "card-006": "CONDUCTOR",
+  "card-007": "CONDUCTOR",
+  "card-008": "CONDUCTOR",
+  "card-009": "ORCHESTRATOR",
+  "card-010": "ARCHITECT",
+};
+
+const SKILL_ARCHETYPE_WEIGHTS: Record<string, { architect: number; orchestrator: number; conductor: number }> = {
+  technical:     { architect: 0.50, orchestrator: 0.30, conductor: 0.20 },
+  leadership:    { architect: 0.20, orchestrator: 0.55, conductor: 0.25 },
+  analytical:    { architect: 0.45, orchestrator: 0.25, conductor: 0.30 },
+  communication: { architect: 0.15, orchestrator: 0.35, conductor: 0.50 },
+  innovation:    { architect: 0.60, orchestrator: 0.25, conductor: 0.15 },
+  ai_adjacent:   { architect: 0.55, orchestrator: 0.30, conductor: 0.15 },
+};
+
+function computeArchetypeHandicap(
+  resumeText: string,
+  scores: Record<string, number>,
+  matchedCardIds: string[]
+): { architect: number; orchestrator: number; conductor: number } {
+  let arch = 0, orch = 0, cond = 0;
+  let totalWeight = 0;
+
+  const lowerText = resumeText.toLowerCase();
+
+  const titleMatches: Array<{ title: string; archetype: "ARCHITECT" | "ORCHESTRATOR" | "CONDUCTOR" }> = [];
+  for (const [title, archetype] of Object.entries(JST_ARCHETYPE_MAP)) {
+    if (lowerText.includes(title)) {
+      titleMatches.push({ title, archetype });
+    }
+  }
+
+  const titleWeight = 40;
+  if (titleMatches.length > 0) {
+    let tA = 0, tO = 0, tC = 0;
+    for (const m of titleMatches) {
+      if (m.archetype === "ARCHITECT") tA++;
+      else if (m.archetype === "ORCHESTRATOR") tO++;
+      else tC++;
+    }
+    const tTotal = tA + tO + tC;
+    arch += (tA / tTotal) * titleWeight;
+    orch += (tO / tTotal) * titleWeight;
+    cond += (tC / tTotal) * titleWeight;
+    totalWeight += titleWeight;
+  }
+
+  const skillWeight = 35;
+  let sA = 0, sO = 0, sC = 0;
+  let totalSkillScore = 0;
+  for (const [cat, score] of Object.entries(scores)) {
+    const weights = SKILL_ARCHETYPE_WEIGHTS[cat];
+    if (!weights || score === 0) continue;
+    sA += score * weights.architect;
+    sO += score * weights.orchestrator;
+    sC += score * weights.conductor;
+    totalSkillScore += score;
+  }
+  if (totalSkillScore > 0) {
+    const skillTotal = sA + sO + sC;
+    arch += (sA / skillTotal) * skillWeight;
+    orch += (sO / skillTotal) * skillWeight;
+    cond += (sC / skillTotal) * skillWeight;
+    totalWeight += skillWeight;
+  }
+
+  const cardWeight = 25;
+  if (matchedCardIds.length > 0) {
+    let cA = 0, cO = 0, cC = 0;
+    for (const cardId of matchedCardIds) {
+      const a = CARD_ARCHETYPE_MAP[cardId];
+      if (a === "ARCHITECT") cA++;
+      else if (a === "ORCHESTRATOR") cO++;
+      else if (a === "CONDUCTOR") cC++;
+    }
+    const cTotal = cA + cO + cC;
+    if (cTotal > 0) {
+      arch += (cA / cTotal) * cardWeight;
+      orch += (cO / cTotal) * cardWeight;
+      cond += (cC / cTotal) * cardWeight;
+      totalWeight += cardWeight;
+    }
+  }
+
+  if (totalWeight === 0) {
+    return { architect: 34, orchestrator: 33, conductor: 33 };
+  }
+
+  let rawArch = (arch / totalWeight) * 100;
+  let rawOrch = (orch / totalWeight) * 100;
+  let rawCond = (cond / totalWeight) * 100;
+
+  rawArch = Math.max(rawArch, 1);
+  rawOrch = Math.max(rawOrch, 1);
+  rawCond = Math.max(rawCond, 1);
+
+  const rawSum = rawArch + rawOrch + rawCond;
+  let pArch = Math.round((rawArch / rawSum) * 100);
+  let pOrch = Math.round((rawOrch / rawSum) * 100);
+  let pCond = 100 - pArch - pOrch;
+
+  if (pCond < 1) { pCond = 1; pArch = Math.round((rawArch / (rawArch + rawOrch)) * 99); pOrch = 99 - pArch; }
+
+  return { architect: pArch, orchestrator: pOrch, conductor: pCond };
+}
+
 function determineProfile(scores: Record<string, number>): string {
   const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
   const top = sorted[0][0];
@@ -301,8 +510,18 @@ export function analyzeResume(resumeText: string): AnalysisResult {
   const avgAutomation = riskSlice.reduce((s, r) => s + r.automatable, 0) / riskSlice.length;
 
   const vulnerabilityLevel = generateVulnerabilityLevel(avgAutomation, categoryScores.ai_adjacent, categoryScores.leadership);
-  const readinessProfile = determineProfile(categoryScores);
   const matchedCardIds = pickMatchedCards(categoryScores);
+
+  const archetypeHandicap = computeArchetypeHandicap(resumeText, categoryScores, matchedCardIds);
+
+  let readinessProfile: string;
+  if (archetypeHandicap.architect >= archetypeHandicap.orchestrator && archetypeHandicap.architect >= archetypeHandicap.conductor) {
+    readinessProfile = "Architect";
+  } else if (archetypeHandicap.orchestrator >= archetypeHandicap.conductor) {
+    readinessProfile = "Orchestrator";
+  } else {
+    readinessProfile = "Conductor";
+  }
 
   const upskillingPlans = generateUpskilling(readinessProfile, categoryScores, vulnerabilityLevel);
   const pivotOpportunities = generatePivots(readinessProfile, categoryScores);
@@ -318,6 +537,9 @@ export function analyzeResume(resumeText: string): AnalysisResult {
       readinessProfile,
       riskModifiers: riskSlice,
       matchedCardIds,
+      archetypeArchitect: archetypeHandicap.architect,
+      archetypeOrchestrator: archetypeHandicap.orchestrator,
+      archetypeConductor: archetypeHandicap.conductor,
     },
     upskillingPlans,
     pivotOpportunities,

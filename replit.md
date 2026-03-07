@@ -55,10 +55,22 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 - Each category has weighted keyword lists; scores determine JST sub-dimensions (Jobs, Skills, Talent)
 - Automation risk detection via regex patterns matched against resume text (14 task patterns)
 - Vulnerability level (0-4) computed from average automation risk adjusted by AI/leadership scores
-- Readiness profile (Architect/Orchestrator/Conductor) from top scoring category
+- **Archetype Handicap System**: Tri-dimensional percentage scoring (Architect/Orchestrator/Conductor)
+  - Three scoring signals weighted and combined: job title matches from JST AI MAP (40%), skill category archetype weights (35%), matched FORGE card classifications (25%)
+  - `JST_ARCHETYPE_MAP`: 228+ job titles mapped to archetypes from the JST AI MAP document (240+ occupations across 13 sectors)
+  - `SKILL_ARCHETYPE_WEIGHTS`: Each of 6 skill categories distributes weight across archetypes (e.g., innovation → 60% Architect, 25% Orchestrator, 15% Conductor)
+  - `CARD_ARCHETYPE_MAP`: FORGE cards classified by archetype (card-001/002/003/010 → Architect, card-004/005/009 → Orchestrator, card-006/007/008 → Conductor)
+  - Normalization ensures percentages always sum to exactly 100%
+  - Primary archetype determines `readinessProfile` (Architect/Orchestrator/Conductor)
 - FORGE card mapping based on category thresholds
 - Generates 12 transferability vectors, 3 upskilling plans, 3 pivot opportunities
 - Accepts PDF (via pdf-parse) and plain text files, max 10MB
+
+## Dashboard Components
+- `JSTGauge` — Tri-dimensional JST score display (0-300)
+- `VulnerabilityMeter` — 5-level AI vulnerability indicator
+- `ArchetypeHandicap` — Visual archetype percentage breakdown with animated bars, trait tags, and composite vector bar
+- `JnomicsCardList` — Matched FORGE cards display
 
 ## Database Seeding
 Run `POST /api/seed` to populate: 10 Jnomics cards (card-001 through card-010), 7 departments, 1 demo user with full assessment data.

@@ -29,6 +29,9 @@ export const assessments = pgTable("assessments", {
   readinessProfile: text("readiness_profile").notNull().default("Conductor"),
   riskModifiers: jsonb("risk_modifiers").$type<Array<{ task: string; automatable: number }>>(),
   matchedCardIds: text("matched_card_ids").array(),
+  archetypeArchitect: integer("archetype_architect").notNull().default(34),
+  archetypeOrchestrator: integer("archetype_orchestrator").notNull().default(33),
+  archetypeConductor: integer("archetype_conductor").notNull().default(33),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
