@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
+import atandaLogo from "@assets/WEB_LEARNING_SYSTEMS_(1920_x_1280_px)_1772920111812.png";
 import { 
   BarChart3, 
   Upload, 
@@ -142,13 +143,17 @@ export function AppLayout({ children }: AppLayoutProps) {
           </button>
         </div>
 
-        <div className="absolute bottom-0 w-full p-4 border-t border-primary/20 bg-background/80 backdrop-blur-sm">
+        <div className="absolute bottom-0 w-full p-4 border-t border-primary/20 bg-background/80 backdrop-blur-sm space-y-3">
           <div className="flex items-center justify-between text-xs font-mono text-muted-foreground">
             <span>SYS.STATUS</span>
             <span className="text-secondary flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
               ONLINE
             </span>
+          </div>
+          <div className="flex flex-col items-center gap-1 pt-2 border-t border-white/5">
+            <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/50 font-mono">Powered By</span>
+            <img src={atandaLogo} alt="Atanda" className="h-10 w-auto object-contain opacity-80 hover:opacity-100 transition-opacity" data-testid="img-powered-by-atanda" />
           </div>
         </div>
       </aside>
