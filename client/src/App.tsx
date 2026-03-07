@@ -6,12 +6,20 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { AppLayout } from "@/components/layout/AppLayout";
 import Home from "@/pages/home";
+import UploadPage from "@/pages/upload";
+import Dashboard from "@/pages/dashboard";
+import PathwaysPage from "@/pages/pathways";
+import EnterprisePage from "@/pages/enterprise";
 
 function Router() {
   return (
     <AppLayout>
       <Switch>
         <Route path="/" component={Home} />
+        <Route path="/upload" component={UploadPage} />
+        <Route path="/dashboard" component={Dashboard} />
+        <Route path="/pathways" component={PathwaysPage} />
+        <Route path="/enterprise" component={EnterprisePage} />
         {/* Fallback to 404 */}
         <Route component={NotFound} />
       </Switch>
