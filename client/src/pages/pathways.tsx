@@ -1,9 +1,46 @@
-import { MOCK_USER_DATA } from "@/lib/mockData";
+import { useEffect, useState } from "react";
 import { TransferabilityRadar } from "@/components/pathways/TransferabilityRadar";
 import { UpskillingTimeline } from "@/components/pathways/UpskillingTimeline";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Loader2 } from "lucide-react";
+import { useAuth } from "@/lib/useAuth";
+import { api } from "@/lib/api";
 
 export default function PathwaysPage() {
+  const { user } = useAuth();
+  const [assessment, setAssessment] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) return;
+    api.getLatestAssessment(user.id)
+      .then(setAssessment)
+      .catch(() => setAssessment(null))
+      .finally(() => setLoading(false));
+  }, [user]);
+
+  if (loading) {
+    return (
+      <div className="w-full max-w-6xl mx-auto min-h-[60vh] flex flex-col items-center justify-center">
+        <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
+        <p className="font-mono text-sm text-muted-foreground uppercase">Loading Pathway Data...</p>
+      </div>
+    );
+  }
+
+  if (!assessment) {
+    return (
+      <div className="w-full max-w-6xl mx-auto min-h-[60vh] flex flex-col items-center justify-center">
+        <p className="font-mono text-sm text-muted-foreground uppercase">No assessment data found. Upload a resume first.</p>
+      </div>
+    );
+  }
+
+  const radarData = (assessment.transferabilityVectors || []).map((v: any) => ({
+    subject: v.subject,
+    A: v.score,
+    fullMark: 100,
+  }));
+
   return (
     <div className="w-full max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       
@@ -18,16 +55,15 @@ export default function PathwaysPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         
-        {/* Left Column: Radar & Pivots */}
         <div className="space-y-8">
-          <TransferabilityRadar data={MOCK_USER_DATA.transferability} />
+          <TransferabilityRadar data={radarData} />
           
           <div className="glass-card p-6 rounded-xl">
             <h3 className="font-display font-bold text-lg text-white uppercase tracking-widest mb-4">
               Top Pivot Opportunities
             </h3>
             <div className="space-y-4">
-              {MOCK_USER_DATA.pivotOpportunities.map((pivot, i) => (
+              {(assessment.pivotOpportunities || []).map((pivot: any, i: number) => (
                 <div key={i} className="flex items-center justify-between p-4 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors cursor-pointer group">
                   <div>
                     <h4 className="font-display font-semibold text-primary group-hover:neon-text">{pivot.role}</h4>
@@ -46,9 +82,8 @@ export default function PathwaysPage() {
           </div>
         </div>
 
-        {/* Right Column: Upskilling Timeline */}
         <div>
-          <UpskillingTimeline items={MOCK_USER_DATA.upskillingPlan as any} />
+          <UpskillingTimeline items={assessment.upskillingPlans || []} />
         </div>
 
       </div>

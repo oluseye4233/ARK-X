@@ -23,15 +23,11 @@ export default function Home() {
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4 pt-8">
-          <Link href="/upload">
-            <Button data-testid="button-start-assessment" size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground font-mono uppercase tracking-wider rounded-none neon-border h-14 px-8 transition-all hover:scale-[1.02]">
-              Initialize Analysis <ArrowRight className="ml-2 h-5 w-5" />
-            </Button>
+          <Link href="/upload" data-testid="button-start-assessment" className="inline-flex items-center justify-center bg-primary hover:bg-primary/90 text-primary-foreground font-mono uppercase tracking-wider rounded-none neon-border h-14 px-8 transition-all hover:scale-[1.02] text-sm font-medium">
+            Initialize Analysis <ArrowRight className="ml-2 h-5 w-5" />
           </Link>
-          <Link href="/login">
-            <Button data-testid="button-view-demo" variant="outline" size="lg" className="font-mono uppercase tracking-wider rounded-none border-primary/50 text-primary hover:bg-primary/10 h-14 px-8 transition-all hover:scale-[1.02]">
-              Enterprise Login
-            </Button>
+          <Link href="/login" data-testid="button-view-demo" className="inline-flex items-center justify-center font-mono uppercase tracking-wider rounded-none border border-primary/50 text-primary hover:bg-primary/10 h-14 px-8 transition-all hover:scale-[1.02] text-sm font-medium">
+            Enterprise Login
           </Link>
         </div>
       </div>

@@ -45,19 +45,19 @@ export function AppLayout({ children }: AppLayoutProps) {
           {navigation.map((item) => {
             const isActive = location === item.href;
             return (
-              <Link key={item.name} href={item.href}>
-                <a
-                  data-testid={`link-nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
-                  className={cn(
-                    "flex items-center gap-3 px-4 py-3 rounded-md transition-all duration-300 group font-mono text-sm uppercase tracking-wide",
-                    isActive
-                      ? "bg-primary/10 text-primary neon-border shadow-[0_0_15px_rgba(0,0,0,0.5)]"
-                      : "text-muted-foreground hover:bg-white/5 hover:text-foreground hover:pl-6"
-                  )}
-                >
-                  <item.icon className={cn("h-5 w-5 transition-colors", isActive ? "text-primary" : "opacity-70 group-hover:opacity-100 group-hover:text-primary/70")} />
-                  {item.name}
-                </a>
+              <Link
+                key={item.name}
+                href={item.href}
+                data-testid={`link-nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
+                className={cn(
+                  "flex items-center gap-3 px-4 py-3 rounded-md transition-all duration-300 group font-mono text-sm uppercase tracking-wide",
+                  isActive
+                    ? "bg-primary/10 text-primary neon-border shadow-[0_0_15px_rgba(0,0,0,0.5)]"
+                    : "text-muted-foreground hover:bg-white/5 hover:text-foreground hover:pl-6"
+                )}
+              >
+                <item.icon className={cn("h-5 w-5 transition-colors", isActive ? "text-primary" : "opacity-70 group-hover:opacity-100 group-hover:text-primary/70")} />
+                {item.name}
               </Link>
             );
           })}

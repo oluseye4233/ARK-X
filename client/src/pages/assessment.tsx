@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { BrainCircuit, ChevronRight, Activity } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/useAuth";
+import { api } from "@/lib/api";
 
 const QUESTIONS = [
   {
@@ -36,6 +37,7 @@ const QUESTIONS = [
 
 export default function AssessmentPage() {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<string[]>([]);
   const [isSynthesizing, setIsSynthesizing] = useState(false);
@@ -51,10 +53,61 @@ export default function AssessmentPage() {
     }
   };
 
-  const finalizeAssessment = (finalAnswers: string[]) => {
+  const finalizeAssessment = async (finalAnswers: string[]) => {
     setIsSynthesizing(true);
-    // In a real app, we would calculate the dominant profile here
-    // For the mockup, we simulate a delay then route to dashboard
+    
+    const counts: Record<string, number> = {};
+    finalAnswers.forEach(a => { counts[a] = (counts[a] || 0) + 1; });
+    const readinessProfile = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+
+    if (user) {
+      try {
+        await api.createAssessment({
+          assessment: {
+            userId: user.id,
+            jstTotal: 242,
+            jstJobs: 82,
+            jstSkills: 78,
+            jstTalent: 82,
+            vulnerabilityLevel: 1,
+            readinessProfile,
+            riskModifiers: [
+              { task: "Routine Data Analysis", automatable: 85 },
+              { task: "System Configuration", automatable: 60 },
+              { task: "Stakeholder Communication", automatable: 15 },
+            ],
+            matchedCardIds: ["card-001", "card-002", "card-004", "card-005"],
+          },
+          upskillingPlans: [
+            { phase: "30-Day", type: "ready-skilling", title: "Prompt Engineering Foundations", description: "Master LLM interaction protocols for system analysis tasks.", hours: 15 },
+            { phase: "90-Day", type: "up-skilling", title: "Cloud Architecture Synthesis", description: "Deepen expertise in multi-cloud environments.", hours: 45 },
+            { phase: "12-Month", type: "new-skilling", title: "AI Orchestration Leadership", description: "Transition to AI Integration Manager role.", hours: 120 },
+          ],
+          pivotOpportunities: [
+            { role: "AI Integration Manager", feasibility: 82, gapCost: "$2,400", time: "6 Months" },
+            { role: "Data Strategy Lead", feasibility: 75, gapCost: "$4,100", time: "9 Months" },
+            { role: "Product Operations Dir.", feasibility: 68, gapCost: "$5,500", time: "12 Months" },
+          ],
+          transferabilityVectors: [
+            { subject: "Industry Mobility", score: 85 },
+            { subject: "Geographic Port.", score: 60 },
+            { subject: "Innovation Trans.", score: 75 },
+            { subject: "Leadership Scal.", score: 55 },
+            { subject: "Tech Fluency", score: 90 },
+            { subject: "Data Literacy", score: 80 },
+            { subject: "Creative Problem", score: 70 },
+            { subject: "Comm. Impact", score: 65 },
+            { subject: "Agility Index", score: 88 },
+            { subject: "Domain Breadth", score: 50 },
+            { subject: "Execution Speed", score: 75 },
+            { subject: "Strategic Vision", score: 60 },
+          ],
+        });
+      } catch (err) {
+        console.error("Failed to save assessment:", err);
+      }
+    }
+
     setTimeout(() => {
       setLocation("/dashboard");
     }, 2500);

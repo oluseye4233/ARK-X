@@ -1,18 +1,56 @@
-import { MOCK_USER_DATA } from "@/lib/mockData";
-import { FileText, Download, Target, Zap, Cpu } from "lucide-react";
+import { useEffect, useState } from "react";
+import { FileText, Download, Cpu, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { JSTGauge } from "@/components/dashboard/JSTGauge";
-import { VulnerabilityMeter } from "@/components/dashboard/VulnerabilityMeter";
+import { useAuth } from "@/lib/useAuth";
+import { api } from "@/lib/api";
 
 export default function ReportPage() {
+  const { user } = useAuth();
+  const [assessment, setAssessment] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) return;
+    api.getLatestAssessment(user.id)
+      .then(setAssessment)
+      .catch(() => setAssessment(null))
+      .finally(() => setLoading(false));
+  }, [user]);
+
   const handlePrint = () => {
     window.print();
   };
 
+  if (loading) {
+    return (
+      <div className="w-full max-w-4xl mx-auto min-h-[60vh] flex flex-col items-center justify-center">
+        <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
+        <p className="font-mono text-sm text-muted-foreground uppercase">Loading Report Data...</p>
+      </div>
+    );
+  }
+
+  if (!assessment) {
+    return (
+      <div className="w-full max-w-4xl mx-auto min-h-[60vh] flex flex-col items-center justify-center">
+        <p className="font-mono text-sm text-muted-foreground uppercase">No assessment data found.</p>
+      </div>
+    );
+  }
+
+  const LEVELS: Record<number, { name: string; label: string }> = {
+    0: { name: "Critical", label: "Critical Exposure" },
+    1: { name: "At Risk", label: "Significant Exposure" },
+    2: { name: "Transitional", label: "Mixed Exposure" },
+    3: { name: "Resilient", label: "Low Exposure" },
+    4: { name: "Flourishing", label: "AI-Augmented Growth" },
+  };
+
+  const vulnInfo = LEVELS[assessment.vulnerabilityLevel] || LEVELS[2];
+
   return (
     <div className="w-full max-w-4xl mx-auto space-y-8 animate-in fade-in duration-700 pb-20">
       
-      {/* Top Action Bar (Hidden when printing) */}
       <div className="flex justify-between items-center pb-6 border-b border-white/10 print:hidden">
         <div>
           <h2 className="text-2xl font-display font-bold text-white uppercase tracking-wider">
@@ -30,10 +68,8 @@ export default function ReportPage() {
         </Button>
       </div>
 
-      {/* Report Content - Styled for both screen and print */}
       <div className="bg-white text-black p-10 rounded-xl print:p-0 print:bg-transparent shadow-2xl">
         
-        {/* Report Header */}
         <div className="border-b-2 border-black/10 pb-6 mb-8 flex justify-between items-end">
           <div>
             <div className="flex items-center gap-2 text-primary font-display font-bold text-2xl tracking-widest mb-4">
@@ -43,22 +79,21 @@ export default function ReportPage() {
           </div>
           <div className="text-right font-mono text-xs text-gray-500 uppercase">
             <p>Generated: {new Date().toLocaleDateString()}</p>
-            <p>Subject: {MOCK_USER_DATA.name}</p>
-            <p>Role: {MOCK_USER_DATA.role}</p>
-            <p>ID: {Math.random().toString(36).substr(2, 9).toUpperCase()}</p>
+            <p>Subject: {user?.name}</p>
+            <p>Role: {user?.role}</p>
+            <p>ID: {assessment.id?.slice(0, 8).toUpperCase()}</p>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-12 mb-12">
-          {/* We use a simplified rendering of JST for the printable report */}
           <div>
             <h3 className="text-lg font-bold font-display uppercase tracking-widest border-b border-black/10 pb-2 mb-4">JST Index Valuation</h3>
             <div className="flex items-center gap-6">
-              <div className="text-6xl font-black font-display text-primary">{MOCK_USER_DATA.jstScore.total}</div>
+              <div className="text-6xl font-black font-display text-primary">{assessment.jstTotal}</div>
               <div className="space-y-1 font-mono text-sm">
-                <div className="flex justify-between w-32"><span className="text-gray-500">JOBS</span> <span className="font-bold">{MOCK_USER_DATA.jstScore.jobs}</span></div>
-                <div className="flex justify-between w-32"><span className="text-gray-500">SKILLS</span> <span className="font-bold">{MOCK_USER_DATA.jstScore.skills}</span></div>
-                <div className="flex justify-between w-32"><span className="text-gray-500">TALENT</span> <span className="font-bold">{MOCK_USER_DATA.jstScore.talent}</span></div>
+                <div className="flex justify-between w-32"><span className="text-gray-500">JOBS</span> <span className="font-bold">{assessment.jstJobs}</span></div>
+                <div className="flex justify-between w-32"><span className="text-gray-500">SKILLS</span> <span className="font-bold">{assessment.jstSkills}</span></div>
+                <div className="flex justify-between w-32"><span className="text-gray-500">TALENT</span> <span className="font-bold">{assessment.jstTalent}</span></div>
               </div>
             </div>
           </div>
@@ -71,7 +106,7 @@ export default function ReportPage() {
                 </div>
                 <div>
                   <div className="text-sm font-mono uppercase text-gray-500">Classification</div>
-                  <div className="text-xl font-bold font-display">{MOCK_USER_DATA.readinessProfile}</div>
+                  <div className="text-xl font-bold font-display">{assessment.readinessProfile}</div>
                 </div>
              </div>
           </div>
@@ -81,17 +116,22 @@ export default function ReportPage() {
           <h3 className="text-lg font-bold font-display uppercase tracking-widest border-b border-black/10 pb-2 mb-6">AI Vulnerability & Risk</h3>
           <div className="bg-gray-50 p-6 rounded-lg border border-gray-200">
              <div className="flex justify-between items-center mb-4">
-               <span className="font-bold text-lg">Level {MOCK_USER_DATA.vulnerabilityLevel}: At Risk</span>
-               <span className="text-orange-600 font-mono text-sm uppercase bg-orange-100 px-3 py-1 rounded-full">Significant Exposure</span>
+               <span className="font-bold text-lg">Level {assessment.vulnerabilityLevel}: {vulnInfo.name}</span>
+               <span className="text-orange-600 font-mono text-sm uppercase bg-orange-100 px-3 py-1 rounded-full">{vulnInfo.label}</span>
              </div>
              <p className="text-gray-600 mb-4">
-               The subject's current skill profile demonstrates a moderate-to-high susceptibility to automation in the next 24 months. 
+               The subject's current skill profile demonstrates a {assessment.vulnerabilityLevel < 2 ? "moderate-to-high" : "low-to-moderate"} susceptibility to automation in the next 24 months. 
                Immediate action is recommended via dynamic upskilling to preserve career capital.
              </p>
              <div className="space-y-2 font-mono text-sm">
-               <div className="flex justify-between border-t border-gray-200 pt-2"><span className="text-gray-500">Routine Data Analysis</span> <span className="text-red-600 font-bold">85% Automatable</span></div>
-               <div className="flex justify-between border-t border-gray-200 pt-2"><span className="text-gray-500">System Configuration</span> <span className="text-orange-600 font-bold">60% Automatable</span></div>
-               <div className="flex justify-between border-t border-gray-200 pt-2"><span className="text-gray-500">Stakeholder Communication</span> <span className="text-green-600 font-bold">15% Automatable</span></div>
+               {(assessment.riskModifiers || []).map((mod: any, i: number) => (
+                 <div key={i} className="flex justify-between border-t border-gray-200 pt-2">
+                   <span className="text-gray-500">{mod.task}</span>
+                   <span className={`font-bold ${mod.automatable > 70 ? 'text-red-600' : mod.automatable > 40 ? 'text-orange-600' : 'text-green-600'}`}>
+                     {mod.automatable}% Automatable
+                   </span>
+                 </div>
+               ))}
              </div>
           </div>
         </div>
@@ -99,7 +139,7 @@ export default function ReportPage() {
         <div>
           <h3 className="text-lg font-bold font-display uppercase tracking-widest border-b border-black/10 pb-2 mb-6">Upskilling Recommendation</h3>
           <div className="space-y-4">
-            {MOCK_USER_DATA.upskillingPlan.map((plan, i) => (
+            {(assessment.upskillingPlans || []).map((plan: any, i: number) => (
               <div key={i} className="flex gap-4 p-4 border border-gray-200 rounded-lg">
                 <div className="w-24 flex-shrink-0 text-xs font-mono text-gray-500 uppercase pt-1">{plan.phase}</div>
                 <div>

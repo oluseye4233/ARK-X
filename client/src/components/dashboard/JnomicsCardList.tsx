@@ -1,32 +1,45 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { JNOMICS_DECK } from "@/lib/mockData";
 import { Database, Link as LinkIcon, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
+
+interface JnomicsCard {
+  id: string;
+  name: string;
+  tier: string;
+  type: string;
+  emoji: string;
+  description: string;
+  basePts: number;
+}
 
 interface JnomicsCardListProps {
   matchedCardIds: string[];
 }
 
 export function JnomicsCardList({ matchedCardIds }: JnomicsCardListProps) {
-  const [cards, setCards] = useState<typeof JNOMICS_DECK>([]);
+  const [cards, setCards] = useState<JnomicsCard[]>([]);
   const [isSyncing, setIsSyncing] = useState(true);
 
   useEffect(() => {
-    // Simulate API fetch to Jnomicsdeck ALPHA database
     const fetchCards = async () => {
       setIsSyncing(true);
-      await new Promise((resolve) => setTimeout(resolve, 1500)); // Simulate network latency
-      
-      const userCards = JNOMICS_DECK.filter((card) => 
-        matchedCardIds.includes(card.id)
-      );
-      
-      setCards(userCards);
-      setIsSyncing(false);
+      try {
+        const data = await api.getJnomicsCardsByIds(matchedCardIds);
+        setCards(data);
+      } catch {
+        setCards([]);
+      } finally {
+        setIsSyncing(false);
+      }
     };
 
-    fetchCards();
+    if (matchedCardIds.length > 0) {
+      fetchCards();
+    } else {
+      setIsSyncing(false);
+    }
   }, [matchedCardIds]);
 
   return (
