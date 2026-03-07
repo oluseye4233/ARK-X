@@ -45,4 +45,19 @@ export const api = {
     }),
 
   getDepartments: () => apiRequest("/api/departments"),
+
+  uploadResume: async (file: File, userId: string) => {
+    const formData = new FormData();
+    formData.append("resume", file);
+    formData.append("userId", userId);
+    const res = await fetch("/api/resume/upload", {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ message: res.statusText }));
+      throw new Error(error.message || "Upload failed");
+    }
+    return res.json();
+  },
 };

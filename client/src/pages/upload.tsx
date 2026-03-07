@@ -5,7 +5,7 @@ export default function UploadPage() {
   const [, setLocation] = useLocation();
 
   const handleComplete = () => {
-    setLocation("/assessment");
+    setLocation("/dashboard");
   };
 
   return (
@@ -15,8 +15,9 @@ export default function UploadPage() {
           Intelligence Vector Input
         </h2>
         <p className="text-muted-foreground font-sans">
-          Initialize the analysis pipeline by uploading a career profile. 
-          Our 4J.BONSAI engine will extract structured data to compute your JST valuation.
+          Initialize the analysis pipeline by uploading your resume. 
+          The 4J.BONSAI engine will extract structured data, compute your JST valuation, 
+          and generate a full career intelligence profile in seconds.
         </p>
       </div>
 

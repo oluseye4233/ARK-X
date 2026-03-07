@@ -1,8 +1,22 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import multer from "multer";
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const pdfParse = require("pdf-parse");
 import { storage } from "./storage";
+import { analyzeResume } from "./resumeAnalyzer";
 import { insertUserSchema, insertAssessmentSchema } from "@shared/schema";
 import { z } from "zod";
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ["application/pdf", "text/plain"];
+    cb(null, allowed.includes(file.mimetype));
+  },
+});
 
 export async function registerRoutes(
   httpServer: Server,
@@ -119,6 +133,66 @@ export async function registerRoutes(
         transferabilityVectors: vectors,
       });
     } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Resume Upload & Analysis ────────────────────────
+  app.post("/api/resume/upload", upload.single("resume"), async (req, res) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ message: "No file uploaded. Accepted formats: PDF, TXT." });
+      }
+
+      let resumeText = "";
+
+      if (file.mimetype === "application/pdf") {
+        const pdfData = await pdfParse(file.buffer);
+        resumeText = pdfData.text;
+      } else if (file.mimetype === "text/plain") {
+        resumeText = file.buffer.toString("utf-8");
+      } else {
+        resumeText = file.buffer.toString("utf-8");
+      }
+
+      if (!resumeText || resumeText.trim().length < 50) {
+        return res.status(422).json({ message: "Could not extract enough text from the uploaded file. Please try a different format." });
+      }
+
+      const userId = req.body.userId;
+      if (!userId) {
+        return res.status(400).json({ message: "userId is required" });
+      }
+
+      const analysis = analyzeResume(resumeText);
+
+      const created = await storage.createAssessment({
+        ...analysis.assessment,
+        userId,
+      });
+
+      const [plans, pivots, vectors] = await Promise.all([
+        storage.createUpskillingPlans(
+          analysis.upskillingPlans.map(p => ({ ...p, assessmentId: created.id }))
+        ),
+        storage.createPivotOpportunities(
+          analysis.pivotOpportunities.map(p => ({ ...p, assessmentId: created.id }))
+        ),
+        storage.createTransferabilityVectors(
+          analysis.transferabilityVectors.map(v => ({ ...v, assessmentId: created.id }))
+        ),
+      ]);
+
+      return res.status(201).json({
+        ...created,
+        upskillingPlans: plans,
+        pivotOpportunities: pivots,
+        transferabilityVectors: vectors,
+        extractedTextLength: resumeText.length,
+      });
+    } catch (err: any) {
+      console.error("Resume upload error:", err);
       return res.status(500).json({ message: err.message });
     }
   });

@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   users, type User, type InsertUser,
   assessments, type Assessment, type InsertAssessment,
@@ -66,7 +66,7 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(assessments)
       .where(eq(assessments.userId, userId))
-      .orderBy(assessments.createdAt)
+      .orderBy(sql`${assessments.createdAt} DESC`)
       .limit(1);
     return results[0];
   }
