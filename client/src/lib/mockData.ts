@@ -53,8 +53,48 @@ export const MOCK_USER_DATA = {
     { role: "AI Integration Manager", feasibility: 82, gapCost: "$2,400", time: "6 Months" },
     { role: "Data Strategy Lead", feasibility: 75, gapCost: "$4,100", time: "9 Months" },
     { role: "Product Operations Dir.", feasibility: 68, gapCost: "$5,500", time: "12 Months" }
-  ]
+  ],
+  matchedJnomicsCards: ["card-001", "card-042", "card-088", "card-112"]
 };
+
+export const JNOMICS_DECK = [
+  {
+    id: "card-001",
+    name: "SPHINX ULTRA SI",
+    tier: "Ultra Premium",
+    type: "Lead Architect",
+    emoji: "🏛",
+    description: "Master of platform architecture & API design. High capability in structural synthesis.",
+    basePts: 48
+  },
+  {
+    id: "card-042",
+    name: "ADA ULTRA SI",
+    tier: "Ultra Premium",
+    type: "Technical Lead",
+    emoji: "💻",
+    description: "Full-stack implementation expert. Specializes in transforming complex specs into scalable code.",
+    basePts: 50
+  },
+  {
+    id: "card-088",
+    name: "STRATEGOS ULTRA SI",
+    tier: "Ultra Premium",
+    type: "Strategy Lead",
+    emoji: "🎯",
+    description: "Roadmap and enterprise deployment specialist. Maximizes transferability and ROI.",
+    basePts: 50
+  },
+  {
+    id: "card-112",
+    name: "ZPOS Expert",
+    tier: "Premium",
+    type: "Optimization Lead",
+    emoji: "⚙",
+    description: "Token optimization and efficiency expert. Minimizes operational drag while preserving semantics.",
+    basePts: 47
+  }
+];
 
 export const MOCK_ENTERPRISE_DATA = {
   overview: {

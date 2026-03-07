@@ -1,6 +1,7 @@
 import { MOCK_USER_DATA } from "@/lib/mockData";
 import { JSTGauge } from "@/components/dashboard/JSTGauge";
 import { VulnerabilityMeter } from "@/components/dashboard/VulnerabilityMeter";
+import { JnomicsCardList } from "@/components/dashboard/JnomicsCardList";
 import { Cpu } from "lucide-react";
 
 export default function Dashboard() {
@@ -60,6 +61,9 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Jnomicsdeck Integration */}
+      <JnomicsCardList matchedCardIds={MOCK_USER_DATA.matchedJnomicsCards} />
 
     </div>
   );
