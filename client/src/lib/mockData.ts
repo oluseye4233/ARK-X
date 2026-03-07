@@ -111,10 +111,20 @@ export const MOCK_ENTERPRISE_DATA = {
     { name: "Flourishing", value: 10, fill: "hsl(var(--secondary))" }
   ],
   departmentHeatmap: [
-    { dept: "Customer Support", risk: 88, color: "bg-destructive/20 border-destructive" },
-    { dept: "Data Entry & Admin", risk: 95, color: "bg-destructive/20 border-destructive" },
-    { dept: "Financial Analysis", risk: 65, color: "bg-orange-500/20 border-orange-500" },
-    { dept: "Software Engineering", risk: 40, color: "bg-yellow-500/20 border-yellow-500" },
-    { dept: "Strategic Planning", risk: 15, color: "bg-secondary/20 border-secondary" },
+    { id: 1, dept: "Customer Support", risk: 88, color: "bg-destructive/20 border-destructive", headcount: 850, seniority: "Junior", location: "Global" },
+    { id: 2, dept: "Data Entry & Admin", risk: 95, color: "bg-destructive/20 border-destructive", headcount: 320, seniority: "Junior", location: "APAC" },
+    { id: 3, dept: "Financial Analysis", risk: 65, color: "bg-orange-500/20 border-orange-500", headcount: 145, seniority: "Mid-Level", location: "NA" },
+    { id: 4, dept: "Software Engineering", risk: 40, color: "bg-yellow-500/20 border-yellow-500", headcount: 620, seniority: "Mid-Level", location: "Global" },
+    { id: 5, dept: "Strategic Planning", risk: 15, color: "bg-secondary/20 border-secondary", headcount: 45, seniority: "Senior", location: "NA" },
+    { id: 6, dept: "HR & Talent", risk: 55, color: "bg-yellow-500/20 border-yellow-500", headcount: 110, seniority: "Mid-Level", location: "EMEA" },
+    { id: 7, dept: "Legal & Compliance", risk: 35, color: "bg-primary/20 border-primary", headcount: 85, seniority: "Senior", location: "Global" },
+  ],
+  jstTrendData: [
+    { month: 'Jan', avgJST: 182, targetJST: 190 },
+    { month: 'Feb', avgJST: 184, targetJST: 190 },
+    { month: 'Mar', avgJST: 185, targetJST: 195 },
+    { month: 'Apr', avgJST: 188, targetJST: 195 },
+    { month: 'May', avgJST: 192, targetJST: 200 },
+    { month: 'Jun', avgJST: 195, targetJST: 200 },
   ]
 };
