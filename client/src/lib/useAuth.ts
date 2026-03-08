@@ -8,6 +8,7 @@ interface AuthUser {
   department?: string | null;
   seniority?: string | null;
   location?: string | null;
+  contextCraftCertLevel?: string | null;
 }
 
 const AUTH_KEY = "ark_user";
@@ -32,5 +33,13 @@ export function useAuth() {
     setUser(null);
   }, []);
 
-  return { user, login, logout, isAuthenticated: !!user };
+  const updateUser = useCallback((updatedData: Partial<AuthUser>) => {
+    if (user) {
+      const newUser = { ...user, ...updatedData };
+      localStorage.setItem(AUTH_KEY, JSON.stringify(newUser));
+      setUser(newUser);
+    }
+  }, [user]);
+
+  return { user, login, logout, updateUser, isAuthenticated: !!user };
 }

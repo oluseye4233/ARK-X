@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Link } from "wouter";
 
 interface JSTGaugeProps {
   score: number;
@@ -10,6 +11,9 @@ interface JSTGaugeProps {
   percentileRank?: number;
   previousScore?: number;
   industryAverage?: number;
+  contextCraftLevel?: string;
+  contextCraftMultiplier?: number;
+  rawTotal?: number;
 }
 
 const COLOR_ZONES = [
@@ -35,6 +39,9 @@ export function JSTGauge({
   percentileRank,
   previousScore,
   industryAverage,
+  contextCraftLevel,
+  contextCraftMultiplier,
+  rawTotal,
 }: JSTGaugeProps) {
   const [animatedScore, setAnimatedScore] = useState(0);
   const maxScore = 300;
@@ -279,6 +286,47 @@ export function JSTGauge({
           <span className="font-display font-bold text-lg text-white">{talentScore}</span>
         </div>
       </div>
+
+      {contextCraftLevel !== undefined && (
+        <Link href="/context-craft" className="w-full block mt-4" data-testid="link-cc-status">
+          <div
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-300 hover:scale-[1.02] cursor-pointer ${
+              contextCraftLevel === "NONE"
+                ? "bg-destructive/10 border border-destructive/20"
+                : "bg-secondary/10 border border-secondary/20"
+            }`}
+          >
+            {contextCraftLevel === "NONE" ? (
+              <ShieldAlert className="h-4 w-4 text-destructive flex-shrink-0" />
+            ) : (
+              <ShieldCheck className="h-4 w-4 text-secondary flex-shrink-0" />
+            )}
+            <div className="flex-1 min-w-0">
+              <span className={`text-[10px] font-mono uppercase tracking-widest ${contextCraftLevel === "NONE" ? "text-destructive" : "text-secondary"}`}>
+                Context Craft {contextCraftLevel === "NONE" ? "NOT VERIFIED" : contextCraftLevel?.replace("_", "-")}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {contextCraftMultiplier !== undefined && rawTotal !== undefined && contextCraftMultiplier !== 1 && (
+                <span className="text-[10px] font-mono text-muted-foreground">
+                  Raw: {rawTotal}
+                </span>
+              )}
+              <span
+                className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${
+                  contextCraftLevel === "NONE"
+                    ? "text-destructive bg-destructive/10"
+                    : contextCraftMultiplier && contextCraftMultiplier > 1
+                      ? "text-secondary bg-secondary/10"
+                      : "text-muted-foreground bg-white/5"
+                }`}
+              >
+                {contextCraftMultiplier !== undefined ? `${contextCraftMultiplier}x` : "—"}
+              </span>
+            </div>
+          </div>
+        </Link>
+      )}
     </div>
   );
 }

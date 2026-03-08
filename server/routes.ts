@@ -6,7 +6,7 @@ const require = createRequire(import.meta.url);
 const pdfParse = require("pdf-parse");
 import { storage } from "./storage";
 import { analyzeResume } from "./resumeAnalyzer";
-import { insertUserSchema, insertAssessmentSchema } from "@shared/schema";
+import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel } from "@shared/schema";
 import { z } from "zod";
 
 const upload = multer({
@@ -66,6 +66,34 @@ export async function registerRoutes(
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
+  });
+
+  // ── Context Craft Certification ──────────────────────
+  const validCertLevels = z.enum(Object.keys(CONTEXT_CRAFT_LEVELS) as [string, ...string[]]);
+
+  app.put("/api/users/:id/context-craft-cert", async (req, res) => {
+    try {
+      const parsed = validCertLevels.safeParse(req.body?.level);
+      if (!parsed.success) {
+        return res.status(400).json({
+          message: "Invalid certification level",
+          validLevels: Object.keys(CONTEXT_CRAFT_LEVELS),
+        });
+      }
+      const level = parsed.data;
+      const updated = await storage.updateUser(req.params.id, {
+        contextCraftCertLevel: level,
+      });
+      if (!updated) return res.status(404).json({ message: "User not found" });
+      const { password: _, ...safeUser } = updated;
+      return res.json(safeUser);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/context-craft/levels", (_req, res) => {
+    return res.json(CONTEXT_CRAFT_LEVELS);
   });
 
   // ── Assessments ───────────────────────────────────────
@@ -165,7 +193,10 @@ export async function registerRoutes(
         return res.status(400).json({ message: "userId is required" });
       }
 
-      const analysis = analyzeResume(resumeText);
+      const user = await storage.getUser(userId);
+      const certLevel = (user?.contextCraftCertLevel as ContextCraftLevel) || "NONE";
+
+      const analysis = analyzeResume(resumeText, certLevel);
 
       const created = await storage.createAssessment({
         ...analysis.assessment,

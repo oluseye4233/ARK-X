@@ -46,6 +46,14 @@ export const api = {
 
   getDepartments: () => apiRequest("/api/departments"),
 
+  getContextCraftLevels: () => apiRequest("/api/context-craft/levels"),
+
+  updateContextCraftCert: (userId: string, level: string) =>
+    apiRequest(`/api/users/${userId}/context-craft-cert`, {
+      method: "PUT",
+      body: JSON.stringify({ level }),
+    }),
+
   uploadResume: async (file: File, userId: string) => {
     const formData = new FormData();
     formData.append("resume", file);

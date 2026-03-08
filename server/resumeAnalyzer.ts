@@ -1,4 +1,5 @@
-import type { InsertAssessment, InsertUpskillingPlan, InsertPivotOpportunity, InsertTransferabilityVector } from "@shared/schema";
+import type { InsertAssessment, InsertUpskillingPlan, InsertPivotOpportunity, InsertTransferabilityVector, ContextCraftLevel } from "@shared/schema";
+import { CONTEXT_CRAFT_LEVELS } from "@shared/schema";
 
 interface AnalysisResult {
   assessment: Omit<InsertAssessment, "userId">;
@@ -518,7 +519,7 @@ function generateVectors(scores: Record<string, number>, yearsExp: number): Omit
   ];
 }
 
-export function analyzeResume(resumeText: string): AnalysisResult {
+export function analyzeResume(resumeText: string, contextCraftLevel: ContextCraftLevel = "NONE"): AnalysisResult {
   const categoryScores: Record<string, number> = {};
   let totalWeightedScore = 0;
 
@@ -536,9 +537,18 @@ export function analyzeResume(resumeText: string): AnalysisResult {
   const skillsRaw = (categoryScores.analytical * 3 + categoryScores.innovation * 3 + categoryScores.technical * 2);
   const talentRaw = (categoryScores.leadership * 3 + categoryScores.communication * 3 + categoryScores.innovation * 2);
 
-  const jstJobs = clamp(Math.round(jobsRaw * 0.8 + 30), 20, 100);
-  const jstSkills = clamp(Math.round(skillsRaw * 0.8 + 25), 20, 100);
-  const jstTalent = clamp(Math.round(talentRaw * 0.8 + 25), 20, 100);
+  const jstRawJobs = clamp(Math.round(jobsRaw * 0.8 + 30), 20, 100);
+  const jstRawSkills = clamp(Math.round(skillsRaw * 0.8 + 25), 20, 100);
+  const jstRawTalent = clamp(Math.round(talentRaw * 0.8 + 25), 20, 100);
+  const jstRawTotal = jstRawJobs + jstRawSkills + jstRawTalent;
+
+  const ccLevel = CONTEXT_CRAFT_LEVELS[contextCraftLevel] || CONTEXT_CRAFT_LEVELS.NONE;
+  const ccMultiplier = ccLevel.multiplier;
+
+  const minAfterCraft = ccMultiplier < 1 ? 10 : 20;
+  const jstJobs = clamp(Math.round(jstRawJobs * ccMultiplier), minAfterCraft, 100);
+  const jstSkills = clamp(Math.round(jstRawSkills * ccMultiplier), minAfterCraft, 100);
+  const jstTalent = clamp(Math.round(jstRawTalent * ccMultiplier), minAfterCraft, 100);
   const jstTotal = jstJobs + jstSkills + jstTalent;
 
   const riskModifiers: Array<{ task: string; automatable: number }> = [];
@@ -586,6 +596,10 @@ export function analyzeResume(resumeText: string): AnalysisResult {
       jstJobs,
       jstSkills,
       jstTalent,
+      jstRawTotal,
+      jstRawJobs,
+      jstRawSkills,
+      jstRawTalent,
       vulnerabilityLevel,
       readinessProfile,
       riskModifiers: riskSlice,
@@ -594,6 +608,8 @@ export function analyzeResume(resumeText: string): AnalysisResult {
       archetypeOrchestrator: archetypeHandicap.orchestrator,
       archetypeConductor: archetypeHandicap.conductor,
       automationMilestones,
+      contextCraftLevel: contextCraftLevel,
+      contextCraftMultiplier: ccMultiplier,
     },
     upskillingPlans,
     pivotOpportunities,

@@ -10,7 +10,8 @@ import {
   TerminalSquare,
   Plug,
   Loader2,
-  Check
+  Check,
+  ShieldCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -141,6 +142,28 @@ export function AppLayout({ children }: AppLayoutProps) {
               </span>
             </div>
           </button>
+
+          <Link
+            href="/context-craft"
+            data-testid="link-context-craft-certs"
+            className={cn(
+              "w-full flex items-center gap-3 px-4 py-3 rounded-md transition-all duration-300 font-mono text-xs uppercase tracking-wide group",
+              location === "/context-craft"
+                ? "bg-primary/10 text-primary border border-primary/30"
+                : "text-muted-foreground hover:bg-cyan-500/10 hover:text-cyan-400 border border-transparent hover:border-cyan-500/30"
+            )}
+          >
+            <ShieldCheck className={cn("h-4 w-4 flex-shrink-0", location === "/context-craft" ? "text-primary" : "opacity-70 group-hover:opacity-100")} />
+            <div className="flex flex-col items-start">
+              <span className="leading-none">Context Craft Certs</span>
+              <span className={cn(
+                "text-[9px] mt-0.5 tracking-wider",
+                location === "/context-craft" ? "text-primary/70" : "text-muted-foreground/50"
+              )}>
+                CERTIFICATIONS
+              </span>
+            </div>
+          </Link>
         </div>
 
         <div className="absolute bottom-0 w-full p-4 border-t border-primary/20 bg-background/80 backdrop-blur-sm space-y-3">

@@ -30,6 +30,12 @@ interface AssessmentData {
   archetypeOrchestrator: number;
   archetypeConductor: number;
   automationMilestones?: Array<{ year: number; event: string; automationPct: number; impact: string }> | null;
+  contextCraftLevel?: string | null;
+  contextCraftMultiplier?: number | null;
+  jstRawTotal?: number | null;
+  jstRawJobs?: number | null;
+  jstRawSkills?: number | null;
+  jstRawTalent?: number | null;
   upskillingPlans: any[];
   pivotOpportunities: any[];
   transferabilityVectors: any[];
@@ -108,6 +114,9 @@ export default function Dashboard() {
           percentileRank={assessment.percentileRank ?? 72}
           previousScore={assessment.previousScore ?? Math.round(assessment.jstTotal * 0.95)}
           industryAverage={assessment.industryAverage ?? 195}
+          contextCraftLevel={assessment.contextCraftLevel || undefined}
+          contextCraftMultiplier={assessment.contextCraftMultiplier || undefined}
+          rawTotal={assessment.jstRawTotal || undefined}
         />
 
         <JSTRadar

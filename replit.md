@@ -37,6 +37,7 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 - `/pathways` — Career Mobility (12-vector radar, pivot opportunities, upskilling timeline, skill gap matrix)
 - `/enterprise` — Workforce Intelligence (department heatmap, vulnerability pie, JST trend)
 - `/report` — Executive Summary (print-optimized brief)
+- `/context-craft` — Context Craft Certifications (integration link, cert level management, JST multiplier preview)
 
 ## API Endpoints
 - `POST /api/auth/login` — Login
@@ -48,6 +49,8 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 - `GET /api/jnomics-cards` — All FORGE cards
 - `POST /api/jnomics-cards/by-ids` — Cards by ID array
 - `GET /api/departments` — All departments
+- `PUT /api/users/:id/context-craft-cert` — Update user's Context Craft certification level (Zod-validated against CONTEXT_CRAFT_LEVELS enum)
+- `GET /api/context-craft/levels` — Get all certification level definitions (multipliers, labels, colors)
 - `POST /api/seed` — Seed demo data
 
 ## Resume Analysis Engine (`server/resumeAnalyzer.ts`)
@@ -62,6 +65,13 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
   - `CARD_ARCHETYPE_MAP`: FORGE cards classified by archetype (card-001/002/003/010 → Architect, card-004/005/009 → Orchestrator, card-006/007/008 → Conductor)
   - Normalization ensures percentages always sum to exactly 100%
   - Primary archetype determines `readinessProfile` (Architect/Orchestrator/Conductor)
+- **Context Craft Handicap System**: Multiplicative scoring modifier based on certification level
+  - No certification (NONE) = 0.5x multiplier (50% JST penalty)
+  - CC-100 Foundational = 1.0x (baseline, penalty removed)
+  - CC-200 Practitioner = 1.1x, CC-300 Specialist = 1.2x, CC-400 Expert = 1.35x, CC-500 Master Architect = 1.5x
+  - Multiplier applied to each JST sub-dimension independently after raw scoring, before final composite
+  - Raw scores (pre-multiplier) stored in `jstRawTotal/Jobs/Skills/Talent` for audit trail
+  - Certification level stored on user record, looked up during resume analysis
 - FORGE card mapping based on category thresholds
 - Generates 12 transferability vectors, 3 upskilling plans, 3 pivot opportunities
 - Accepts PDF (via pdf-parse) and plain text files, max 10MB

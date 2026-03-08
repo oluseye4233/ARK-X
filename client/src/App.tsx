@@ -13,6 +13,7 @@ import EnterprisePage from "@/pages/enterprise";
 import LoginPage from "@/pages/auth/login";
 import AssessmentPage from "@/pages/assessment";
 import ReportPage from "@/pages/report";
+import ContextCraftPage from "@/pages/context-craft";
 
 function Router() {
   return (
@@ -26,6 +27,7 @@ function Router() {
         <Route path="/pathways" component={PathwaysPage} />
         <Route path="/enterprise" component={EnterprisePage} />
         <Route path="/report" component={ReportPage} />
+        <Route path="/context-craft" component={ContextCraftPage} />
         {/* Fallback to 404 */}
         <Route component={NotFound} />
       </Switch>
