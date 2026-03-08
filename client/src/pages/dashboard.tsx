@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { JSTGauge } from "@/components/dashboard/JSTGauge";
+import { JSTRadar } from "@/components/dashboard/JSTRadar";
 import { VulnerabilityMeter } from "@/components/dashboard/VulnerabilityMeter";
 import { JnomicsCardList } from "@/components/dashboard/JnomicsCardList";
 import { ArchetypeHandicap } from "@/components/dashboard/ArchetypeHandicap";
+import { TaskHeatmap } from "@/components/dashboard/TaskHeatmap";
+import { VulnerabilityTimeline } from "@/components/dashboard/VulnerabilityTimeline";
 import { Cpu, FileText, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -20,9 +23,13 @@ interface AssessmentData {
   readinessProfile: string;
   riskModifiers: Array<{ task: string; automatable: number }> | null;
   matchedCardIds: string[] | null;
+  percentileRank?: number;
+  previousScore?: number;
+  industryAverage?: number;
   archetypeArchitect: number;
   archetypeOrchestrator: number;
   archetypeConductor: number;
+  automationMilestones?: Array<{ year: number; event: string; automationPct: number; impact: string }> | null;
   upskillingPlans: any[];
   pivotOpportunities: any[];
   transferabilityVectors: any[];
@@ -98,26 +105,28 @@ export default function Dashboard() {
           jobsScore={assessment.jstJobs}
           skillsScore={assessment.jstSkills}
           talentScore={assessment.jstTalent}
+          percentileRank={assessment.percentileRank ?? 72}
+          previousScore={assessment.previousScore ?? Math.round(assessment.jstTotal * 0.95)}
+          industryAverage={assessment.industryAverage ?? 195}
         />
-        
-        <div className="flex flex-col justify-between space-y-8">
-          <VulnerabilityMeter level={assessment.vulnerabilityLevel} />
-          
-          <div className="glass-card p-6 rounded-xl border-orange-500/20">
-             <h4 className="font-mono text-sm uppercase tracking-widest text-orange-500 mb-4">Risk Modifiers</h4>
-             <ul className="space-y-3 font-sans text-sm">
-               {(assessment.riskModifiers || []).map((mod, i) => (
-                 <li key={i} className="flex justify-between items-center">
-                   <span className="text-muted-foreground">{mod.task}</span>
-                   <span className={`font-mono ${mod.automatable > 70 ? 'text-destructive' : mod.automatable > 40 ? 'text-orange-500' : 'text-secondary'}`}>
-                     {mod.automatable}% Automatable
-                   </span>
-                 </li>
-               ))}
-             </ul>
-          </div>
-        </div>
+
+        <JSTRadar
+          jobsScore={assessment.jstJobs}
+          skillsScore={assessment.jstSkills}
+          talentScore={assessment.jstTalent}
+        />
       </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <VulnerabilityMeter level={assessment.vulnerabilityLevel} />
+          
+        <TaskHeatmap riskModifiers={assessment.riskModifiers || []} />
+      </div>
+
+      <VulnerabilityTimeline
+        vulnerabilityLevel={assessment.vulnerabilityLevel}
+        milestones={assessment.automationMilestones}
+      />
 
       <ArchetypeHandicap
         architect={assessment.archetypeArchitect}

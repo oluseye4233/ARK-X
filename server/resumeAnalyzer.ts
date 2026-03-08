@@ -410,6 +410,58 @@ function generateUpskilling(profile: string, scores: Record<string, number>, vul
   return plans;
 }
 
+function generateAutomationMilestones(vulnerabilityLevel: number, avgAutomation: number): Array<{ year: number; event: string; automationPct: number; impact: string }> {
+  const currentYear = new Date().getFullYear();
+
+  if (vulnerabilityLevel >= 4) {
+    return [
+      { year: currentYear, event: "Current State", automationPct: Math.round(avgAutomation * 0.2), impact: "medium" },
+      { year: currentYear + 2, event: "AI Assistants Replace Routine Tasks", automationPct: 35, impact: "high" },
+      { year: currentYear + 4, event: "Process Automation Wave", automationPct: 55, impact: "critical" },
+      { year: currentYear + 6, event: "Autonomous Systems Deployed", automationPct: 72, impact: "critical" },
+      { year: currentYear + 9, event: "Full Workflow Automation", automationPct: 85, impact: "critical" },
+      { year: currentYear + 12, event: "Role Displacement Threshold", automationPct: 92, impact: "critical" },
+      { year: 2041, event: "Projected Saturation", automationPct: 95, impact: "critical" },
+    ];
+  }
+
+  if (vulnerabilityLevel >= 3) {
+    return [
+      { year: currentYear, event: "Current State", automationPct: Math.round(avgAutomation * 0.15), impact: "low" },
+      { year: currentYear + 2, event: "AI Tool Integration", automationPct: 22, impact: "medium" },
+      { year: currentYear + 5, event: "Partial Task Automation", automationPct: 40, impact: "high" },
+      { year: currentYear + 8, event: "Role Restructuring", automationPct: 55, impact: "high" },
+      { year: currentYear + 11, event: "Hybrid Workforce Models", automationPct: 65, impact: "high" },
+      { year: 2041, event: "Projected Saturation", automationPct: 72, impact: "high" },
+    ];
+  }
+
+  if (vulnerabilityLevel >= 2) {
+    return [
+      { year: currentYear, event: "Current State", automationPct: Math.round(avgAutomation * 0.1), impact: "low" },
+      { year: currentYear + 3, event: "AI Augmentation Phase", automationPct: 18, impact: "low" },
+      { year: currentYear + 6, event: "Selective Task Automation", automationPct: 30, impact: "medium" },
+      { year: currentYear + 10, event: "Role Evolution", automationPct: 42, impact: "medium" },
+      { year: 2041, event: "Projected Plateau", automationPct: 50, impact: "medium" },
+    ];
+  }
+
+  if (vulnerabilityLevel >= 1) {
+    return [
+      { year: currentYear, event: "Current State", automationPct: Math.round(avgAutomation * 0.08), impact: "low" },
+      { year: currentYear + 4, event: "AI Co-Pilot Integration", automationPct: 12, impact: "low" },
+      { year: currentYear + 8, event: "Enhanced Productivity Tools", automationPct: 22, impact: "low" },
+      { year: 2041, event: "Projected Stability", automationPct: 30, impact: "low" },
+    ];
+  }
+
+  return [
+    { year: currentYear, event: "Current State", automationPct: 3, impact: "low" },
+    { year: currentYear + 5, event: "Minimal AI Augmentation", automationPct: 8, impact: "low" },
+    { year: 2041, event: "Projected Stability", automationPct: 15, impact: "low" },
+  ];
+}
+
 function generatePivots(profile: string, scores: Record<string, number>): Omit<InsertPivotOpportunity, "assessmentId">[] {
   const pivots: Omit<InsertPivotOpportunity, "assessmentId">[] = [];
 
@@ -523,6 +575,7 @@ export function analyzeResume(resumeText: string): AnalysisResult {
     readinessProfile = "Conductor";
   }
 
+  const automationMilestones = generateAutomationMilestones(vulnerabilityLevel, avgAutomation);
   const upskillingPlans = generateUpskilling(readinessProfile, categoryScores, vulnerabilityLevel);
   const pivotOpportunities = generatePivots(readinessProfile, categoryScores);
   const transferabilityVectors = generateVectors(categoryScores, yearsExp);
@@ -540,6 +593,7 @@ export function analyzeResume(resumeText: string): AnalysisResult {
       archetypeArchitect: archetypeHandicap.architect,
       archetypeOrchestrator: archetypeHandicap.orchestrator,
       archetypeConductor: archetypeHandicap.conductor,
+      automationMilestones,
     },
     upskillingPlans,
     pivotOpportunities,

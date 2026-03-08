@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { TransferabilityRadar } from "@/components/pathways/TransferabilityRadar";
 import { UpskillingTimeline } from "@/components/pathways/UpskillingTimeline";
+import { SkillGapMatrix } from "@/components/pathways/SkillGapMatrix";
 import { ArrowUpRight, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/useAuth";
 import { api } from "@/lib/api";
@@ -87,6 +88,14 @@ export default function PathwaysPage() {
         </div>
 
       </div>
+
+      <SkillGapMatrix
+        pivotOpportunities={assessment.pivotOpportunities || []}
+        transferabilityVectors={(assessment.transferabilityVectors || []).map((v: any) => ({
+          subject: v.subject,
+          score: v.score,
+        }))}
+      />
     </div>
   );
 }

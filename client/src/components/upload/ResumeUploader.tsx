@@ -1,9 +1,55 @@
 import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { UploadCloud, FileText, CheckCircle2, Activity, AlertTriangle } from "lucide-react";
+import { UploadCloud, FileText, CheckCircle2, Activity, AlertTriangle, Search, Calculator, Shield, GitBranch, Lightbulb } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
+
+interface ProcessingPhase {
+  id: number;
+  name: string;
+  description: string;
+  icon: React.ElementType;
+  steps: string[];
+}
+
+const PHASES: ProcessingPhase[] = [
+  {
+    id: 1,
+    name: "Discovery & Extraction",
+    description: "Parsing resume structure and extracting career data",
+    icon: Search,
+    steps: ["Parsing Document Layout", "Extracting Experience Architecture", "Identifying Skill Taxonomy"],
+  },
+  {
+    id: 2,
+    name: "JST Calculation",
+    description: "Computing Jobs, Skills & Talent composite index",
+    icon: Calculator,
+    steps: ["Quantifying Achievement Vectors", "Classifying NAICS Sector", "Synthesizing JST Index"],
+  },
+  {
+    id: 3,
+    name: "Vulnerability Assessment",
+    description: "Analyzing automation exposure and risk factors",
+    icon: Shield,
+    steps: ["Mapping Task Automation Potential", "Computing Vulnerability Score", "Generating Risk Modifiers"],
+  },
+  {
+    id: 4,
+    name: "Transferability Analysis",
+    description: "Evaluating cross-industry skill portability",
+    icon: GitBranch,
+    steps: ["Building Transferability Vectors", "Identifying Pivot Opportunities", "Scoring Role Alignment"],
+  },
+  {
+    id: 5,
+    name: "Recommendations",
+    description: "Generating personalized career intelligence",
+    icon: Lightbulb,
+    steps: ["Generating Upskilling Pathways", "Compiling FORGE Recommendations"],
+  },
+];
 
 interface ResumeUploaderProps {
   onComplete: () => void;
@@ -15,19 +61,14 @@ export function ResumeUploader({ onComplete }: ResumeUploaderProps) {
   const [uploadState, setUploadState] = useState<"idle" | "uploading" | "processing" | "complete" | "error">("idle");
   const [progress, setProgress] = useState(0);
   const [currentStep, setCurrentStep] = useState("");
+  const [activePhase, setActivePhase] = useState(0);
+  const [phaseStepIndex, setPhaseStepIndex] = useState(0);
+  const [completedPhases, setCompletedPhases] = useState<number[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
   const [fileName, setFileName] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const intervalsRef = useRef<NodeJS.Timeout[]>([]);
-
-  const processingSteps = [
-    "Parsing Document Layout...",
-    "Extracting Experience Architecture...",
-    "Quantifying Achievement Vectors...",
-    "Classifying NAICS Sector...",
-    "Synthesizing JST Index...",
-  ];
 
   const clearAllIntervals = useCallback(() => {
     intervalsRef.current.forEach(clearInterval);
@@ -87,14 +128,35 @@ export function ResumeUploader({ onComplete }: ResumeUploaderProps) {
       clearInterval(uploadInterval);
       setProgress(100);
       setUploadState("processing");
+      setActivePhase(0);
+      setPhaseStepIndex(0);
+      setCompletedPhases([]);
 
-      let stepIndex = 0;
+      let currentPhaseIdx = 0;
+      let currentStepIdx = 0;
+
+      setCurrentStep(PHASES[0].steps[0]);
+
       const stepInterval = setInterval(() => {
-        if (stepIndex < processingSteps.length) {
-          setCurrentStep(processingSteps[stepIndex]);
-          stepIndex++;
+        const phase = PHASES[currentPhaseIdx];
+        if (!phase) return;
+
+        currentStepIdx++;
+        if (currentStepIdx < phase.steps.length) {
+          setPhaseStepIndex(currentStepIdx);
+          setCurrentStep(phase.steps[currentStepIdx]);
+        } else {
+          setCompletedPhases(prev => [...prev, currentPhaseIdx]);
+          currentPhaseIdx++;
+          currentStepIdx = 0;
+
+          if (currentPhaseIdx < PHASES.length) {
+            setActivePhase(currentPhaseIdx);
+            setPhaseStepIndex(0);
+            setCurrentStep(PHASES[currentPhaseIdx].steps[0]);
+          }
         }
-      }, 700);
+      }, 600);
       intervalsRef.current.push(stepInterval);
 
       await apiPromise;
@@ -115,6 +177,10 @@ export function ResumeUploader({ onComplete }: ResumeUploaderProps) {
     setProgress(0);
     setErrorMessage("");
     setFileName("");
+    setActivePhase(0);
+    setPhaseStepIndex(0);
+    setCompletedPhases([]);
+    setCurrentStep("");
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -197,26 +263,101 @@ export function ResumeUploader({ onComplete }: ResumeUploaderProps) {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="glass-card rounded-xl p-12 text-center border-secondary/30"
+            className="glass-card rounded-xl p-8 border-secondary/30"
+            data-testid="processing-pipeline"
           >
-            <Activity className="w-16 h-16 mx-auto mb-6 text-secondary animate-spin" />
-            <h3 className="font-display font-bold text-xl text-white mb-2 uppercase tracking-widest">
-              Synthesizing Intelligence
-            </h3>
-            <p className="font-mono text-xs text-muted-foreground mb-6">{fileName}</p>
+            <div className="text-center mb-6">
+              <Activity className="w-10 h-10 mx-auto mb-3 text-secondary animate-spin" />
+              <h3 className="font-display font-bold text-xl text-white uppercase tracking-widest">
+                Synthesizing Intelligence
+              </h3>
+              <p className="font-mono text-xs text-muted-foreground mt-1">{fileName}</p>
+            </div>
 
-            <div className="h-8 flex items-center justify-center">
-              <AnimatePresence mode="wait">
-                <motion.p
-                  key={currentStep}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="font-mono text-sm text-secondary"
-                >
-                  {currentStep}
-                </motion.p>
-              </AnimatePresence>
+            <div className="space-y-3">
+              {PHASES.map((phase, idx) => {
+                const isCompleted = completedPhases.includes(idx);
+                const isActive = activePhase === idx;
+                const isPending = !isCompleted && !isActive;
+                const PhaseIcon = phase.icon;
+
+                return (
+                  <motion.div
+                    key={phase.id}
+                    data-testid={`phase-${phase.id}`}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: idx * 0.1 }}
+                    className={`flex items-center gap-4 p-3 rounded-lg border transition-all duration-300 ${
+                      isActive
+                        ? "border-secondary/50 bg-secondary/5"
+                        : isCompleted
+                        ? "border-primary/30 bg-primary/5"
+                        : "border-white/5 bg-white/[0.02]"
+                    }`}
+                  >
+                    <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+                      isCompleted
+                        ? "bg-primary/20 text-primary"
+                        : isActive
+                        ? "bg-secondary/20 text-secondary"
+                        : "bg-white/5 text-muted-foreground"
+                    }`}>
+                      {isCompleted ? (
+                        <CheckCircle2 className="w-5 h-5" />
+                      ) : (
+                        <PhaseIcon className={`w-5 h-5 ${isActive ? "animate-pulse" : ""}`} />
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`font-mono text-[10px] uppercase tracking-widest ${
+                          isCompleted ? "text-primary" : isActive ? "text-secondary" : "text-muted-foreground/50"
+                        }`}>
+                          Phase {phase.id}
+                        </span>
+                        {isActive && (
+                          <span className="font-mono text-[10px] text-secondary/70">
+                            Step {phaseStepIndex + 1}/{phase.steps.length}
+                          </span>
+                        )}
+                        {isCompleted && (
+                          <span className="font-mono text-[10px] text-primary/70">Complete</span>
+                        )}
+                      </div>
+                      <p className={`font-display text-sm font-semibold ${
+                        isPending ? "text-muted-foreground/40" : "text-white"
+                      }`}>
+                        {phase.name}
+                      </p>
+                      {isActive && (
+                        <div className="mt-1.5">
+                          <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+                            <motion.div
+                              className="h-full bg-secondary"
+                              initial={{ width: "0%" }}
+                              animate={{ width: `${((phaseStepIndex + 1) / phase.steps.length) * 100}%` }}
+                              transition={{ duration: 0.3 }}
+                            />
+                          </div>
+                          <AnimatePresence mode="wait">
+                            <motion.p
+                              key={currentStep}
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              className="font-mono text-[11px] text-secondary/70 mt-1"
+                            >
+                              {currentStep}...
+                            </motion.p>
+                          </AnimatePresence>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                );
+              })}
             </div>
           </motion.div>
         )}

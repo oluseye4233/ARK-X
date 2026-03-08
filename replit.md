@@ -33,8 +33,8 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 - `/login` — Enterprise login
 - `/upload` — Resume upload
 - `/assessment` — Context Craft assessment questionnaire
-- `/dashboard` — Intelligence Hub (JST gauge, vulnerability meter, risk modifiers, FORGE cards)
-- `/pathways` — Career Mobility (12-vector radar, pivot opportunities, upskilling timeline)
+- `/dashboard` — Intelligence Hub (JST gauge + radar, vulnerability meter + task heatmap + timeline, archetype handicap, FORGE cards)
+- `/pathways` — Career Mobility (12-vector radar, pivot opportunities, upskilling timeline, skill gap matrix)
 - `/enterprise` — Workforce Intelligence (department heatmap, vulnerability pie, JST trend)
 - `/report` — Executive Summary (print-optimized brief)
 
@@ -66,11 +66,23 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 - Generates 12 transferability vectors, 3 upskilling plans, 3 pivot opportunities
 - Accepts PDF (via pdf-parse) and plain text files, max 10MB
 
-## Dashboard Components
-- `JSTGauge` — Tri-dimensional JST score display (0-300)
-- `VulnerabilityMeter` — 5-level AI vulnerability indicator
-- `ArchetypeHandicap` — Visual archetype percentage breakdown with animated bars, trait tags, and composite vector bar
+## Dashboard Components (VIZ Payload Aligned)
+- `JSTGauge` (VIZ-001) — Tri-dimensional JST score display (0-300) with 5 color zones (Needs Development/Fair/Good/Excellent/Exceptional), percentile rank, industry average comparison, trend arrow
+- `JSTRadar` (VIZ-002) — Three-layer radar chart (Jobs/Skills/Talent) with industry average benchmark overlay
+- `VulnerabilityMeter` (VIZ-004) — 5-level AI vulnerability indicator
+- `TaskHeatmap` (VIZ-005) — Task-level automation potential heatmap with color scale (green→blue→yellow→orange→red), time allocation estimates, risk labels
+- `VulnerabilityTimeline` (VIZ-006) — Recharts AreaChart showing automation milestone projections from current year to 2041, color-coded by impact level
+- `ArchetypeHandicap` — Visual archetype percentage breakdown (Architect/Orchestrator/Conductor) with animated bars, trait tags, and composite vector bar
 - `JnomicsCardList` — Matched FORGE cards display
+
+## Pathways Components
+- `TransferabilityRadar` — 12-vector radar chart for skill mobility
+- `UpskillingTimeline` — 30/90/365-day phased upskilling roadmap
+- `SkillGapMatrix` (VIZ-008) — Matrix showing required vs current skills for top pivot roles, color-coded by gap size (Minimal/Small/Medium/Large/Critical)
+
+## Upload Pipeline (VIZ-012)
+- 5-phase processing UI: Discovery & Extraction → JST Calculation → Vulnerability Assessment → Transferability Analysis → Recommendations
+- Each phase shows step progress, descriptions, and animated state transitions
 
 ## Database Seeding
 Run `POST /api/seed` to populate: 10 Jnomics cards (card-001 through card-010), 7 departments, 1 demo user with full assessment data.

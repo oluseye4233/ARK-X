@@ -32,6 +32,7 @@ export const assessments = pgTable("assessments", {
   archetypeArchitect: integer("archetype_architect").notNull().default(34),
   archetypeOrchestrator: integer("archetype_orchestrator").notNull().default(33),
   archetypeConductor: integer("archetype_conductor").notNull().default(33),
+  automationMilestones: jsonb("automation_milestones").$type<Array<{ year: number; event: string; automationPct: number; impact: string }>>(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
