@@ -2,8 +2,15 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
 import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-const pdfParse = require("pdf-parse");
+import { fileURLToPath } from "url";
+
+const _filename = typeof __filename !== "undefined"
+  ? __filename
+  : typeof (import.meta as any).url === "string"
+    ? fileURLToPath((import.meta as any).url)
+    : process.cwd() + "/index.js";
+const _require = createRequire(_filename);
+const pdfParse = _require("pdf-parse");
 import { storage } from "./storage";
 import { analyzeResume } from "./resumeAnalyzer";
 import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel } from "@shared/schema";
