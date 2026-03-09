@@ -38,6 +38,7 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 - `/enterprise` — Workforce Intelligence (department heatmap, vulnerability pie, JST trend)
 - `/report` — Executive Summary (print-optimized brief)
 - `/context-craft` — Context Craft Certifications (integration link, cert level management, JST multiplier preview)
+- `/subscription` — Subscription Plans (Individual Free/Pro, School/Student, Enterprise tiers with feature comparison)
 
 ## API Endpoints
 - `POST /api/auth/login` — Login
@@ -51,6 +52,8 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 - `GET /api/departments` — All departments
 - `PUT /api/users/:id/context-craft-cert` — Update user's Context Craft certification level (Zod-validated against CONTEXT_CRAFT_LEVELS enum)
 - `GET /api/context-craft/levels` — Get all certification level definitions (multipliers, labels, colors)
+- `GET /api/subscription/plans` — Get all subscription plan definitions (features, limits, pricing)
+- `PUT /api/users/:id/subscription` — Update user's subscription plan (Zod-validated against SUBSCRIPTION_PLANS enum, supports institution field for School plan)
 - `POST /api/seed` — Seed demo data
 
 ## Resume Analysis Engine (`server/resumeAnalyzer.ts`)

@@ -13,7 +13,7 @@ const _require = createRequire(_filename);
 const pdfParse = _require("pdf-parse");
 import { storage } from "./storage";
 import { analyzeResume } from "./resumeAnalyzer";
-import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel } from "@shared/schema";
+import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, type SubscriptionPlan } from "@shared/schema";
 import { z } from "zod";
 
 const upload = multer({
@@ -101,6 +101,43 @@ export async function registerRoutes(
 
   app.get("/api/context-craft/levels", (_req, res) => {
     return res.json(CONTEXT_CRAFT_LEVELS);
+  });
+
+  // ── Subscription Plans ─────────────────────────────────
+  const validSubscriptionPlans = z.enum(Object.keys(SUBSCRIPTION_PLANS) as [string, ...string[]]);
+
+  app.get("/api/subscription/plans", (_req, res) => {
+    return res.json(SUBSCRIPTION_PLANS);
+  });
+
+  app.put("/api/users/:id/subscription", async (req, res) => {
+    try {
+      const parsed = validSubscriptionPlans.safeParse(req.body?.plan);
+      if (!parsed.success) {
+        return res.status(400).json({
+          message: "Invalid subscription plan",
+          validPlans: Object.keys(SUBSCRIPTION_PLANS),
+        });
+      }
+      const plan = parsed.data as SubscriptionPlan;
+      const planData = SUBSCRIPTION_PLANS[plan];
+
+      const updateData: any = {
+        subscriptionPlan: plan,
+        subscriptionStatus: "active",
+      };
+
+      if (planData.type === "school" && req.body?.institution) {
+        updateData.institution = req.body.institution;
+      }
+
+      const updated = await storage.updateUser(req.params.id, updateData);
+      if (!updated) return res.status(404).json({ message: "User not found" });
+      const { password: _, ...safeUser } = updated;
+      return res.json(safeUser);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
   });
 
   // ── Assessments ───────────────────────────────────────

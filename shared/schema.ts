@@ -3,6 +3,51 @@ import { pgTable, text, varchar, integer, real, jsonb, boolean, timestamp } from
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export const SUBSCRIPTION_PLANS = {
+  INDIVIDUAL_FREE: {
+    key: "INDIVIDUAL_FREE",
+    label: "Individual Free",
+    type: "individual",
+    price: 0,
+    period: "forever",
+    color: "#888888",
+    features: ["1 resume upload", "Basic JST Score", "Vulnerability Level"],
+    limits: { uploadsPerMonth: 1, dashboardAccess: true, pathwaysAccess: false, enterpriseAccess: false, reportAccess: false, forgeCards: false },
+  },
+  INDIVIDUAL_PRO: {
+    key: "INDIVIDUAL_PRO",
+    label: "Individual Pro",
+    type: "individual",
+    price: 29,
+    period: "month",
+    color: "#00B4D8",
+    features: ["Unlimited uploads", "Full JST Dashboard", "12-Vector Radar", "Career Pathways", "FORGE Cards", "Executive Report", "Context Craft Integration"],
+    limits: { uploadsPerMonth: -1, dashboardAccess: true, pathwaysAccess: true, enterpriseAccess: false, reportAccess: true, forgeCards: true },
+  },
+  SCHOOL_STUDENT: {
+    key: "SCHOOL_STUDENT",
+    label: "School / Student",
+    type: "school",
+    price: 9,
+    period: "month",
+    color: "#AA44FF",
+    features: ["Unlimited uploads", "Full JST Dashboard", "12-Vector Radar", "Career Pathways", "FORGE Cards", "Executive Report", "Context Craft Integration", "Institution Dashboard"],
+    limits: { uploadsPerMonth: -1, dashboardAccess: true, pathwaysAccess: true, enterpriseAccess: false, reportAccess: true, forgeCards: true },
+  },
+  ENTERPRISE: {
+    key: "ENTERPRISE",
+    label: "Enterprise",
+    type: "corporate",
+    price: 0,
+    period: "custom",
+    color: "#44AA44",
+    features: ["Everything in Pro", "Workforce Intelligence", "Department Analytics", "Bulk Assessment", "Custom Integrations", "Priority Support"],
+    limits: { uploadsPerMonth: -1, dashboardAccess: true, pathwaysAccess: true, enterpriseAccess: true, reportAccess: true, forgeCards: true },
+  },
+} as const;
+
+export type SubscriptionPlan = keyof typeof SUBSCRIPTION_PLANS;
+
 export const CONTEXT_CRAFT_LEVELS = {
   NONE: { key: "NONE", label: "No Certification", multiplier: 0.5, color: "#FF4444" },
   CC_100: { key: "CC_100", label: "CC-100 Foundational", multiplier: 1.0, color: "#FFA500" },
@@ -24,9 +69,21 @@ export const users = pgTable("users", {
   seniority: text("seniority"),
   location: text("location"),
   contextCraftCertLevel: text("context_craft_cert_level").default("NONE"),
+  subscriptionPlan: text("subscription_plan").default("INDIVIDUAL_FREE"),
+  subscriptionStatus: text("subscription_status").default("active"),
+  institution: text("institution"),
+  uploadsThisMonth: integer("uploads_this_month").default(0),
+  uploadResetDate: timestamp("upload_reset_date"),
 });
 
-export const insertUserSchema = createInsertSchema(users).omit({ id: true });
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  subscriptionPlan: true,
+  subscriptionStatus: true,
+  institution: true,
+  uploadsThisMonth: true,
+  uploadResetDate: true,
+});
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 

@@ -11,7 +11,8 @@ import {
   Plug,
   Loader2,
   Check,
-  ShieldCheck
+  ShieldCheck,
+  CreditCard
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -161,6 +162,28 @@ export function AppLayout({ children }: AppLayoutProps) {
                 location === "/context-craft" ? "text-primary/70" : "text-muted-foreground/50"
               )}>
                 CERTIFICATIONS
+              </span>
+            </div>
+          </Link>
+
+          <Link
+            href="/subscription"
+            data-testid="link-subscription"
+            className={cn(
+              "w-full flex items-center gap-3 px-4 py-3 rounded-md transition-all duration-300 font-mono text-xs uppercase tracking-wide group",
+              location === "/subscription"
+                ? "bg-primary/10 text-primary border border-primary/30"
+                : "text-muted-foreground hover:bg-cyan-500/10 hover:text-cyan-400 border border-transparent hover:border-cyan-500/30"
+            )}
+          >
+            <CreditCard className={cn("h-4 w-4 flex-shrink-0", location === "/subscription" ? "text-primary" : "opacity-70 group-hover:opacity-100")} />
+            <div className="flex flex-col items-start">
+              <span className="leading-none">Subscription</span>
+              <span className={cn(
+                "text-[9px] mt-0.5 tracking-wider",
+                location === "/subscription" ? "text-primary/70" : "text-muted-foreground/50"
+              )}>
+                PLANS & BILLING
               </span>
             </div>
           </Link>

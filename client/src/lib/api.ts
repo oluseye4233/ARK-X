@@ -54,6 +54,14 @@ export const api = {
       body: JSON.stringify({ level }),
     }),
 
+  getSubscriptionPlans: () => apiRequest("/api/subscription/plans"),
+
+  updateSubscription: (userId: string, plan: string, institution?: string) =>
+    apiRequest(`/api/users/${userId}/subscription`, {
+      method: "PUT",
+      body: JSON.stringify({ plan, institution }),
+    }),
+
   uploadResume: async (file: File, userId: string) => {
     const formData = new FormData();
     formData.append("resume", file);

@@ -3,9 +3,12 @@ import { FileText, Download, Cpu, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/useAuth";
 import { api } from "@/lib/api";
+import { useSubscription } from "@/lib/useSubscription";
+import UpgradeGate from "@/components/UpgradeGate";
 
 export default function ReportPage() {
   const { user } = useAuth();
+  const { canAccessReport } = useSubscription();
   const [assessment, setAssessment] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -20,6 +23,14 @@ export default function ReportPage() {
   const handlePrint = () => {
     window.print();
   };
+
+  if (!canAccessReport) {
+    return (
+      <UpgradeGate featureName="Executive Report" requiredPlan="Individual Pro" hasAccess={false}>
+        <div />
+      </UpgradeGate>
+    );
+  }
 
   if (loading) {
     return (

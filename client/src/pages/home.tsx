@@ -1,6 +1,7 @@
 import { Link } from "wouter";
-import { ArrowRight, ShieldAlert, Target, Zap } from "lucide-react";
+import { ArrowRight, ShieldAlert, Target, Zap, Crown, GraduationCap, User, Building2, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SUBSCRIPTION_PLANS } from "@shared/schema";
 
 export default function Home() {
   return (
@@ -55,6 +56,80 @@ export default function Home() {
           <p className="text-sm text-muted-foreground font-sans">
             Maps career mobility across 12 orthogonal dimensions to generate optimal pivot pathways.
           </p>
+        </div>
+      </div>
+
+      <div className="space-y-8 pt-12 border-t border-white/10">
+        <div className="text-center space-y-3">
+          <h2 className="text-3xl font-display font-bold text-white tracking-tight">
+            Access <span className="text-primary neon-text">Tiers</span>
+          </h2>
+          <p className="text-sm text-muted-foreground font-mono uppercase tracking-widest">
+            Individual & School Plans Available
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {([
+            { key: "INDIVIDUAL_FREE", icon: User },
+            { key: "INDIVIDUAL_PRO", icon: Crown },
+            { key: "SCHOOL_STUDENT", icon: GraduationCap },
+            { key: "ENTERPRISE", icon: Building2 },
+          ] as const).map(({ key, icon: Icon }) => {
+            const plan = SUBSCRIPTION_PLANS[key];
+            const isPopular = key === "INDIVIDUAL_PRO";
+            return (
+              <div
+                key={key}
+                className={`glass-card p-5 rounded-lg flex flex-col relative ${isPopular ? "ring-1 ring-primary/40" : ""}`}
+                data-testid={`card-home-plan-${key.toLowerCase()}`}
+              >
+                {isPopular && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[9px] font-mono uppercase tracking-widest px-3 py-1 rounded-full">
+                    Popular
+                  </div>
+                )}
+                <div className="flex items-center gap-2 mb-3">
+                  <Icon className="h-5 w-5" style={{ color: plan.color }} />
+                  <span className="font-display font-bold text-sm text-white uppercase">{plan.label}</span>
+                </div>
+                <div className="mb-3">
+                  {plan.price === 0 ? (
+                    <span className="text-2xl font-display font-black text-white">
+                      {key === "ENTERPRISE" ? "Custom" : "Free"}
+                    </span>
+                  ) : (
+                    <span className="text-2xl font-display font-black text-white">
+                      ${plan.price}<span className="text-sm text-muted-foreground font-mono">/{plan.period}</span>
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-1.5 flex-1 mb-4">
+                  {plan.features.slice(0, 4).map((f, i) => (
+                    <div key={i} className="flex items-center gap-1.5">
+                      <Check className="h-3 w-3" style={{ color: plan.color }} />
+                      <span className="text-xs text-muted-foreground">{f}</span>
+                    </div>
+                  ))}
+                  {plan.features.length > 4 && (
+                    <span className="text-xs text-muted-foreground/50 font-mono">
+                      +{plan.features.length - 4} more
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="text-center">
+          <Link
+            href="/subscription"
+            data-testid="link-view-plans"
+            className="inline-flex items-center gap-2 text-primary font-mono text-sm uppercase tracking-wider hover:text-primary/80 transition-colors"
+          >
+            View All Plans & Features <ArrowRight className="h-4 w-4" />
+          </Link>
         </div>
       </div>
     </div>

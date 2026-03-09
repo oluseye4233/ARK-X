@@ -9,6 +9,9 @@ interface AuthUser {
   seniority?: string | null;
   location?: string | null;
   contextCraftCertLevel?: string | null;
+  subscriptionPlan?: string | null;
+  subscriptionStatus?: string | null;
+  institution?: string | null;
 }
 
 const AUTH_KEY = "ark_user";

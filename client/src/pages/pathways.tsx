@@ -5,9 +5,12 @@ import { SkillGapMatrix } from "@/components/pathways/SkillGapMatrix";
 import { ArrowUpRight, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/useAuth";
 import { api } from "@/lib/api";
+import { useSubscription } from "@/lib/useSubscription";
+import UpgradeGate from "@/components/UpgradeGate";
 
 export default function PathwaysPage() {
   const { user } = useAuth();
+  const { canAccessPathways } = useSubscription();
   const [assessment, setAssessment] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -18,6 +21,14 @@ export default function PathwaysPage() {
       .catch(() => setAssessment(null))
       .finally(() => setLoading(false));
   }, [user]);
+
+  if (!canAccessPathways) {
+    return (
+      <UpgradeGate featureName="Career Pathways" requiredPlan="Individual Pro" hasAccess={false}>
+        <div />
+      </UpgradeGate>
+    );
+  }
 
   if (loading) {
     return (
