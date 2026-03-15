@@ -32,13 +32,15 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 - `/` — Landing page
 - `/login` — Enterprise login
 - `/upload` — Resume upload
-- `/assessment` — Context Craft assessment questionnaire
-- `/dashboard` — Intelligence Hub (JST gauge + radar, vulnerability meter + task heatmap + timeline, archetype handicap, FORGE cards)
+- `/assessment` — Context Craft assessment questionnaire (8 questions, archetype scoring)
+- `/dashboard` — Intelligence Hub (JST gauge + radar, vulnerability meter + task heatmap + timeline, archetype handicap, FORGE cards, assessment history chart, email summary)
 - `/pathways` — Career Mobility (12-vector radar, pivot opportunities, upskilling timeline, skill gap matrix)
 - `/enterprise` — Workforce Intelligence (department heatmap, vulnerability pie, JST trend)
-- `/report` — Executive Summary (print-optimized brief)
+- `/report` — Executive Summary (print-optimized brief, PDF export via jsPDF + html2canvas)
 - `/context-craft` — Context Craft Certifications (integration link, cert level management, JST multiplier preview)
-- `/subscription` — Subscription Plans (Individual Free/Pro, School/Student, Enterprise tiers with feature comparison)
+- `/subscription` — Subscription Plans with Stripe checkout modal (Individual Free/Pro, School/Student, Enterprise tiers with feature comparison)
+- `/profile` — User Profile (editable profile details, subscription status, cert level, institution)
+- `/school` — Institution Dashboard (cohort JST scores, skill radar, archetype/vulnerability distributions, School plan gated)
 
 ## API Endpoints
 - `POST /api/auth/login` — Login
@@ -54,6 +56,9 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 - `GET /api/context-craft/levels` — Get all certification level definitions (multipliers, labels, colors)
 - `GET /api/subscription/plans` — Get all subscription plan definitions (features, limits, pricing)
 - `PUT /api/users/:id/subscription` — Update user's subscription plan (Zod-validated against SUBSCRIPTION_PLANS enum, supports institution field for School plan)
+- `PUT /api/users/:id/profile` — Update user profile (name, role, department, seniority, location)
+- `GET /api/assessments/user/:userId` — All assessments for user (history)
+- `POST /api/notifications/assessment-summary` — Queue email notification with assessment summary
 - `POST /api/seed` — Seed demo data
 
 ## Resume Analysis Engine (`server/resumeAnalyzer.ts`)

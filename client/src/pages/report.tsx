@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { FileText, Download, Cpu, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/useAuth";
@@ -20,8 +20,43 @@ export default function ReportPage() {
       .finally(() => setLoading(false));
   }, [user]);
 
-  const handlePrint = () => {
-    window.print();
+  const reportRef = useRef<HTMLDivElement>(null);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportPDF = async () => {
+    if (!reportRef.current) return;
+    setExporting(true);
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const { jsPDF } = await import("jspdf");
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+      });
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = pageWidth - 20;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 10;
+      pdf.addImage(imgData, "PNG", 10, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight + 10;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 10, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+      pdf.save(`ARK_Assessment_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch (err) {
+      console.error("PDF export failed:", err);
+      window.print();
+    } finally {
+      setExporting(false);
+    }
   };
 
   if (!canAccessReport) {
@@ -72,14 +107,21 @@ export default function ReportPage() {
           </p>
         </div>
         <Button 
-          onClick={handlePrint}
+          onClick={handleExportPDF}
+          disabled={exporting}
           className="bg-primary/20 text-primary border border-primary/50 hover:bg-primary hover:text-primary-foreground font-mono uppercase tracking-widest"
+          data-testid="button-export-pdf"
         >
-          <Download className="w-4 h-4 mr-2" /> Export to PDF
+          {exporting ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <Download className="w-4 h-4 mr-2" />
+          )}
+          {exporting ? "Generating..." : "Export to PDF"}
         </Button>
       </div>
 
-      <div className="bg-white text-black p-10 rounded-xl print:p-0 print:bg-transparent shadow-2xl">
+      <div ref={reportRef} className="bg-white text-black p-10 rounded-xl print:p-0 print:bg-transparent shadow-2xl">
         
         <div className="border-b-2 border-black/10 pb-6 mb-8 flex justify-between items-end">
           <div>

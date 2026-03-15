@@ -33,7 +33,52 @@ const QUESTIONS = [
       { text: "Switch to a different model or adjust the processing pipeline.", type: "Orchestrator" },
       { text: "Engage in a conversational feedback loop to correct the errors.", type: "Conductor" }
     ]
-  }
+  },
+  {
+    id: 4,
+    question: "When presented with a new technology, your first move is to:",
+    options: [
+      { text: "Map it into a system blueprint and identify integration points.", type: "Architect" },
+      { text: "Evaluate how it fits into the existing tool ecosystem and workflows.", type: "Orchestrator" },
+      { text: "Try it hands-on and build a prototype to test its limits.", type: "Conductor" }
+    ]
+  },
+  {
+    id: 5,
+    question: "Your team faces a major strategic pivot. You contribute by:",
+    options: [
+      { text: "Designing the new architecture and long-term technical vision.", type: "Architect" },
+      { text: "Coordinating the migration plan and aligning cross-functional teams.", type: "Orchestrator" },
+      { text: "Leading the execution, shipping deliverables and keeping momentum.", type: "Conductor" }
+    ]
+  },
+  {
+    id: 6,
+    question: "When documenting a complex process, you prioritize:",
+    options: [
+      { text: "Comprehensive system diagrams and constraint specifications.", type: "Architect" },
+      { text: "Workflow maps showing dependencies between teams and tools.", type: "Orchestrator" },
+      { text: "Step-by-step runbooks with examples and edge cases.", type: "Conductor" }
+    ]
+  },
+  {
+    id: 7,
+    question: "In a high-pressure deadline scenario, your strength is:",
+    options: [
+      { text: "Quickly simplifying the system to reduce complexity and risk.", type: "Architect" },
+      { text: "Reallocating resources and re-prioritizing across the pipeline.", type: "Orchestrator" },
+      { text: "Rolling up your sleeves and grinding through the critical path.", type: "Conductor" }
+    ]
+  },
+  {
+    id: 8,
+    question: "Your ideal career growth path involves:",
+    options: [
+      { text: "Becoming a technical visionary who shapes platform strategy.", type: "Architect" },
+      { text: "Leading cross-functional programs at increasing scale.", type: "Orchestrator" },
+      { text: "Mastering execution and becoming the go-to problem solver.", type: "Conductor" }
+    ]
+  },
 ];
 
 export default function AssessmentPage() {
@@ -44,11 +89,11 @@ export default function AssessmentPage() {
   const [isSynthesizing, setIsSynthesizing] = useState(false);
 
   const liveScores = useMemo(() => {
-    const base = { j: 30, s: 25, t: 28 };
+    const base = { j: 18, s: 15, t: 16 };
     const boosts: Record<string, { j: number; s: number; t: number }> = {
-      Architect: { j: 18, s: 22, t: 15 },
-      Orchestrator: { j: 20, s: 16, t: 18 },
-      Conductor: { j: 16, s: 18, t: 22 },
+      Architect: { j: 8, s: 10, t: 6 },
+      Orchestrator: { j: 9, s: 7, t: 8 },
+      Conductor: { j: 7, s: 8, t: 10 },
     };
     let j = base.j, s = base.s, t = base.t;
     answers.forEach((a) => {

@@ -6,11 +6,13 @@ import { JnomicsCardList } from "@/components/dashboard/JnomicsCardList";
 import { ArchetypeHandicap } from "@/components/dashboard/ArchetypeHandicap";
 import { TaskHeatmap } from "@/components/dashboard/TaskHeatmap";
 import { VulnerabilityTimeline } from "@/components/dashboard/VulnerabilityTimeline";
-import { Cpu, FileText, Loader2 } from "lucide-react";
+import { Cpu, FileText, Loader2, TrendingUp, Mail, CheckCircle2 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/useAuth";
 import { api } from "@/lib/api";
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface AssessmentData {
   id: string;
@@ -44,15 +46,49 @@ interface AssessmentData {
 export default function Dashboard() {
   const { user } = useAuth();
   const [assessment, setAssessment] = useState<AssessmentData | null>(null);
+  const [allAssessments, setAllAssessments] = useState<AssessmentData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [emailSent, setEmailSent] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailError, setEmailError] = useState(false);
 
   useEffect(() => {
     if (!user) return;
-    api.getLatestAssessment(user.id)
-      .then(setAssessment)
-      .catch(() => setAssessment(null))
-      .finally(() => setLoading(false));
+    Promise.all([
+      api.getLatestAssessment(user.id).catch(() => null),
+      api.getAllAssessments(user.id).catch(() => []),
+    ]).then(([latest, all]) => {
+      setAssessment(latest);
+      setAllAssessments(Array.isArray(all) ? all : []);
+    }).finally(() => setLoading(false));
   }, [user]);
+
+  const handleSendEmail = async () => {
+    if (!user) return;
+    setSendingEmail(true);
+    try {
+      await api.requestEmailNotification(user.id, user.username);
+      setEmailSent(true);
+      setTimeout(() => setEmailSent(false), 4000);
+    } catch (err) {
+      console.error("Email notification failed:", err);
+      setEmailError(true);
+      setTimeout(() => setEmailError(false), 4000);
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
+  const historyData = allAssessments
+    .sort((a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime())
+    .map((a: any, i: number) => ({
+      label: `#${i + 1}`,
+      date: a.createdAt ? new Date(a.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : `Assessment ${i + 1}`,
+      total: a.jstTotal,
+      jobs: a.jstJobs,
+      skills: a.jstSkills,
+      talent: a.jstTalent,
+    }));
 
   if (loading) {
     return (
@@ -145,6 +181,83 @@ export default function Dashboard() {
       />
 
       <JnomicsCardList matchedCardIds={assessment.matchedCardIds || []} />
+
+      {historyData.length > 1 && (
+        <div className="glass-card p-6 rounded-xl" data-testid="card-assessment-history">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <TrendingUp className="h-5 w-5 text-primary" />
+              <h3 className="font-display font-bold text-lg text-primary uppercase tracking-widest">Assessment History</h3>
+            </div>
+            <span className="text-xs font-mono text-muted-foreground">{historyData.length} assessments</span>
+          </div>
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={historyData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+              <XAxis dataKey="date" tick={{ fill: "#888", fontSize: 11, fontFamily: "monospace" }} />
+              <YAxis tick={{ fill: "#888", fontSize: 11 }} domain={[0, 300]} />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "#1a1f35",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 8,
+                  fontFamily: "monospace",
+                  fontSize: 12,
+                }}
+              />
+              <Line type="monotone" dataKey="total" stroke="#00B4D8" strokeWidth={2} dot={{ fill: "#00B4D8", r: 4 }} name="Total JST" />
+              <Line type="monotone" dataKey="jobs" stroke="#44AA44" strokeWidth={1} strokeDasharray="4 4" dot={false} name="Jobs" />
+              <Line type="monotone" dataKey="skills" stroke="#AA44FF" strokeWidth={1} strokeDasharray="4 4" dot={false} name="Skills" />
+              <Line type="monotone" dataKey="talent" stroke="#FFDD00" strokeWidth={1} strokeDasharray="4 4" dot={false} name="Talent" />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      <div className="glass-card p-6 rounded-xl" data-testid="card-email-summary">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Mail className="h-5 w-5 text-primary" />
+            <div>
+              <h3 className="font-display font-bold text-sm text-white uppercase tracking-widest">Email Summary</h3>
+              <p className="text-xs text-muted-foreground font-mono mt-0.5">Send your latest assessment results to your inbox</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <AnimatePresence>
+              {emailSent && (
+                <motion.span
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="text-secondary text-xs font-mono flex items-center gap-1"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Queued
+                </motion.span>
+              )}
+              {emailError && (
+                <motion.span
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="text-destructive text-xs font-mono"
+                >
+                  Failed to send
+                </motion.span>
+              )}
+            </AnimatePresence>
+            <button
+              onClick={handleSendEmail}
+              disabled={sendingEmail || emailSent}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xs uppercase tracking-wider text-primary bg-primary/10 border border-primary/30 hover:bg-primary/20 transition-all disabled:opacity-40"
+              data-testid="button-send-email-summary"
+            >
+              {sendingEmail ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+              {sendingEmail ? "Sending..." : "Send Report"}
+            </button>
+          </div>
+        </div>
+      </div>
 
     </div>
   );

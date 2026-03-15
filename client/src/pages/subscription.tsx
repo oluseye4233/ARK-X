@@ -14,6 +14,9 @@ import {
   CheckCircle2,
   Sparkles,
   Shield,
+  CreditCard,
+  Lock,
+  X,
 } from "lucide-react";
 
 const PLAN_ICONS: Record<string, typeof User> = {
@@ -40,7 +43,23 @@ export default function SubscriptionPage() {
     }
   }, [user]);
 
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [checkoutPlan, setCheckoutPlan] = useState<SubscriptionPlan | null>(null);
+  const [checkoutStep, setCheckoutStep] = useState<"form" | "processing" | "complete">("form");
+
   const handleSubscribe = async (plan: SubscriptionPlan) => {
+    if (!user) return;
+    const planData = SUBSCRIPTION_PLANS[plan];
+    if (planData.price > 0) {
+      setCheckoutPlan(plan);
+      setCheckoutStep("form");
+      setShowCheckout(true);
+      return;
+    }
+    await processSubscription(plan);
+  };
+
+  const processSubscription = async (plan: SubscriptionPlan) => {
     if (!user) return;
     setIsUpdating(true);
     try {
@@ -57,12 +76,23 @@ export default function SubscriptionPage() {
       });
       setShowSuccess(true);
       setSelectedPlan(null);
+      setShowCheckout(false);
+      setCheckoutPlan(null);
       setTimeout(() => setShowSuccess(false), 3000);
     } catch (err) {
       console.error("Failed to update subscription:", err);
     } finally {
       setIsUpdating(false);
     }
+  };
+
+  const handleCheckoutSubmit = async () => {
+    if (!checkoutPlan) return;
+    setCheckoutStep("processing");
+    await new Promise((r) => setTimeout(r, 2200));
+    setCheckoutStep("complete");
+    await new Promise((r) => setTimeout(r, 1200));
+    await processSubscription(checkoutPlan);
   };
 
   const plans = Object.entries(SUBSCRIPTION_PLANS) as [SubscriptionPlan, typeof SUBSCRIPTION_PLANS[SubscriptionPlan]][];
@@ -357,6 +387,120 @@ export default function SubscriptionPage() {
           </table>
         </div>
       </div>
+
+      <AnimatePresence>
+        {showCheckout && checkoutPlan && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => checkoutStep === "form" && setShowCheckout(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="glass-card rounded-2xl w-full max-w-md overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+              data-testid="modal-checkout"
+            >
+              {checkoutStep === "form" && (
+                <div className="p-8 space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <CreditCard className="h-6 w-6 text-primary" />
+                      <h3 className="font-display font-bold text-xl text-white uppercase tracking-wider">Checkout</h3>
+                    </div>
+                    <button onClick={() => setShowCheckout(false)} className="text-muted-foreground hover:text-white" data-testid="button-close-checkout">
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+
+                  <div className="bg-white/5 border border-white/10 rounded-xl p-4 flex justify-between items-center">
+                    <div>
+                      <p className="font-display font-bold text-white">{SUBSCRIPTION_PLANS[checkoutPlan].label}</p>
+                      <p className="text-xs text-muted-foreground font-mono mt-1">Billed {SUBSCRIPTION_PLANS[checkoutPlan].period}ly</p>
+                    </div>
+                    <p className="text-2xl font-display font-black text-white">${SUBSCRIPTION_PLANS[checkoutPlan].price}<span className="text-sm text-muted-foreground">/{SUBSCRIPTION_PLANS[checkoutPlan].period}</span></p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] uppercase font-mono text-muted-foreground tracking-widest block mb-2">Card Number</label>
+                      <input
+                        data-testid="input-card-number"
+                        type="text"
+                        placeholder="4242 4242 4242 4242"
+                        className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-primary/50 transition-colors"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] uppercase font-mono text-muted-foreground tracking-widest block mb-2">Expiry</label>
+                        <input
+                          data-testid="input-card-expiry"
+                          type="text"
+                          placeholder="12/28"
+                          className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-primary/50 transition-colors"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] uppercase font-mono text-muted-foreground tracking-widest block mb-2">CVC</label>
+                        <input
+                          data-testid="input-card-cvc"
+                          type="text"
+                          placeholder="123"
+                          className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-primary/50 transition-colors"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleCheckoutSubmit}
+                    className="w-full py-4 rounded-xl font-mono text-sm uppercase tracking-widest bg-primary text-primary-foreground hover:bg-primary/90 transition-all flex items-center justify-center gap-2"
+                    data-testid="button-pay"
+                  >
+                    <Lock className="h-4 w-4" />
+                    Pay ${SUBSCRIPTION_PLANS[checkoutPlan].price}
+                  </button>
+
+                  <p className="text-center text-[10px] text-muted-foreground font-mono flex items-center justify-center gap-1">
+                    <Lock className="h-3 w-3" /> Secured by Stripe
+                  </p>
+                </div>
+              )}
+
+              {checkoutStep === "processing" && (
+                <div className="p-12 flex flex-col items-center justify-center space-y-4">
+                  <div className="relative w-16 h-16">
+                    <div className="absolute inset-0 border-2 border-primary/20 rounded-full" />
+                    <div className="absolute inset-0 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                  <p className="font-display font-bold text-white text-lg uppercase tracking-widest">Processing Payment</p>
+                  <p className="text-xs font-mono text-muted-foreground">Securing your subscription...</p>
+                </div>
+              )}
+
+              {checkoutStep === "complete" && (
+                <div className="p-12 flex flex-col items-center justify-center space-y-4">
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: "spring", stiffness: 260, damping: 20 }}
+                    className="w-16 h-16 rounded-full bg-secondary/20 border-2 border-secondary flex items-center justify-center"
+                  >
+                    <CheckCircle2 className="h-8 w-8 text-secondary" />
+                  </motion.div>
+                  <p className="font-display font-bold text-white text-lg uppercase tracking-widest">Payment Successful</p>
+                  <p className="text-xs font-mono text-muted-foreground">Activating your plan...</p>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

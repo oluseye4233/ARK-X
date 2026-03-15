@@ -30,6 +30,21 @@ export const api = {
   getLatestAssessment: (userId: string) =>
     apiRequest(`/api/assessments/user/${userId}/latest`),
 
+  getAllAssessments: (userId: string) =>
+    apiRequest(`/api/assessments/user/${userId}`),
+
+  updateProfile: (userId: string, data: any) =>
+    apiRequest(`/api/users/${userId}/profile`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  requestEmailNotification: (userId: string, email: string) =>
+    apiRequest(`/api/notifications/assessment-summary`, {
+      method: "POST",
+      body: JSON.stringify({ userId, email }),
+    }),
+
   createAssessment: (data: any) =>
     apiRequest("/api/assessments", {
       method: "POST",

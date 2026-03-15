@@ -12,7 +12,9 @@ import {
   Loader2,
   Check,
   ShieldCheck,
-  CreditCard
+  CreditCard,
+  User,
+  GraduationCap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -129,6 +131,50 @@ export function AppLayout({ children }: AppLayoutProps) {
                 location === "/context-craft" ? "text-primary/70" : "text-muted-foreground/50"
               )}>
                 CERTIFICATIONS
+              </span>
+            </div>
+          </Link>
+
+          <Link
+            href="/profile"
+            data-testid="link-profile"
+            className={cn(
+              "w-full flex items-center gap-3 px-4 py-3 rounded-md transition-all duration-300 font-mono text-xs uppercase tracking-wide group",
+              location === "/profile"
+                ? "bg-primary/10 text-primary border border-primary/30"
+                : "text-muted-foreground hover:bg-cyan-500/10 hover:text-cyan-400 border border-transparent hover:border-cyan-500/30"
+            )}
+          >
+            <User className={cn("h-4 w-4 flex-shrink-0", location === "/profile" ? "text-primary" : "opacity-70 group-hover:opacity-100")} />
+            <div className="flex flex-col items-start">
+              <span className="leading-none">Profile</span>
+              <span className={cn(
+                "text-[9px] mt-0.5 tracking-wider",
+                location === "/profile" ? "text-primary/70" : "text-muted-foreground/50"
+              )}>
+                ACCOUNT
+              </span>
+            </div>
+          </Link>
+
+          <Link
+            href="/school"
+            data-testid="link-school-dashboard"
+            className={cn(
+              "w-full flex items-center gap-3 px-4 py-3 rounded-md transition-all duration-300 font-mono text-xs uppercase tracking-wide group",
+              location === "/school"
+                ? "bg-purple-500/10 text-purple-400 border border-purple-500/30"
+                : "text-muted-foreground hover:bg-purple-500/10 hover:text-purple-400 border border-transparent hover:border-purple-500/30"
+            )}
+          >
+            <GraduationCap className={cn("h-4 w-4 flex-shrink-0", location === "/school" ? "text-purple-400" : "opacity-70 group-hover:opacity-100")} />
+            <div className="flex flex-col items-start">
+              <span className="leading-none">Institution</span>
+              <span className={cn(
+                "text-[9px] mt-0.5 tracking-wider",
+                location === "/school" ? "text-purple-400/70" : "text-muted-foreground/50"
+              )}>
+                SCHOOL DASHBOARD
               </span>
             </div>
           </Link>

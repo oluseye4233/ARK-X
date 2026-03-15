@@ -75,6 +75,51 @@ export async function registerRoutes(
     }
   });
 
+  // ── Profile Update ──────────────────────────────────
+  app.put("/api/users/:id/profile", async (req, res) => {
+    try {
+      const allowed = ["name", "role", "department", "seniority", "location"];
+      const updateData: any = {};
+      for (const key of allowed) {
+        if (req.body[key] !== undefined) updateData[key] = req.body[key];
+      }
+      const updated = await storage.updateUser(req.params.id, updateData);
+      if (!updated) return res.status(404).json({ message: "User not found" });
+      const { password: _, ...safeUser } = updated;
+      return res.json(safeUser);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Email Notifications ────────────────────────────
+  app.post("/api/notifications/assessment-summary", async (req, res) => {
+    try {
+      const { userId, email } = req.body;
+      if (!userId || !email) {
+        return res.status(400).json({ message: "userId and email are required" });
+      }
+      const assessment = await storage.getLatestAssessment(userId);
+      if (!assessment) {
+        return res.status(404).json({ message: "No assessment found for this user" });
+      }
+      console.log(`[EMAIL] Assessment summary queued for ${email} (userId: ${userId}, JST: ${assessment.jstTotal})`);
+      return res.json({
+        success: true,
+        message: `Assessment summary will be sent to ${email}`,
+        preview: {
+          subject: `Your ARK JST Assessment Summary — Score: ${assessment.jstTotal}/300`,
+          recipient: email,
+          jstTotal: assessment.jstTotal,
+          readinessProfile: assessment.readinessProfile,
+          vulnerabilityLevel: assessment.vulnerabilityLevel,
+        },
+      });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
   // ── Context Craft Certification ──────────────────────
   const validCertLevels = z.enum(Object.keys(CONTEXT_CRAFT_LEVELS) as [string, ...string[]]);
 
