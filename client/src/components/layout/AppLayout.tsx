@@ -12,7 +12,8 @@ import {
   Loader2,
   Check,
   ShieldCheck,
-  CreditCard
+  CreditCard,
+  Gauge
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -24,9 +25,10 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [location] = useLocation();
   const [matrixStatus, setMatrixStatus] = useState<"idle" | "connecting" | "connected">("idle");
   const [sphinxStatus, setSphinxStatus] = useState<"idle" | "connecting" | "connected">("idle");
+  const [arkJstStatus, setArkJstStatus] = useState<"idle" | "connecting" | "connected">("idle");
 
   const handleConnect = (
-    target: "matrix" | "sphinx",
+    target: "matrix" | "sphinx" | "arkjst",
     setStatus: (s: "idle" | "connecting" | "connected") => void
   ) => {
     setStatus("connecting");
@@ -140,6 +142,37 @@ export function AppLayout({ children }: AppLayoutProps) {
                 sphinxStatus === "connected" ? "text-secondary/70" : sphinxStatus === "connecting" ? "text-amber-500/70" : "text-muted-foreground/50"
               )}>
                 {sphinxStatus === "connected" ? "SYNCED" : sphinxStatus === "connecting" ? "ESTABLISHING..." : "CONNECT"}
+              </span>
+            </div>
+          </button>
+
+          <button
+            data-testid="button-connect-ark-jst"
+            onClick={() => handleConnect("arkjst", setArkJstStatus)}
+            disabled={arkJstStatus !== "idle"}
+            className={cn(
+              "w-full flex items-center gap-3 px-4 py-3 rounded-md transition-all duration-300 font-mono text-xs uppercase tracking-wide group",
+              arkJstStatus === "connected"
+                ? "bg-secondary/10 text-secondary border border-secondary/30"
+                : arkJstStatus === "connecting"
+                  ? "bg-amber-500/10 text-amber-500 border border-amber-500/30 animate-pulse"
+                  : "text-muted-foreground hover:bg-cyan-500/10 hover:text-cyan-400 border border-transparent hover:border-cyan-500/30"
+            )}
+          >
+            {arkJstStatus === "connecting" ? (
+              <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
+            ) : arkJstStatus === "connected" ? (
+              <Check className="h-4 w-4 flex-shrink-0" />
+            ) : (
+              <Gauge className="h-4 w-4 flex-shrink-0 opacity-70 group-hover:opacity-100" />
+            )}
+            <div className="flex flex-col items-start">
+              <span className="leading-none">ARK JST</span>
+              <span className={cn(
+                "text-[9px] mt-0.5 tracking-wider",
+                arkJstStatus === "connected" ? "text-secondary/70" : arkJstStatus === "connecting" ? "text-amber-500/70" : "text-muted-foreground/50"
+              )}>
+                {arkJstStatus === "connected" ? "SYNCED" : arkJstStatus === "connecting" ? "ESTABLISHING..." : "CONNECT"}
               </span>
             </div>
           </button>
