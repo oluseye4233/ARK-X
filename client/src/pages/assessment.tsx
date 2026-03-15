@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { BrainCircuit, ChevronRight, Activity } from "lucide-react";
 import { useAuth } from "@/lib/useAuth";
 import { api } from "@/lib/api";
+import { LiveJSTScore } from "@/components/LiveJSTScore";
 
 const QUESTIONS = [
   {
@@ -41,6 +42,25 @@ export default function AssessmentPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<string[]>([]);
   const [isSynthesizing, setIsSynthesizing] = useState(false);
+
+  const liveScores = useMemo(() => {
+    const base = { j: 30, s: 25, t: 28 };
+    const boosts: Record<string, { j: number; s: number; t: number }> = {
+      Architect: { j: 18, s: 22, t: 15 },
+      Orchestrator: { j: 20, s: 16, t: 18 },
+      Conductor: { j: 16, s: 18, t: 22 },
+    };
+    let j = base.j, s = base.s, t = base.t;
+    answers.forEach((a) => {
+      const b = boosts[a];
+      if (b) { j += b.j; s += b.s; t += b.t; }
+    });
+    return {
+      jobs: Math.min(j, 100),
+      skills: Math.min(s, 100),
+      talent: Math.min(t, 100),
+    };
+  }, [answers]);
 
   const handleAnswer = (type: string) => {
     const newAnswers = [...answers, type];
@@ -138,7 +158,7 @@ export default function AssessmentPage() {
   const question = QUESTIONS[currentStep];
 
   return (
-    <div className="w-full max-w-3xl mx-auto min-h-[70vh] flex flex-col justify-center py-12">
+    <div className="w-full max-w-5xl mx-auto min-h-[70vh] flex flex-col justify-center py-12">
       <div className="mb-12">
         <div className="flex items-center gap-3 mb-4">
           <BrainCircuit className="w-6 h-6 text-secondary" />
@@ -158,35 +178,58 @@ export default function AssessmentPage() {
         </div>
       </div>
 
-      <AnimatePresence mode="wait">
+      <div className="flex flex-col md:flex-row gap-6 items-start">
+        <div className="flex-1">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentStep}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.3 }}
+              className="glass-card p-8 md:p-12 rounded-xl border-secondary/20"
+            >
+              <h3 className="text-2xl md:text-3xl font-display font-bold text-white mb-8 leading-snug">
+                {question.question}
+              </h3>
+
+              <div className="space-y-4">
+                {question.options.map((option, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleAnswer(option.type)}
+                    data-testid={`button-answer-${currentStep}-${idx}`}
+                    className="w-full text-left p-6 rounded-lg border border-white/10 bg-white/5 hover:bg-secondary/10 hover:border-secondary/50 transition-all group flex items-center justify-between"
+                  >
+                    <span className="font-sans text-lg text-white/90 group-hover:text-white transition-colors">
+                      {option.text}
+                    </span>
+                    <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-secondary opacity-0 group-hover:opacity-100 transition-all transform translate-x-[-10px] group-hover:translate-x-0" />
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+
         <motion.div
-          key={currentStep}
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -20 }}
-          transition={{ duration: 0.3 }}
-          className="glass-card p-8 md:p-12 rounded-xl border-secondary/20"
+          transition={{ delay: 0.3 }}
+          className="hidden md:flex flex-col items-center glass-card p-5 rounded-xl border border-white/10 min-w-[190px] sticky top-8"
         >
-          <h3 className="text-2xl md:text-3xl font-display font-bold text-white mb-8 leading-snug">
-            {question.question}
-          </h3>
-
-          <div className="space-y-4">
-            {question.options.map((option, idx) => (
-              <button
-                key={idx}
-                onClick={() => handleAnswer(option.type)}
-                className="w-full text-left p-6 rounded-lg border border-white/10 bg-white/5 hover:bg-secondary/10 hover:border-secondary/50 transition-all group flex items-center justify-between"
-              >
-                <span className="font-sans text-lg text-white/90 group-hover:text-white transition-colors">
-                  {option.text}
-                </span>
-                <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-secondary opacity-0 group-hover:opacity-100 transition-all transform translate-x-[-10px] group-hover:translate-x-0" />
-              </button>
-            ))}
-          </div>
+          <LiveJSTScore
+            jobsScore={liveScores.jobs}
+            skillsScore={liveScores.skills}
+            talentScore={liveScores.talent}
+            compact
+            label="Projected JST"
+          />
+          <p className="text-[9px] font-mono text-muted-foreground/60 text-center mt-3 leading-relaxed">
+            Score updates with<br />each response
+          </p>
         </motion.div>
-      </AnimatePresence>
+      </div>
     </div>
   );
 }

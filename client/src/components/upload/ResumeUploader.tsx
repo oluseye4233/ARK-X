@@ -1,9 +1,10 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { UploadCloud, FileText, CheckCircle2, Activity, AlertTriangle, Search, Calculator, Shield, GitBranch, Lightbulb } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
+import { LiveJSTScore } from "@/components/LiveJSTScore";
 
 interface ProcessingPhase {
   id: number;
@@ -66,6 +67,10 @@ export function ResumeUploader({ onComplete }: ResumeUploaderProps) {
   const [completedPhases, setCompletedPhases] = useState<number[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
   const [fileName, setFileName] = useState("");
+  const [liveJobs, setLiveJobs] = useState(0);
+  const [liveSkills, setLiveSkills] = useState(0);
+  const [liveTalent, setLiveTalent] = useState(0);
+  const [finalResult, setFinalResult] = useState<any>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const intervalsRef = useRef<NodeJS.Timeout[]>([]);
@@ -131,11 +136,23 @@ export function ResumeUploader({ onComplete }: ResumeUploaderProps) {
       setActivePhase(0);
       setPhaseStepIndex(0);
       setCompletedPhases([]);
+      setLiveJobs(0);
+      setLiveSkills(0);
+      setLiveTalent(0);
+      setFinalResult(null);
 
       let currentPhaseIdx = 0;
       let currentStepIdx = 0;
 
       setCurrentStep(PHASES[0].steps[0]);
+
+      const phaseScoreTargets = [
+        { j: 18, s: 14, t: 16 },
+        { j: 48, s: 42, t: 45 },
+        { j: 62, s: 58, t: 60 },
+        { j: 70, s: 66, t: 68 },
+        { j: 75, s: 72, t: 74 },
+      ];
 
       const stepInterval = setInterval(() => {
         const phase = PHASES[currentPhaseIdx];
@@ -147,6 +164,12 @@ export function ResumeUploader({ onComplete }: ResumeUploaderProps) {
           setCurrentStep(phase.steps[currentStepIdx]);
         } else {
           setCompletedPhases(prev => [...prev, currentPhaseIdx]);
+          const target = phaseScoreTargets[currentPhaseIdx];
+          if (target) {
+            setLiveJobs(target.j);
+            setLiveSkills(target.s);
+            setLiveTalent(target.t);
+          }
           currentPhaseIdx++;
           currentStepIdx = 0;
 
@@ -159,11 +182,19 @@ export function ResumeUploader({ onComplete }: ResumeUploaderProps) {
       }, 600);
       intervalsRef.current.push(stepInterval);
 
-      await apiPromise;
+      const result = await apiPromise;
+      setFinalResult(result);
 
       clearAllIntervals();
+
+      if (result?.assessment) {
+        setLiveJobs(result.assessment.jstJobs || 0);
+        setLiveSkills(result.assessment.jstSkills || 0);
+        setLiveTalent(result.assessment.jstTalent || 0);
+      }
+
       setUploadState("complete");
-      setTimeout(onComplete, 1500);
+      setTimeout(onComplete, 2000);
     } catch (err: any) {
       clearAllIntervals();
       setErrorMessage(err.message || "Upload failed. Please try again.");
@@ -181,11 +212,15 @@ export function ResumeUploader({ onComplete }: ResumeUploaderProps) {
     setPhaseStepIndex(0);
     setCompletedPhases([]);
     setCurrentStep("");
+    setLiveJobs(0);
+    setLiveSkills(0);
+    setLiveTalent(0);
+    setFinalResult(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto" data-testid="resume-uploader">
+    <div className="w-full max-w-3xl mx-auto" data-testid="resume-uploader">
       <AnimatePresence mode="wait">
         {uploadState === "idle" && (
           <motion.div
@@ -266,6 +301,8 @@ export function ResumeUploader({ onComplete }: ResumeUploaderProps) {
             className="glass-card rounded-xl p-8 border-secondary/30"
             data-testid="processing-pipeline"
           >
+            <div className="flex flex-col md:flex-row gap-6 items-start">
+            <div className="flex-1">
             <div className="text-center mb-6">
               <Activity className="w-10 h-10 mx-auto mb-3 text-secondary animate-spin" />
               <h3 className="font-display font-bold text-xl text-white uppercase tracking-widest">
@@ -359,6 +396,23 @@ export function ResumeUploader({ onComplete }: ResumeUploaderProps) {
                 );
               })}
             </div>
+            </div>
+
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.4 }}
+              className="hidden md:flex flex-col items-center glass p-4 rounded-xl border border-white/10 min-w-[180px]"
+            >
+              <LiveJSTScore
+                jobsScore={liveJobs}
+                skillsScore={liveSkills}
+                talentScore={liveTalent}
+                compact
+                label="Live JST Score"
+              />
+            </motion.div>
+            </div>
           </motion.div>
         )}
 
@@ -369,11 +423,21 @@ export function ResumeUploader({ onComplete }: ResumeUploaderProps) {
             animate={{ opacity: 1, scale: 1 }}
             className="glass-card rounded-xl p-12 text-center border-primary shadow-[0_0_30px_rgba(var(--primary),0.2)]"
           >
-            <CheckCircle2 className="w-16 h-16 mx-auto mb-6 text-primary neon-text" />
-            <h3 className="font-display font-bold text-2xl text-white mb-2">Analysis Complete</h3>
-            <p className="font-mono text-sm text-primary uppercase tracking-widest">
-              Routing to Intelligence Hub...
-            </p>
+            <div className="flex flex-col items-center gap-6">
+              <CheckCircle2 className="w-16 h-16 text-primary neon-text" />
+              <div>
+                <h3 className="font-display font-bold text-2xl text-white mb-2">Analysis Complete</h3>
+                <p className="font-mono text-sm text-primary uppercase tracking-widest">
+                  Routing to Intelligence Hub...
+                </p>
+              </div>
+              <LiveJSTScore
+                jobsScore={liveJobs}
+                skillsScore={liveSkills}
+                talentScore={liveTalent}
+                label="Final JST Score"
+              />
+            </div>
           </motion.div>
         )}
 
