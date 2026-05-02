@@ -46,6 +46,16 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 - `/marketplace/publish` — Publish a new SPC (Gold+ cert gated, runs HIVE pre-check)
 - `/marketplace/:id` — SPC detail page (preview, purchase, ownership view)
 
+## GUIN+ Identity (Phase C of LEAN_ONECRAFT_ROADMAP.md)
+- **Schema** (`shared/schema.ts`): `endorsements` (id, endorserId, recipientId, sessionId, message, createdAt) — peer endorsements gated by cert tier and backed by a real CCGE session as evidence
+- **Constants**: `KNIGHT_RANKS` (Squire 0 / Knight 50 / Paladin 150 / Champion 350 / Legend 650 — thresholds in cumulative KCSE earned), `ENDORSEMENT_MAX_LEN=240`
+- **Helpers**: `computeKnightRank(totalKcseEarned)` returns `{ current, next, progress, totalKcseEarned }` for the rank ribbon
+- **Aggregator** (`server/guin.ts`): `buildGuinProfile(userId)` returns user, knight rank, 30-day KCSE radar (avg of knowledge/clarity/specificity/efficiency from `gameSessions.kcseBreakdown`), owned cards (CCGE cards used in finished sessions where `certTierEarned` is non-null = "won"), published SPCs (active only), endorsements enriched with endorser metadata, recent finished sessions
+- **Endorsement gate** (`validateEndorsement`): blocks self-endorse, blocks endorsers whose `CERT_LEVEL_RANK` is below recipient's, requires session that exists / belongs to endorser / is finished + KCSE-scored, blocks duplicates per (endorser, recipient) pair
+- **Frontend** (`client/src/pages/guin-public.tsx`): exports `GuinProfileView` (reusable identity card with knight ribbon, KCSE radar via Recharts `RadarChart`, owned-cards grid, published-SPC portfolio, endorsements list with inline endorse form). Default export is the public `/u/:username` page
+- **Embedded on `/profile`**: the existing edit-mode profile page renders the full `GuinProfileView` below the editable details (`viewerCanEndorse=false` for self), plus a "View Public Profile →" link
+- **Public route** `/u/:username`: read-only GUIN+ card; if a viewer is logged in and holds an equal-or-higher cert tier, the "Endorse" button shows an inline form with a session picker (auto-loaded via `getCcgeUserSessions`) and a 240-char message field
+
 ## SPHINX Marketplace (Phase B of LEAN_ONECRAFT_ROADMAP.md)
 - **Schema** (`shared/schema.ts`): `spcListings` (creator, title/desc/body, pillar, priceCredits, kcseScore, hiveScore, status, salesCount, totalEarned), `spcPurchases` (buyer, listing, creator, priceCredits, creatorShare, platformShare, isFirstSaleForCreator), `userCredits` (userId PK, balance, lifetimeEarned, lifetimeSpent)
 - **Constants**: `SPC_CREATOR_SHARE_PCT=70`, `SPC_PLATFORM_SHARE_PCT=30`, `SPC_STARTING_CREDITS=100`, `SPC_MIN_CERT_TO_PUBLISH=CC_400`, `SPC_PRICE_MIN=5`, `SPC_PRICE_MAX=500`, `SPC_HIVE_MIN_TO_PUBLISH=60`, `SPC_FIRST_SALE_TALENT_BOOST=3`
@@ -102,6 +112,10 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 - `GET /api/sphinx/listings/by-creator/:userId` — Creator's listings
 - `GET /api/sphinx/sales/:userId` — Sales for creator (purchases + totalEarned + salesCount)
 - `GET /api/sphinx/purchases/:userId` — Buyer's purchase history (each enriched with `listing` payload for full prompt access)
+- `GET /api/guin/by-id/:userId` — Full GUIN+ profile payload (user, knight rank, KCSE radar, owned cards, published SPCs, endorsements)
+- `GET /api/guin/by-username/:username` — Same as above, looked up by username (powers the public `/u/:username` route)
+- `POST /api/endorsements` — Create endorsement; validates self-endorse / cert-tier gate / session ownership / session-finished / no-duplicate, returns 400/403/404/409 on each failure mode
+- `GET /api/endorsements/by-recipient/:userId` — Raw endorsement rows for a user
 
 ## Resume Analysis Engine (`server/resumeAnalyzer.ts`)
 - Keyword-based scoring across 6 categories: technical, leadership, analytical, communication, innovation, ai_adjacent

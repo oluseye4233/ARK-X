@@ -17,6 +17,8 @@ import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type Co
 import { dealHand, scoreSession, applyFlywheel } from "./ccge";
 import { seedCcge } from "./ccgeSeed";
 import { runHivePrecheck, executePurchase, getOrCreateCredits } from "./sphinx";
+import { buildGuinProfile, validateEndorsement } from "./guin";
+import { ENDORSEMENT_MAX_LEN } from "@shared/schema";
 import { z } from "zod";
 
 const upload = multer({
@@ -889,6 +891,77 @@ export async function registerRoutes(
         ccgeScenarios: ccge.scenarios,
         spcListings: spcListingsCount,
       });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── GUIN+ Identity ────────────────────────────────────
+  app.get("/api/guin/by-id/:userId", async (req, res) => {
+    try {
+      const profile = await buildGuinProfile(req.params.userId);
+      if (!profile) return res.status(404).json({ message: "User not found." });
+      return res.json(profile);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/guin/by-username/:username", async (req, res) => {
+    try {
+      const u = await storage.getUserByUsername(req.params.username);
+      if (!u) return res.status(404).json({ message: "User not found." });
+      const profile = await buildGuinProfile(u.id);
+      if (!profile) return res.status(404).json({ message: "User not found." });
+      return res.json(profile);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  const endorsementBodySchema = z.object({
+    endorserId: z.string().min(1),
+    recipientId: z.string().min(1),
+    sessionId: z.string().min(1),
+    message: z.string().min(8).max(ENDORSEMENT_MAX_LEN),
+  });
+
+  app.post("/api/endorsements", async (req, res) => {
+    try {
+      const parsed = endorsementBodySchema.parse(req.body);
+      const gate = await validateEndorsement({
+        endorserId: parsed.endorserId,
+        recipientId: parsed.recipientId,
+        sessionId: parsed.sessionId,
+      });
+      if (!gate.ok) return res.status(gate.status).json({ message: gate.message });
+      try {
+        const created = await storage.createEndorsement({
+          endorserId: parsed.endorserId,
+          recipientId: parsed.recipientId,
+          sessionId: parsed.sessionId,
+          message: parsed.message,
+        });
+        return res.status(201).json(created);
+      } catch (insertErr: any) {
+        // Postgres unique-violation = concurrent duplicate; the unique index
+        // on (endorser_id, recipient_id) is the source of truth, the precheck
+        // is just for UX. Map both pg-driver shapes to 409.
+        const code = insertErr?.code || insertErr?.cause?.code;
+        if (code === "23505") {
+          return res.status(409).json({ message: "You have already endorsed this user." });
+        }
+        throw insertErr;
+      }
+    } catch (err: any) {
+      return res.status(400).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/endorsements/by-recipient/:userId", async (req, res) => {
+    try {
+      const list = await storage.getEndorsementsForUser(req.params.userId);
+      return res.json(list);
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }

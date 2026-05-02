@@ -151,6 +151,21 @@ export const api = {
 
   getSpcPurchases: (userId: string) => apiRequest(`/api/sphinx/purchases/${userId}`),
 
+  // ── GUIN+ Identity ───────────────────────────────────
+  getGuinById: (userId: string) => apiRequest(`/api/guin/by-id/${userId}`),
+  getGuinByUsername: (username: string) =>
+    apiRequest(`/api/guin/by-username/${encodeURIComponent(username)}`),
+  createEndorsement: (data: {
+    endorserId: string;
+    recipientId: string;
+    sessionId: string;
+    message: string;
+  }) =>
+    apiRequest("/api/endorsements", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
   seed: () => apiRequest("/api/seed", { method: "POST" }),
 
   uploadResume: async (file: File, userId: string) => {

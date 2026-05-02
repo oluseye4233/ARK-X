@@ -19,6 +19,7 @@ import ProfilePage from "@/pages/profile";
 import SchoolDashboard from "@/pages/school-dashboard";
 import PlayPage from "@/pages/play";
 import MarketplacePage from "@/pages/marketplace";
+import GuinPublicPage from "@/pages/guin-public";
 
 function Router() {
   return (
@@ -40,6 +41,7 @@ function Router() {
         <Route path="/marketplace/publish" component={MarketplacePage} />
         <Route path="/marketplace/:id" component={MarketplacePage} />
         <Route path="/marketplace" component={MarketplacePage} />
+        <Route path="/u/:username" component={GuinPublicPage} />
         {/* Fallback to 404 */}
         <Route component={NotFound} />
       </Switch>

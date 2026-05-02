@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { useAuth } from "@/lib/useAuth";
 import { api } from "@/lib/api";
 import { SUBSCRIPTION_PLANS, CONTEXT_CRAFT_LEVELS, type SubscriptionPlan, type ContextCraftLevel, type UserCredits } from "@shared/schema";
+import { GuinProfileView } from "./guin-public";
 import {
   User,
   Mail,
@@ -47,10 +48,17 @@ export default function ProfilePage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [credits, setCredits] = useState<UserCredits | null>(null);
   const [sales, setSales] = useState<{ totalEarned: number; salesCount: number } | null>(null);
+  const [guin, setGuin] = useState<any>(null);
+
+  const loadGuin = () => {
+    api.getGuinById(user.id).then(setGuin).catch(() => setGuin(null));
+  };
 
   useEffect(() => {
     api.getCredits(user.id).then(setCredits).catch(() => null);
     api.getSpcSales(user.id).then(setSales).catch(() => null);
+    loadGuin();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.id]);
 
   const handleSave = async () => {
@@ -76,13 +84,20 @@ export default function ProfilePage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-3xl font-display font-bold text-primary tracking-widest uppercase" data-testid="text-profile-title">
-          User Profile
-        </h1>
-        <p className="text-muted-foreground font-mono text-sm mt-2">
-          ACCOUNT CONFIGURATION // {user.username}
-        </p>
+      <div className="flex items-end justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-3xl font-display font-bold text-primary tracking-widest uppercase" data-testid="text-profile-title">
+            User Profile
+          </h1>
+          <p className="text-muted-foreground font-mono text-sm mt-2">
+            ACCOUNT CONFIGURATION // {user.username}
+          </p>
+        </div>
+        <Link href={`/u/${user.username}`} data-testid="link-view-public-profile">
+          <a className="px-3 py-1.5 rounded-lg font-mono text-[11px] uppercase tracking-wider border border-purple-300/30 bg-purple-300/10 text-purple-200 hover:bg-purple-300/20 transition-colors">
+            View Public Profile →
+          </a>
+        </Link>
       </div>
 
       {saveError && (
@@ -231,6 +246,12 @@ export default function ProfilePage() {
           </Link>
         </div>
       </div>
+
+      {guin && (
+        <div className="pt-4 border-t border-white/5">
+          <GuinProfileView profile={guin} viewerCanEndorse={false} onEndorse={loadGuin} />
+        </div>
+      )}
     </div>
   );
 }

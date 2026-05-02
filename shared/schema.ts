@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, real, jsonb, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, real, jsonb, boolean, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -373,6 +373,59 @@ export const insertSpcPurchaseSchema = createInsertSchema(spcPurchases).omit({
 });
 export type InsertSpcPurchase = z.infer<typeof insertSpcPurchaseSchema>;
 export type SpcPurchase = typeof spcPurchases.$inferSelect;
+
+// ── GUIN+ Identity Layer ─────────────────────────────────────
+export const endorsements = pgTable(
+  "endorsements",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    endorserId: varchar("endorser_id").notNull(),
+    recipientId: varchar("recipient_id").notNull(),
+    sessionId: varchar("session_id").notNull(),
+    message: text("message").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    // Race-safe duplicate prevention: even if two concurrent requests pass
+    // the validateEndorsement precheck, the second insert will fail with a
+    // unique-violation that the route handler maps to HTTP 409.
+    endorserRecipientUnique: uniqueIndex("endorsements_endorser_recipient_uniq").on(
+      t.endorserId,
+      t.recipientId
+    ),
+  })
+);
+
+export const insertEndorsementSchema = createInsertSchema(endorsements).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertEndorsement = z.infer<typeof insertEndorsementSchema>;
+export type Endorsement = typeof endorsements.$inferSelect;
+
+export const KNIGHT_RANKS = [
+  { key: "Squire",   label: "Squire",   min: 0,   color: "#888888", icon: "🛡" },
+  { key: "Knight",   label: "Knight",   min: 50,  color: "#FFA500", icon: "⚔" },
+  { key: "Paladin",  label: "Paladin",  min: 150, color: "#FFDD00", icon: "🏆" },
+  { key: "Champion", label: "Champion", min: 350, color: "#4488FF", icon: "👑" },
+  { key: "Legend",   label: "Legend",   min: 650, color: "#AA44FF", icon: "🐉" },
+] as const;
+export type KnightRankKey = typeof KNIGHT_RANKS[number]["key"];
+
+export function computeKnightRank(totalKcseEarned: number) {
+  let current = KNIGHT_RANKS[0];
+  for (const r of KNIGHT_RANKS) {
+    if (totalKcseEarned >= r.min) current = r;
+  }
+  const idx = KNIGHT_RANKS.findIndex((r) => r.key === current.key);
+  const next = idx < KNIGHT_RANKS.length - 1 ? KNIGHT_RANKS[idx + 1] : null;
+  const progress = next
+    ? Math.max(0, Math.min(1, (totalKcseEarned - current.min) / (next.min - current.min)))
+    : 1;
+  return { current: { ...current }, next: next ? { ...next } : null, progress, totalKcseEarned };
+}
+
+export const ENDORSEMENT_MAX_LEN = 240;
 
 export const userCredits = pgTable("user_credits", {
   userId: varchar("user_id").primaryKey(),

@@ -111,7 +111,7 @@ Known limitations (deferred by design):
 
 ---
 
-### 🔵 Phase C — GUIN+ Identity Evolution
+### ✅ Phase C — GUIN+ Identity Evolution
 **Goal:** Upgrade `/profile` into the full GUIN+ professional identity card.
 
 **Scope:**
@@ -256,8 +256,8 @@ Revisit each item only when blocked by a real, observed limitation — not by th
 |---|---|---|---|
 | 0 — Foundation | ✅ Done | prior | commit `f97251341` |
 | A — CCGE Card Game MVP | ✅ Done | this | Game playable end-to-end; flywheel wired; IDOR + atomicity deferred to D & E (documented) |
-| B — SPHINX Marketplace Stub | ⬜ Next | — | Depends on A (cert tiers) |
-| C — GUIN+ Identity | ⬜ | — | Depends on A + B (radar/SPC data) |
+| B — SPHINX Marketplace Stub | ✅ Done | this | Atomic txn purchase, body redaction, lifetime-creator first-sale boost |
+| C — GUIN+ Identity | ✅ Done | this | Knight ranks, KCSE radar (30d), owned cards, published SPCs, endorsements with cert-gate + session-evidence + dedup; public `/u/:username` route |
 | D — Real Stripe + Auth | ⬜ | — | Independent; can run in parallel |
 | E — Flywheel Orchestration | ⬜ | — | Best after A+B; touches both |
 | F — Claude Hardening | ⬜ | — | Needs `ANTHROPIC_API_KEY` |

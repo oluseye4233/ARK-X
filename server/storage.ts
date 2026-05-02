@@ -14,6 +14,7 @@ import {
   spcListings, type SpcListing, type InsertSpcListing,
   spcPurchases, type SpcPurchase,
   userCredits, type UserCredits,
+  endorsements, type Endorsement, type InsertEndorsement,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -62,7 +63,13 @@ export interface IStorage {
   updateSpcListing(id: string, data: Partial<SpcListing>): Promise<SpcListing | undefined>;
   getSpcPurchasesByBuyer(buyerId: string): Promise<SpcPurchase[]>;
   getSpcPurchasesByCreator(creatorId: string): Promise<SpcPurchase[]>;
+  hasBuyerPurchasedListing(buyerId: string, listingId: string): Promise<boolean>;
   getCredits(userId: string): Promise<UserCredits | undefined>;
+
+  // GUIN+ endorsements
+  createEndorsement(e: InsertEndorsement): Promise<Endorsement>;
+  getEndorsementsForUser(recipientId: string): Promise<Endorsement[]>;
+  getEndorsementBetween(endorserId: string, recipientId: string): Promise<Endorsement | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -286,6 +293,28 @@ export class DatabaseStorage implements IStorage {
   async getCredits(userId: string): Promise<UserCredits | undefined> {
     const [c] = await db.select().from(userCredits).where(eq(userCredits.userId, userId));
     return c;
+  }
+
+  async createEndorsement(e: InsertEndorsement): Promise<Endorsement> {
+    const [created] = await db.insert(endorsements).values(e).returning();
+    return created;
+  }
+
+  async getEndorsementsForUser(recipientId: string): Promise<Endorsement[]> {
+    return db
+      .select()
+      .from(endorsements)
+      .where(eq(endorsements.recipientId, recipientId))
+      .orderBy(desc(endorsements.createdAt));
+  }
+
+  async getEndorsementBetween(endorserId: string, recipientId: string): Promise<Endorsement | undefined> {
+    const [row] = await db
+      .select()
+      .from(endorsements)
+      .where(and(eq(endorsements.endorserId, endorserId), eq(endorsements.recipientId, recipientId)))
+      .limit(1);
+    return row;
   }
 }
 
