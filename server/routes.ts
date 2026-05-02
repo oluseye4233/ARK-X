@@ -13,6 +13,7 @@ const _require = createRequire(_filename);
 const pdfParse = _require("pdf-parse");
 import { storage } from "./storage";
 import { analyzeResume } from "./resumeAnalyzer";
+import { requireAuth, requireSelf, currentUserId, loginSession } from "./auth";
 import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, type SubscriptionPlan, CCGE_TIERS, type CcgeTier, jcseToTier, ALL_CARD_PILLARS, SPC_MIN_CERT_TO_PUBLISH, SPC_PRICE_MIN, SPC_PRICE_MAX, SPC_STATUSES, CERT_LEVEL_RANK, type CardPillar, type SpcStatus } from "@shared/schema";
 import { dealHand, scoreSession, applyFlywheel } from "./ccge";
 import { seedCcge } from "./ccgeSeed";
@@ -46,6 +47,7 @@ export async function registerRoutes(
       if (!user || user.password !== password) {
         return res.status(401).json({ message: "Invalid credentials" });
       }
+      await loginSession(req, user.id);
       const { password: _, ...safeUser } = user;
       return res.json(safeUser);
     } catch (err: any) {
@@ -61,6 +63,7 @@ export async function registerRoutes(
         return res.status(409).json({ message: "Username already exists" });
       }
       const user = await storage.createUser(parsed);
+      await loginSession(req, user.id);
       const { password: _, ...safeUser } = user;
       return res.status(201).json(safeUser);
     } catch (err: any) {
@@ -68,20 +71,51 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy(() => {
+      res.clearCookie("ark.sid");
+      return res.json({ ok: true });
+    });
+  });
+
+  app.get("/api/auth/me", async (req, res) => {
+    const sid = currentUserId(req);
+    if (!sid) return res.status(401).json({ message: "Not authenticated." });
+    const user = await storage.getUser(sid);
+    if (!user) {
+      req.session.destroy(() => {});
+      return res.status(401).json({ message: "Session user no longer exists." });
+    }
+    const { password: _, ...safeUser } = user;
+    return res.json(safeUser);
+  });
+
   // ── Users ─────────────────────────────────────────────
+  // Public DTO — only fields safe to expose to anyone (no email/username,
+  // no subscription/institution metadata). Private full record is only
+  // available to the user themselves via /api/auth/me.
   app.get("/api/users/:id", async (req, res) => {
     try {
       const user = await storage.getUser(req.params.id);
       if (!user) return res.status(404).json({ message: "User not found" });
-      const { password: _, ...safeUser } = user;
-      return res.json(safeUser);
+      const sid = currentUserId(req);
+      if (sid === user.id) {
+        const { password: _, ...safeUser } = user;
+        return res.json(safeUser);
+      }
+      return res.json({
+        id: user.id,
+        name: user.name,
+        role: user.role,
+        contextCraftCertLevel: user.contextCraftCertLevel,
+      });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
   });
 
   // ── Profile Update ──────────────────────────────────
-  app.put("/api/users/:id/profile", async (req, res) => {
+  app.put("/api/users/:id/profile", requireSelf("id"), async (req, res) => {
     try {
       const allowed = ["name", "role", "department", "seniority", "location"];
       const updateData: any = {};
@@ -98,11 +132,12 @@ export async function registerRoutes(
   });
 
   // ── Email Notifications ────────────────────────────
-  app.post("/api/notifications/assessment-summary", async (req, res) => {
+  app.post("/api/notifications/assessment-summary", requireAuth, async (req, res) => {
     try {
-      const { userId, email } = req.body;
-      if (!userId || !email) {
-        return res.status(400).json({ message: "userId and email are required" });
+      const userId = currentUserId(req)!;
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ message: "email is required" });
       }
       const assessment = await storage.getLatestAssessment(userId);
       if (!assessment) {
@@ -128,7 +163,16 @@ export async function registerRoutes(
   // ── Context Craft Certification ──────────────────────
   const validCertLevels = z.enum(Object.keys(CONTEXT_CRAFT_LEVELS) as [string, ...string[]]);
 
-  app.put("/api/users/:id/context-craft-cert", async (req, res) => {
+  // Cert level is computed by the game-finish flywheel; clients may NOT set
+  // it directly. Kept as a no-op endpoint that always 403s for back-compat.
+  app.put("/api/users/:id/context-craft-cert", (_req, res) => {
+    return res.status(403).json({
+      message: "Certification level can only be earned through CCGE Arena play, not set directly.",
+    });
+  });
+
+  // (legacy handler retained below but unreachable; kept for type-checks only)
+  const _unusedCertHandler = async (req: any, res: any) => {
     try {
       const parsed = validCertLevels.safeParse(req.body?.level);
       if (!parsed.success) {
@@ -147,7 +191,8 @@ export async function registerRoutes(
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
-  });
+  };
+  void _unusedCertHandler;
 
   app.get("/api/context-craft/levels", (_req, res) => {
     return res.json(CONTEXT_CRAFT_LEVELS);
@@ -160,7 +205,7 @@ export async function registerRoutes(
     return res.json(SUBSCRIPTION_PLANS);
   });
 
-  app.put("/api/users/:id/subscription", async (req, res) => {
+  app.put("/api/users/:id/subscription", requireSelf("id"), async (req, res) => {
     try {
       const parsed = validSubscriptionPlans.safeParse(req.body?.plan);
       if (!parsed.success) {
@@ -191,11 +236,11 @@ export async function registerRoutes(
   });
 
   // ── Assessments ───────────────────────────────────────
-  app.post("/api/assessments", async (req, res) => {
+  app.post("/api/assessments", requireAuth, async (req, res) => {
     try {
+      const sid = currentUserId(req)!;
       const { assessment, upskillingPlans, pivotOpportunities, transferabilityVectors } = req.body;
-      
-      const created = await storage.createAssessment(assessment);
+      const created = await storage.createAssessment({ ...assessment, userId: sid });
 
       let plans: any[] = [];
       let pivots: any[] = [];
@@ -228,7 +273,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/assessments/user/:userId", async (req, res) => {
+  app.get("/api/assessments/user/:userId", requireSelf("userId"), async (req, res) => {
     try {
       const results = await storage.getAssessmentsByUser(req.params.userId);
       return res.json(results);
@@ -237,7 +282,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/assessments/user/:userId/latest", async (req, res) => {
+  app.get("/api/assessments/user/:userId/latest", requireSelf("userId"), async (req, res) => {
     try {
       const assessment = await storage.getLatestAssessment(req.params.userId);
       if (!assessment) return res.status(404).json({ message: "No assessment found" });
@@ -260,7 +305,7 @@ export async function registerRoutes(
   });
 
   // ── Resume Upload & Analysis ────────────────────────
-  app.post("/api/resume/upload", upload.single("resume"), async (req, res) => {
+  app.post("/api/resume/upload", requireAuth, upload.single("resume"), async (req, res) => {
     try {
       const file = req.file;
       if (!file) {
@@ -282,11 +327,7 @@ export async function registerRoutes(
         return res.status(422).json({ message: "Could not extract enough text from the uploaded file. Please try a different format." });
       }
 
-      const userId = req.body.userId;
-      if (!userId) {
-        return res.status(400).json({ message: "userId is required" });
-      }
-
+      const userId = currentUserId(req)!;
       const user = await storage.getUser(userId);
       const certLevel = (user?.contextCraftCertLevel as ContextCraftLevel) || "NONE";
 
@@ -374,17 +415,15 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/ccge/sessions", async (req, res) => {
+  app.post("/api/ccge/sessions", requireAuth, async (req, res) => {
     try {
-      const schema = z.object({
-        userId: z.string().min(1),
-        scenarioId: z.string().min(1),
-      });
+      const schema = z.object({ scenarioId: z.string().min(1) });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ message: "userId and scenarioId required" });
+        return res.status(400).json({ message: "scenarioId required" });
       }
-      const { userId, scenarioId } = parsed.data;
+      const userId = currentUserId(req)!;
+      const { scenarioId } = parsed.data;
 
       const scenario = await storage.getCcgeScenario(scenarioId);
       if (!scenario) return res.status(404).json({ message: "Scenario not found" });
@@ -415,10 +454,13 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/ccge/sessions/:id", async (req, res) => {
+  app.get("/api/ccge/sessions/:id", requireAuth, async (req, res) => {
     try {
       const session = await storage.getGameSession(req.params.id);
       if (!session) return res.status(404).json({ message: "Session not found" });
+      if (session.userId !== currentUserId(req)) {
+        return res.status(403).json({ message: "You may only view your own sessions." });
+      }
       const scenario = await storage.getCcgeScenario(session.scenarioId);
       return res.json({ session, scenario });
     } catch (err: any) {
@@ -426,7 +468,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/ccge/sessions/:id/finish", async (req, res) => {
+  app.post("/api/ccge/sessions/:id/finish", requireAuth, async (req, res) => {
     try {
       const schema = z.object({ playedCardIds: z.array(z.string()).min(1).max(5) });
       const parsed = schema.safeParse(req.body);
@@ -437,6 +479,9 @@ export async function registerRoutes(
 
       const session = await storage.getGameSession(req.params.id);
       if (!session) return res.status(404).json({ message: "Session not found" });
+      if (session.userId !== currentUserId(req)) {
+        return res.status(403).json({ message: "You may only finish your own sessions." });
+      }
       if (session.status !== "in_progress") {
         return res.status(409).json({ message: "Session is already finished" });
       }
@@ -492,7 +537,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/ccge/sessions/user/:userId", async (req, res) => {
+  app.get("/api/ccge/sessions/user/:userId", requireSelf("userId"), async (req, res) => {
     try {
       const sessions = await storage.getGameSessionsByUser(req.params.userId);
       return res.json(sessions);
@@ -520,7 +565,6 @@ export async function registerRoutes(
   });
 
   const publishListingSchema = z.object({
-    creatorId: z.string().min(1),
     title: z.string().min(6).max(80),
     description: z.string().min(20).max(500),
     body: z.string().min(80).max(4000),
@@ -528,10 +572,11 @@ export async function registerRoutes(
     priceCredits: z.number().int().min(SPC_PRICE_MIN).max(SPC_PRICE_MAX),
   });
 
-  app.post("/api/sphinx/listings", async (req, res) => {
+  app.post("/api/sphinx/listings", requireAuth, async (req, res) => {
     try {
       const parsed = publishListingSchema.parse(req.body);
-      const creator = await storage.getUser(parsed.creatorId);
+      const creatorId = currentUserId(req)!;
+      const creator = await storage.getUser(creatorId);
       if (!creator) return res.status(404).json({ message: "Creator not found." });
 
       const certLevel = (creator.contextCraftCertLevel as ContextCraftLevel) || "NONE";
@@ -555,7 +600,7 @@ export async function registerRoutes(
       }
 
       const listing = await storage.createSpcListing({
-        creatorId: parsed.creatorId,
+        creatorId,
         title: parsed.title,
         description: parsed.description,
         body: parsed.body,
@@ -609,7 +654,7 @@ export async function registerRoutes(
       const safeCreator = creator
         ? { id: creator.id, name: creator.name, contextCraftCertLevel: creator.contextCraftCertLevel }
         : null;
-      const viewerId = typeof req.query.viewerId === "string" ? req.query.viewerId : null;
+      const viewerId = currentUserId(req);
       let canViewBody = false;
       if (viewerId) {
         if (viewerId === listing.creatorId) {
@@ -627,10 +672,9 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/sphinx/listings/:id", async (req, res) => {
+  app.delete("/api/sphinx/listings/:id", requireAuth, async (req, res) => {
     try {
-      const { creatorId } = req.body;
-      if (!creatorId) return res.status(400).json({ message: "creatorId required." });
+      const creatorId = currentUserId(req)!;
       const listing = await storage.getSpcListing(req.params.id);
       if (!listing) return res.status(404).json({ message: "Listing not found." });
       if (listing.creatorId !== creatorId) {
@@ -643,13 +687,9 @@ export async function registerRoutes(
     }
   });
 
-  const purchaseSchema = z.object({ buyerId: z.string().min(1) });
-
-  app.post("/api/sphinx/listings/:id/purchase", async (req, res) => {
+  app.post("/api/sphinx/listings/:id/purchase", requireAuth, async (req, res) => {
     try {
-      const { buyerId } = purchaseSchema.parse(req.body);
-      const buyer = await storage.getUser(buyerId);
-      if (!buyer) return res.status(404).json({ message: "Buyer not found." });
+      const buyerId = currentUserId(req)!;
       const outcome = await executePurchase(buyerId, req.params.id);
       return res.json(outcome);
     } catch (err: any) {
@@ -659,7 +699,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/sphinx/credits/:userId", async (req, res) => {
+  app.get("/api/sphinx/credits/:userId", requireSelf("userId"), async (req, res) => {
     try {
       const credits = await getOrCreateCredits(req.params.userId);
       return res.json(credits);
@@ -677,7 +717,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/sphinx/sales/:userId", async (req, res) => {
+  app.get("/api/sphinx/sales/:userId", requireSelf("userId"), async (req, res) => {
     try {
       const purchases = await storage.getSpcPurchasesByCreator(req.params.userId);
       const totalEarned = purchases.reduce((s, p) => s + p.creatorShare, 0);
@@ -687,7 +727,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/sphinx/purchases/:userId", async (req, res) => {
+  app.get("/api/sphinx/purchases/:userId", requireSelf("userId"), async (req, res) => {
     try {
       const purchases = await storage.getSpcPurchasesByBuyer(req.params.userId);
       const listingIds = Array.from(new Set(purchases.map((p) => p.listingId)));
@@ -920,24 +960,24 @@ export async function registerRoutes(
   });
 
   const endorsementBodySchema = z.object({
-    endorserId: z.string().min(1),
     recipientId: z.string().min(1),
     sessionId: z.string().min(1),
     message: z.string().min(8).max(ENDORSEMENT_MAX_LEN),
   });
 
-  app.post("/api/endorsements", async (req, res) => {
+  app.post("/api/endorsements", requireAuth, async (req, res) => {
     try {
       const parsed = endorsementBodySchema.parse(req.body);
+      const endorserId = currentUserId(req)!;
       const gate = await validateEndorsement({
-        endorserId: parsed.endorserId,
+        endorserId,
         recipientId: parsed.recipientId,
         sessionId: parsed.sessionId,
       });
       if (!gate.ok) return res.status(gate.status).json({ message: gate.message });
       try {
         const created = await storage.createEndorsement({
-          endorserId: parsed.endorserId,
+          endorserId,
           recipientId: parsed.recipientId,
           sessionId: parsed.sessionId,
           message: parsed.message,

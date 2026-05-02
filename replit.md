@@ -46,6 +46,19 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 - `/marketplace/publish` — Publish a new SPC (Gold+ cert gated, runs HIVE pre-check)
 - `/marketplace/:id` — SPC detail page (preview, purchase, ownership view)
 
+## Auth & Authorization (Phase D.1 of LEAN_ONECRAFT_ROADMAP.md)
+- **Server-side sessions** via `express-session` + `connect-pg-simple` (PG-backed `session` table, auto-created). Cookie name `ark.sid`, httpOnly + sameSite=lax, `secure: true` in production, 14-day rolling expiry, `trust proxy` enabled. `SESSION_SECRET` is required in production — process refuses to start without it; dev falls back to a clearly-labelled insecure default with a startup warning.
+- **`server/auth.ts`** exports: `buildSessionMiddleware()`, `requireAuth`, `requireSelf(paramName)`, `currentUserId(req)`, `loginSession(req, userId)` (regenerates the session ID before binding userId to mitigate session fixation).
+- **Auth routes**: `POST /api/auth/login`, `POST /api/auth/register` (auto-login), `POST /api/auth/logout`, `GET /api/auth/me`. Register and login both go through `loginSession` so a fresh session ID is minted on every auth boundary.
+- **Platform-wide IDOR lockdown**: every mutation derives identity from `req.session.userId`, never from request body or path. Routes wear one of two middlewares:
+  - `requireAuth` — endpoint reads/writes the current session user. Examples: `POST /api/ccge/sessions`, `POST /api/sphinx/listings/:id/purchase`, `POST /api/endorsements`, `POST /api/sphinx/listings`, `DELETE /api/sphinx/listings/:id`.
+  - `requireSelf(paramName)` — path param must equal session userId. Examples: `PUT /api/users/:id/profile`, `PUT /api/users/:id/subscription`, `GET /api/assessments/user/:userId`, `GET /api/sphinx/credits/:userId`, `GET /api/sphinx/sales/:userId`, `GET /api/sphinx/purchases/:userId`, `GET /api/ccge/sessions/user/:userId`.
+  - Object-ownership endpoints (`GET /api/ccge/sessions/:id`, `POST /api/ccge/sessions/:id/finish`) re-check `session.userId === currentUserId(req)` after loading the row.
+- **`PUT /api/users/:id/context-craft-cert` permanently 403s**. Cert level is computed only by the CCGE flywheel — clients cannot self-promote.
+- **Public reads minimised**: `GET /api/users/:id` returns a public DTO (`id, name, role, contextCraftCertLevel`) for non-self viewers; full record (including username, subscription, institution, upload counters) is only returned to the user themselves and via `/api/auth/me`.
+- **Client `useAuth`** is a thin wrapper around `useQuery(["/api/auth/me"])`. No more localStorage. All fetches send `credentials: "include"`. Logout calls `POST /api/auth/logout` and clears the React Query cache.
+- **Client `api.ts`** stops sending the actor's userId in any request body — the server derives it from the session. Method signatures still accept `userId` for backward compatibility but ignore it for actor identity.
+
 ## GUIN+ Identity (Phase C of LEAN_ONECRAFT_ROADMAP.md)
 - **Schema** (`shared/schema.ts`): `endorsements` (id, endorserId, recipientId, sessionId, message, createdAt) — peer endorsements gated by cert tier and backed by a real CCGE session as evidence
 - **Constants**: `KNIGHT_RANKS` (Squire 0 / Knight 50 / Paladin 150 / Champion 350 / Legend 650 — thresholds in cumulative KCSE earned), `ENDORSEMENT_MAX_LEN=240`

@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-interface AuthUser {
+export interface AuthUser {
   id: string;
   username: string;
   name: string;
@@ -14,35 +15,50 @@ interface AuthUser {
   institution?: string | null;
 }
 
-const AUTH_KEY = "ark_user";
+const ME_KEY = ["/api/auth/me"];
 
 export function useAuth() {
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    try {
-      const stored = localStorage.getItem(AUTH_KEY);
-      return stored ? JSON.parse(stored) : null;
-    } catch {
-      return null;
-    }
+  const qc = useQueryClient();
+
+  const { data: user, isLoading } = useQuery<AuthUser | null>({
+    queryKey: ME_KEY,
+    queryFn: async () => {
+      const res = await fetch("/api/auth/me", { credentials: "include" });
+      if (res.status === 401) return null;
+      if (!res.ok) throw new Error("Failed to load session");
+      return res.json();
+    },
+    staleTime: 1000 * 60,
+    retry: false,
   });
 
-  const login = useCallback((userData: AuthUser) => {
-    localStorage.setItem(AUTH_KEY, JSON.stringify(userData));
-    setUser(userData);
-  }, []);
+  const login = useCallback(
+    (userData: AuthUser) => {
+      qc.setQueryData(ME_KEY, userData);
+    },
+    [qc]
+  );
 
-  const logout = useCallback(() => {
-    localStorage.removeItem(AUTH_KEY);
-    setUser(null);
-  }, []);
+  const logout = useCallback(async () => {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+    qc.setQueryData(ME_KEY, null);
+    qc.clear();
+  }, [qc]);
 
-  const updateUser = useCallback((updatedData: Partial<AuthUser>) => {
-    if (user) {
-      const newUser = { ...user, ...updatedData };
-      localStorage.setItem(AUTH_KEY, JSON.stringify(newUser));
-      setUser(newUser);
-    }
-  }, [user]);
+  const updateUser = useCallback(
+    (updatedData: Partial<AuthUser>) => {
+      const current = qc.getQueryData<AuthUser | null>(ME_KEY);
+      if (current) qc.setQueryData(ME_KEY, { ...current, ...updatedData });
+    },
+    [qc]
+  );
 
-  return { user, login, logout, updateUser, isAuthenticated: !!user };
+  return {
+    user: user ?? null,
+    login,
+    logout,
+    updateUser,
+    isLoading,
+    isAuthenticated: !!user,
+  };
 }

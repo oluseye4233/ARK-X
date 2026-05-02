@@ -462,7 +462,6 @@ function PublishPage() {
     setError(null);
     try {
       const result = await api.publishSpcListing({
-        creatorId: user.id,
         title: form.title,
         description: form.description,
         body: form.body,

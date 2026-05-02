@@ -327,7 +327,6 @@ function EndorsementsBlock({
     setError(null);
     try {
       await api.createEndorsement({
-        endorserId: viewer.id,
         recipientId: profile.user.id,
         sessionId,
         message,

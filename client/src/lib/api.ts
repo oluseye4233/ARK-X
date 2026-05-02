@@ -1,8 +1,7 @@
-import { queryClient } from "./queryClient";
-
 async function apiRequest(url: string, options?: RequestInit) {
   const res = await fetch(url, {
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     ...options,
   });
   if (!res.ok) {
@@ -25,6 +24,10 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  logout: () => apiRequest("/api/auth/logout", { method: "POST" }),
+
+  me: () => apiRequest("/api/auth/me"),
+
   getUser: (id: string) => apiRequest(`/api/users/${id}`),
 
   getLatestAssessment: (userId: string) =>
@@ -39,10 +42,10 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
-  requestEmailNotification: (userId: string, email: string) =>
+  requestEmailNotification: (_userId: string, email: string) =>
     apiRequest(`/api/notifications/assessment-summary`, {
       method: "POST",
-      body: JSON.stringify({ userId, email }),
+      body: JSON.stringify({ email }),
     }),
 
   createAssessment: (data: any) =>
@@ -77,16 +80,15 @@ export const api = {
       body: JSON.stringify({ plan, institution }),
     }),
 
-  // ── CCGE Game Engine ─────────────────────────────────
   getCcgeCards: () => apiRequest("/api/ccge/cards"),
 
   getCcgeScenarios: (tier?: string) =>
     apiRequest(`/api/ccge/scenarios${tier ? `?tier=${encodeURIComponent(tier)}` : ""}`),
 
-  startCcgeSession: (userId: string, scenarioId: string) =>
+  startCcgeSession: (_userId: string, scenarioId: string) =>
     apiRequest("/api/ccge/sessions", {
       method: "POST",
-      body: JSON.stringify({ userId, scenarioId }),
+      body: JSON.stringify({ scenarioId }),
     }),
 
   getCcgeSession: (id: string) => apiRequest(`/api/ccge/sessions/${id}`),
@@ -100,7 +102,6 @@ export const api = {
   getCcgeUserSessions: (userId: string) =>
     apiRequest(`/api/ccge/sessions/user/${userId}`),
 
-  // ── SPHINX Marketplace ───────────────────────────────
   hivePrecheck: (data: { title: string; description: string; body: string; pillar: string }) =>
     apiRequest("/api/sphinx/hive-precheck", {
       method: "POST",
@@ -108,7 +109,6 @@ export const api = {
     }),
 
   publishSpcListing: (data: {
-    creatorId: string;
     title: string;
     description: string;
     body: string;
@@ -127,20 +127,14 @@ export const api = {
     return apiRequest(`/api/sphinx/listings${qs ? `?${qs}` : ""}`);
   },
 
-  getSpcListing: (id: string, viewerId?: string) =>
-    apiRequest(`/api/sphinx/listings/${id}${viewerId ? `?viewerId=${encodeURIComponent(viewerId)}` : ""}`),
+  getSpcListing: (id: string, _viewerId?: string) =>
+    apiRequest(`/api/sphinx/listings/${id}`),
 
-  delistSpc: (id: string, creatorId: string) =>
-    apiRequest(`/api/sphinx/listings/${id}`, {
-      method: "DELETE",
-      body: JSON.stringify({ creatorId }),
-    }),
+  delistSpc: (id: string, _creatorId?: string) =>
+    apiRequest(`/api/sphinx/listings/${id}`, { method: "DELETE" }),
 
-  purchaseSpc: (listingId: string, buyerId: string) =>
-    apiRequest(`/api/sphinx/listings/${listingId}/purchase`, {
-      method: "POST",
-      body: JSON.stringify({ buyerId }),
-    }),
+  purchaseSpc: (listingId: string, _buyerId?: string) =>
+    apiRequest(`/api/sphinx/listings/${listingId}/purchase`, { method: "POST" }),
 
   getCredits: (userId: string) => apiRequest(`/api/sphinx/credits/${userId}`),
 
@@ -151,12 +145,10 @@ export const api = {
 
   getSpcPurchases: (userId: string) => apiRequest(`/api/sphinx/purchases/${userId}`),
 
-  // ── GUIN+ Identity ───────────────────────────────────
   getGuinById: (userId: string) => apiRequest(`/api/guin/by-id/${userId}`),
   getGuinByUsername: (username: string) =>
     apiRequest(`/api/guin/by-username/${encodeURIComponent(username)}`),
   createEndorsement: (data: {
-    endorserId: string;
     recipientId: string;
     sessionId: string;
     message: string;
@@ -168,13 +160,13 @@ export const api = {
 
   seed: () => apiRequest("/api/seed", { method: "POST" }),
 
-  uploadResume: async (file: File, userId: string) => {
+  uploadResume: async (file: File, _userId: string) => {
     const formData = new FormData();
     formData.append("resume", file);
-    formData.append("userId", userId);
     const res = await fetch("/api/resume/upload", {
       method: "POST",
       body: formData,
+      credentials: "include",
     });
     if (!res.ok) {
       const error = await res.json().catch(() => ({ message: res.statusText }));

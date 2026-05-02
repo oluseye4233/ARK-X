@@ -128,7 +128,17 @@ Known limitations (deferred by design):
 
 ---
 
-### 💳 Phase D — Real Stripe + Real Auth *(absorbs ALL platform IDOR fixes)*
+### 🟡 Phase D — Real Stripe + Real Auth *(split D.1 ✅ done / D.2 pending Stripe key / D.3 Connect)*
+
+**D.1 ✅ DONE** — Server-side sessions (express-session + PG store) + platform-wide IDOR lockdown. All 22 endpoints either `requireAuth`, `requireSelf`, or do object-ownership checks. Cert-set endpoint permanently 403s. `/api/users/:id` returns public DTO only. Login/register regenerate session ID; SESSION_SECRET enforced in prod. Client useAuth rewritten to /api/auth/me; localStorage purged.
+
+**D.2 ⬜ Pending** — Real Stripe Checkout for the 4 subscription plans, webhook receiver, billing portal. Blocked on `STRIPE_SECRET_KEY` from user.
+
+**D.3 ⬜ Pending** — Stripe Connect (Express accounts) for SPHINX creator payouts. Depends on D.2.
+
+---
+
+### 💳 Phase D (original) — Real Stripe + Real Auth *(absorbs ALL platform IDOR fixes)*
 **Goal:** Replace the simulated checkout and localStorage auth with real, billable infrastructure. **This is the phase where every existing API endpoint that currently trusts `userId` from the request body gets locked down.**
 
 **Scope:**
@@ -258,7 +268,9 @@ Revisit each item only when blocked by a real, observed limitation — not by th
 | A — CCGE Card Game MVP | ✅ Done | this | Game playable end-to-end; flywheel wired; IDOR + atomicity deferred to D & E (documented) |
 | B — SPHINX Marketplace Stub | ✅ Done | this | Atomic txn purchase, body redaction, lifetime-creator first-sale boost |
 | C — GUIN+ Identity | ✅ Done | this | Knight ranks, KCSE radar (30d), owned cards, published SPCs, endorsements with cert-gate + session-evidence + dedup; public `/u/:username` route |
-| D — Real Stripe + Auth | ⬜ | — | Independent; can run in parallel |
+| D.1 — Auth + IDOR sweep | ✅ Done | this | Express-session + PG store, platform-wide IDOR lockdown, session-fixation mitigated, public-DTO redaction |
+| D.2 — Stripe Checkout | ⏸ Blocked | — | Needs `STRIPE_SECRET_KEY` from user |
+| D.3 — Stripe Connect | ⬜ | — | Depends on D.2 |
 | E — Flywheel Orchestration | ⬜ | — | Best after A+B; touches both |
 | F — Claude Hardening | ⬜ | — | Needs `ANTHROPIC_API_KEY` |
 | G — Institutional Tier | ⬜ | — | Independent of A-F |
