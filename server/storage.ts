@@ -16,6 +16,8 @@ import {
   spcPurchases, type SpcPurchase,
   userCredits, type UserCredits,
   endorsements, type Endorsement, type InsertEndorsement,
+  checkoutSessions, type CheckoutSession, type InsertCheckoutSession,
+  billingEvents, type BillingEvent, type InsertBillingEvent,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -88,6 +90,28 @@ export interface IStorage {
   createEndorsement(e: InsertEndorsement): Promise<Endorsement>;
   getEndorsementsForUser(recipientId: string): Promise<Endorsement[]>;
   getEndorsementBetween(endorserId: string, recipientId: string): Promise<Endorsement | undefined>;
+
+  // Billing
+  createCheckoutSession(data: InsertCheckoutSession): Promise<CheckoutSession>;
+  getCheckoutSession(id: string): Promise<CheckoutSession | undefined>;
+  updateCheckoutSession(id: string, data: Partial<CheckoutSession>): Promise<CheckoutSession | undefined>;
+  createBillingEvent(e: InsertBillingEvent): Promise<BillingEvent>;
+  getBillingEventsByUser(userId: string, limit?: number): Promise<BillingEvent[]>;
+  completeCheckoutSession(args: {
+    sessionId: string;
+    actorUserId: string;
+    success: boolean;
+  }): Promise<{
+    ok: boolean;
+    user: User;
+    session: CheckoutSession;
+    fromPlan: string;
+    toPlan: string;
+    transition: "subscription.upgraded" | "subscription.downgraded" | null;
+    amountCents: number;
+    externalSessionId: string | null;
+    stripeSubscriptionId: string | null;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -431,6 +455,150 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(endorsements.endorserId, endorserId), eq(endorsements.recipientId, recipientId)))
       .limit(1);
     return row;
+  }
+
+  async createCheckoutSession(data: InsertCheckoutSession): Promise<CheckoutSession> {
+    const [row] = await db.insert(checkoutSessions).values(data).returning();
+    return row;
+  }
+
+  async getCheckoutSession(id: string): Promise<CheckoutSession | undefined> {
+    const [row] = await db.select().from(checkoutSessions).where(eq(checkoutSessions.id, id));
+    return row;
+  }
+
+  async updateCheckoutSession(id: string, data: Partial<CheckoutSession>): Promise<CheckoutSession | undefined> {
+    const [row] = await db.update(checkoutSessions).set(data).where(eq(checkoutSessions.id, id)).returning();
+    return row;
+  }
+
+  async createBillingEvent(e: InsertBillingEvent): Promise<BillingEvent> {
+    const [row] = await db.insert(billingEvents).values(e).returning();
+    return row;
+  }
+
+  async getBillingEventsByUser(userId: string, limit = 20): Promise<BillingEvent[]> {
+    return db
+      .select()
+      .from(billingEvents)
+      .where(eq(billingEvents.userId, userId))
+      .orderBy(desc(billingEvents.createdAt))
+      .limit(limit);
+  }
+
+  async completeCheckoutSession(args: {
+    sessionId: string;
+    actorUserId: string;
+    success: boolean;
+  }) {
+    const {
+      isPaidPlan,
+      nextPeriodEnd,
+      syntheticStripeCustomerId,
+      syntheticStripeSubscriptionId,
+      transitionType,
+    } = await import("./billing");
+    return await db.transaction(async (tx) => {
+      const [session] = await tx
+        .select()
+        .from(checkoutSessions)
+        .where(eq(checkoutSessions.id, args.sessionId))
+        .for("update");
+      if (!session) {
+        const err: any = new Error("Checkout session not found");
+        err.status = 404;
+        throw err;
+      }
+      if (session.userId !== args.actorUserId) {
+        const err: any = new Error("Not your checkout session.");
+        err.status = 403;
+        throw err;
+      }
+      if (session.status !== "pending") {
+        const err: any = new Error(`Session already ${session.status}.`);
+        err.status = 409;
+        throw err;
+      }
+
+      const [user] = await tx.select().from(users).where(eq(users.id, args.actorUserId)).for("update");
+      if (!user) {
+        const err: any = new Error("User not found");
+        err.status = 404;
+        throw err;
+      }
+      const fromPlan = (user.subscriptionPlan as any) || "INDIVIDUAL_FREE";
+      const toPlan = session.plan as any;
+      const now = new Date();
+
+      if (!args.success) {
+        const [failedSession] = await tx
+          .update(checkoutSessions)
+          .set({ status: "failed", completedAt: now })
+          .where(eq(checkoutSessions.id, session.id))
+          .returning();
+        await tx.insert(billingEvents).values({
+          userId: user.id,
+          type: "payment.failed",
+          fromPlan, toPlan,
+          amountCents: session.amountCents,
+          externalId: session.externalSessionId,
+          payload: { simulated: true, sessionId: session.id },
+        });
+        return {
+          ok: false, user, session: failedSession, fromPlan, toPlan,
+          transition: null, amountCents: session.amountCents,
+          externalSessionId: session.externalSessionId,
+          stripeSubscriptionId: user.stripeSubscriptionId,
+        };
+      }
+
+      const periodEnd = isPaidPlan(toPlan) ? nextPeriodEnd(now) : null;
+      const stripeCustomerId = user.stripeCustomerId || syntheticStripeCustomerId(user.id);
+      const stripeSubscriptionId = isPaidPlan(toPlan) ? syntheticStripeSubscriptionId(session.id) : null;
+
+      const updateData: any = {
+        subscriptionPlan: toPlan,
+        subscriptionStatus: "active",
+        stripeCustomerId,
+        stripeSubscriptionId,
+        subscriptionCurrentPeriodEnd: periodEnd,
+        subscriptionCanceledAt: null,
+      };
+      if (session.institution) updateData.institution = session.institution;
+      const [updatedUser] = await tx.update(users).set(updateData).where(eq(users.id, user.id)).returning();
+
+      const [completedSession] = await tx
+        .update(checkoutSessions)
+        .set({ status: "completed", completedAt: now })
+        .where(eq(checkoutSessions.id, session.id))
+        .returning();
+
+      await tx.insert(billingEvents).values({
+        userId: user.id,
+        type: "checkout.completed",
+        fromPlan, toPlan,
+        amountCents: session.amountCents,
+        externalId: session.externalSessionId,
+        payload: { sessionId: session.id, simulated: true },
+      });
+      const transition = transitionType(fromPlan, toPlan);
+      if (transition) {
+        await tx.insert(billingEvents).values({
+          userId: user.id,
+          type: transition,
+          fromPlan, toPlan,
+          amountCents: session.amountCents,
+          externalId: stripeSubscriptionId,
+          payload: { simulated: true },
+        });
+      }
+
+      return {
+        ok: true, user: updatedUser, session: completedSession, fromPlan, toPlan,
+        transition, amountCents: session.amountCents,
+        externalSessionId: session.externalSessionId, stripeSubscriptionId,
+      };
+    });
   }
 }
 

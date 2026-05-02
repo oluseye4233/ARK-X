@@ -148,6 +148,10 @@ export const users = pgTable("users", {
   contextCraftCertLevel: text("context_craft_cert_level").default("NONE"),
   subscriptionPlan: text("subscription_plan").default("INDIVIDUAL_FREE"),
   subscriptionStatus: text("subscription_status").default("active"),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  subscriptionCurrentPeriodEnd: timestamp("subscription_current_period_end"),
+  subscriptionCanceledAt: timestamp("subscription_canceled_at"),
   institution: text("institution"),
   uploadsThisMonth: integer("uploads_this_month").default(0),
   uploadResetDate: timestamp("upload_reset_date"),
@@ -443,7 +447,64 @@ export const ARK_EVENT_TYPES = [
   "cert.upgraded",
   "spc.published",
   "spc.purchased",
+  "billing.checkout.completed",
+  "billing.subscription.canceled",
+  "billing.payment.failed",
 ] as const;
+
+export const CHECKOUT_STATUSES = ["pending", "completed", "failed", "canceled"] as const;
+export type CheckoutStatus = typeof CHECKOUT_STATUSES[number];
+
+export const BILLING_EVENT_TYPES = [
+  "checkout.created",
+  "checkout.completed",
+  "checkout.failed",
+  "subscription.upgraded",
+  "subscription.downgraded",
+  "subscription.canceled",
+  "payment.succeeded",
+  "payment.failed",
+] as const;
+export type BillingEventType = typeof BILLING_EVENT_TYPES[number];
+
+export const checkoutSessions = pgTable("checkout_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  plan: text("plan").notNull(),
+  amountCents: integer("amount_cents").notNull(),
+  status: text("status").notNull().default("pending"),
+  institution: text("institution"),
+  externalSessionId: text("external_session_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertCheckoutSessionSchema = createInsertSchema(checkoutSessions).omit({
+  id: true,
+  createdAt: true,
+  completedAt: true,
+});
+export type InsertCheckoutSession = z.infer<typeof insertCheckoutSessionSchema>;
+export type CheckoutSession = typeof checkoutSessions.$inferSelect;
+
+export const billingEvents = pgTable("billing_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  type: text("type").notNull(),
+  fromPlan: text("from_plan"),
+  toPlan: text("to_plan"),
+  amountCents: integer("amount_cents"),
+  externalId: text("external_id"),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertBillingEventSchema = createInsertSchema(billingEvents).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertBillingEvent = z.infer<typeof insertBillingEventSchema>;
+export type BillingEvent = typeof billingEvents.$inferSelect;
 export type ArkEventType = typeof ARK_EVENT_TYPES[number];
 
 export const arkEvents = pgTable("ark_events", {

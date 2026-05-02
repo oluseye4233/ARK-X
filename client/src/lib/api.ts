@@ -80,6 +80,24 @@ export const api = {
       body: JSON.stringify({ plan, institution }),
     }),
 
+  getBillingMe: () => apiRequest("/api/billing/me"),
+
+  startCheckout: (plan: string, institution?: string) =>
+    apiRequest("/api/billing/checkout", {
+      method: "POST",
+      body: JSON.stringify({ plan, institution }),
+    }),
+
+  getCheckoutSession: (id: string) => apiRequest(`/api/billing/checkout/${id}`),
+
+  completeCheckout: (id: string, success = true) =>
+    apiRequest(`/api/billing/checkout/${id}/complete`, {
+      method: "POST",
+      body: JSON.stringify({ success }),
+    }),
+
+  cancelSubscription: () => apiRequest("/api/billing/cancel", { method: "POST" }),
+
   getCcgeCards: () => apiRequest("/api/ccge/cards"),
 
   getCcgeScenarios: (tier?: string) =>

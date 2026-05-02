@@ -15,6 +15,7 @@ import AssessmentPage from "@/pages/assessment";
 import ReportPage from "@/pages/report";
 import ContextCraftPage from "@/pages/context-craft";
 import SubscriptionPage from "@/pages/subscription";
+import CheckoutPage from "@/pages/checkout";
 import ProfilePage from "@/pages/profile";
 import SchoolDashboard from "@/pages/school-dashboard";
 import PlayPage from "@/pages/play";
@@ -35,6 +36,7 @@ function Router() {
         <Route path="/report" component={ReportPage} />
         <Route path="/context-craft" component={ContextCraftPage} />
         <Route path="/subscription" component={SubscriptionPage} />
+        <Route path="/checkout/:id" component={CheckoutPage} />
         <Route path="/profile" component={ProfilePage} />
         <Route path="/school" component={SchoolDashboard} />
         <Route path="/play" component={PlayPage} />

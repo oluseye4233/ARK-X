@@ -46,6 +46,32 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 - `/marketplace/publish` — Publish a new SPC (Gold+ cert gated, runs HIVE pre-check)
 - `/marketplace/:id` — SPC detail page (preview, purchase, ownership view)
 
+## Billing — Stripe Stub (Phase D.2 of LEAN_ONECRAFT_ROADMAP.md)
+- **Status**: STUBBED OUT (no Stripe key wired). Stripe integration unavailable in this Replit environment; column shapes mirror real Stripe so future swap is mechanical.
+- **Schema** (`shared/schema.ts`):
+  - `users` adds `stripeCustomerId`, `stripeSubscriptionId`, `subscriptionCurrentPeriodEnd`, `subscriptionCanceledAt` (all nullable).
+  - `checkoutSessions` (id, userId, plan, amountCents, status ∈ CHECKOUT_STATUSES, institution, externalSessionId, createdAt, completedAt).
+  - `billingEvents` audit ledger (id, userId, type ∈ BILLING_EVENT_TYPES, fromPlan, toPlan, amountCents, externalId, payload jsonb, createdAt). Indexed by (user_id, created_at DESC).
+  - `ARK_EVENT_TYPES` extended with `billing.checkout.completed`, `billing.subscription.canceled`, `billing.payment.failed` (orchestrator emits with scoreDelta=0 — no JST impact).
+- **Helpers** (`server/billing.ts`): `priceCentsForPlan`, `isPaidPlan`, `nextPeriodEnd` (30d), `syntheticStripe{Customer,Subscription,Checkout}Id` (deterministic stubs prefixed `cus_stub_/sub_stub_/cs_stub_`), `transitionType` → upgraded/downgraded/null.
+- **Routes** (`server/routes.ts`):
+  - `GET /api/billing/me` → `{plan, status, currentPeriodEnd, canceledAt, stripeCustomerId, stripeSubscriptionId, recentEvents[10]}`.
+  - `POST /api/billing/checkout {plan, institution?}` → creates pending session, writes `checkout.created` event. Returns `{sessionId, externalSessionId, plan, amountCents, requiresPayment, redirectUrl: "/checkout/:id"}`. 409 if same plan already active; 409 for ENTERPRISE (sales contact); 400 for SCHOOL_STUDENT without institution.
+  - `GET /api/billing/checkout/:id` → session details (auth + ownership).
+  - `POST /api/billing/checkout/:id/complete {success}` → on success: updates user (plan, status=active, stripe IDs, currentPeriodEnd=now+30d, canceledAt=null) + `checkout.completed` + `subscription.upgraded|downgraded` event + emits `billing.checkout.completed`. On failure: marks session `failed`, emits `billing.payment.failed`, returns 402. 409 if already completed.
+  - `POST /api/billing/cancel` → sets status=`canceling`, canceledAt=now, preserves currentPeriodEnd; emits `billing.subscription.canceled`. 409 on free plan / already canceling.
+  - `POST /api/admin/billing/webhook-simulate {targetUserId, type}` (ADMIN_USER_ID gated) → simulates `payment.failed` (sets past_due) or `subscription.canceled/deleted` (immediate downgrade). Used to test failure recovery paths.
+  - `PUT /api/users/:id/subscription` retained as legacy ENTERPRISE-only path (returns 409 for any other plan with pointer to `/api/billing/checkout`).
+- **Frontend**:
+  - `client/src/pages/subscription.tsx` — `handleSubscribe` calls `api.startCheckout`, navigates to `/checkout/:id` for paid plans (free auto-completes inline). Cancel button on current-plan card. Status pill reflects `canceling`. Inline error banner.
+  - `client/src/pages/checkout.tsx` (new, route `/checkout/:id`) — fetches session, renders fake card form (4242 4242 4242 4242 / 12/28 / 123). "Pay" button → `completeCheckout(true)`. "Simulate Payment Failure" button → `completeCheckout(false)` → renders failure state. Auto-redirects to `/subscription` 1.6s after success.
+  - `client/src/lib/api.ts` adds `getBillingMe`, `startCheckout`, `getCheckoutSession`, `completeCheckout`, `cancelSubscription`.
+- **Future Stripe swap** (mechanical):
+  - Replace `syntheticStripe*` calls with `stripe.checkout.sessions.create / customers.create`.
+  - Replace `/checkout/:id` redirect with `session.url` from Stripe.
+  - Replace `/complete` route with real Stripe webhook handler that verifies signature and writes the same `billingEvents` rows + emits same orchestrator events.
+  - DB columns and event types stay identical; UI flow unchanged.
+
 ## Claude AI Hardening (Phase F of LEAN_ONECRAFT_ROADMAP.md)
 - **Integration**: `javascript_anthropic_ai_integrations` blueprint — credentials auto-provisioned via `AI_INTEGRATIONS_ANTHROPIC_API_KEY` + `AI_INTEGRATIONS_ANTHROPIC_BASE_URL`, billed to user's Replit credits. No own API key.
 - **Models** (`server/ai/client.ts`): `MODELS.HAIKU = "claude-haiku-4-5"` (KCSE), `MODELS.SONNET = "claude-sonnet-4-6"` (narrative + scenario gen). `isClaudeAvailable()` guards every entry point.

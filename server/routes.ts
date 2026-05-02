@@ -22,6 +22,12 @@ import { generateResumeNarrative, ProTierRequiredError } from "./ai/narrative";
 import { generateScenario } from "./ai/scenarioGen";
 import { getMonthlyTokens } from "./ai/usage";
 import { isClaudeAvailable } from "./ai/client";
+import {
+  isPaidPlan,
+  priceCentsForPlan,
+  nextPeriodEnd,
+  syntheticStripeCheckoutId,
+} from "./billing";
 import { seedCcge } from "./ccgeSeed";
 import { runHivePrecheck, executePurchase, getOrCreateCredits } from "./sphinx";
 import { buildGuinProfile, validateEndorsement } from "./guin";
@@ -304,31 +310,242 @@ export async function registerRoutes(
     return res.json(SUBSCRIPTION_PLANS);
   });
 
-  app.put("/api/users/:id/subscription", requireSelf("id"), async (req, res) => {
+  // Legacy direct-update endpoint — ADMIN ONLY (ENTERPRISE custom-deal provisioning).
+  // All self-serve plan transitions must flow through /api/billing/checkout.
+  app.put("/api/users/:id/subscription", requireAuth, async (req, res) => {
     try {
+      const adminId = process.env.ADMIN_USER_ID;
+      const callerId = currentUserId(req)!;
+      if (!adminId || callerId !== adminId) {
+        return res.status(403).json({ message: "Admin only. Use POST /api/billing/checkout for self-serve plan changes.", endpoint: "/api/billing/checkout" });
+      }
       const parsed = validSubscriptionPlans.safeParse(req.body?.plan);
       if (!parsed.success) {
-        return res.status(400).json({
-          message: "Invalid subscription plan",
-          validPlans: Object.keys(SUBSCRIPTION_PLANS),
-        });
+        return res.status(400).json({ message: "Invalid subscription plan", validPlans: Object.keys(SUBSCRIPTION_PLANS) });
       }
       const plan = parsed.data as SubscriptionPlan;
+      if (plan !== "ENTERPRISE") {
+        return res.status(409).json({ message: "Admin endpoint reserved for ENTERPRISE provisioning. Use /api/billing/checkout otherwise.", endpoint: "/api/billing/checkout" });
+      }
+      const target = await storage.getUser(req.params.id);
+      if (!target) return res.status(404).json({ message: "User not found" });
+      const fromPlan = (target.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
+      const updated = await storage.updateUser(req.params.id, {
+        subscriptionPlan: plan, subscriptionStatus: "active",
+      } as any);
+      await storage.createBillingEvent({
+        userId: target.id, type: "subscription.upgraded",
+        fromPlan, toPlan: plan, amountCents: 0,
+        externalId: null,
+        payload: { source: "admin.enterprise.provision", actorAdminId: adminId },
+      });
+      const { password: _, ...safeUser } = updated!;
+      return res.json(safeUser);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Billing (Stub Stripe) ─────────────────────────────
+  app.get("/api/billing/me", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const events = await storage.getBillingEventsByUser(userId, 10);
+      return res.json({
+        plan: user.subscriptionPlan,
+        status: user.subscriptionStatus,
+        currentPeriodEnd: user.subscriptionCurrentPeriodEnd,
+        canceledAt: user.subscriptionCanceledAt,
+        stripeCustomerId: user.stripeCustomerId,
+        stripeSubscriptionId: user.stripeSubscriptionId,
+        recentEvents: events,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/billing/checkout", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const schema = z.object({
+        plan: validSubscriptionPlans,
+        institution: z.string().min(1).max(120).optional(),
+      });
+      const p = schema.safeParse(req.body);
+      if (!p.success) return res.status(400).json({ message: "plan required", validPlans: Object.keys(SUBSCRIPTION_PLANS) });
+      const plan = p.data.plan as SubscriptionPlan;
+      const fromPlan = (user.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
+
+      if (plan === "ENTERPRISE") {
+        return res.status(409).json({ message: "Enterprise requires a sales contact, not self-checkout." });
+      }
+      if (plan === fromPlan && user.subscriptionStatus === "active" && !user.subscriptionCanceledAt) {
+        return res.status(409).json({ message: `Already on ${plan}.` });
+      }
       const planData = SUBSCRIPTION_PLANS[plan];
-
-      const updateData: any = {
-        subscriptionPlan: plan,
-        subscriptionStatus: "active",
-      };
-
-      if (planData.type === "school" && req.body?.institution) {
-        updateData.institution = req.body.institution;
+      if (planData.type === "school" && !p.data.institution && !user.institution) {
+        return res.status(400).json({ message: "Institution name required for School plan." });
       }
 
-      const updated = await storage.updateUser(req.params.id, updateData);
-      if (!updated) return res.status(404).json({ message: "User not found" });
-      const { password: _, ...safeUser } = updated;
-      return res.json(safeUser);
+      const amountCents = priceCentsForPlan(plan);
+      const session = await storage.createCheckoutSession({
+        userId,
+        plan,
+        amountCents,
+        status: "pending",
+        institution: planData.type === "school" ? (p.data.institution || user.institution || null) : null,
+        externalSessionId: null,
+      });
+      const externalSessionId = syntheticStripeCheckoutId(session.id);
+      await storage.updateCheckoutSession(session.id, { externalSessionId });
+      await storage.createBillingEvent({
+        userId,
+        type: "checkout.created",
+        fromPlan,
+        toPlan: plan,
+        amountCents,
+        externalId: externalSessionId,
+        payload: { sessionId: session.id, simulated: true },
+      });
+
+      // Free plan auto-completes (no card needed) — caller will hit /complete next.
+      return res.status(201).json({
+        sessionId: session.id,
+        externalSessionId,
+        plan,
+        amountCents,
+        requiresPayment: amountCents > 0,
+        redirectUrl: `/checkout/${session.id}`,
+      });
+    } catch (err: any) {
+      console.error("Billing checkout error:", err);
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/billing/checkout/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const session = await storage.getCheckoutSession(req.params.id);
+      if (!session) return res.status(404).json({ message: "Checkout session not found" });
+      if (session.userId !== userId) return res.status(403).json({ message: "Not your checkout session." });
+      return res.json(session);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/billing/checkout/:id/complete", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const schema = z.object({ success: z.boolean().default(true) });
+      const p = schema.safeParse(req.body || {});
+      if (!p.success) return res.status(400).json({ message: "Invalid body" });
+
+      const result = await storage.completeCheckoutSession({
+        sessionId: req.params.id,
+        actorUserId: userId,
+        success: p.data.success,
+      });
+
+      if (!result.ok) {
+        await orchestrator.emit(userId, "billing.payment.failed", {
+          plan: result.toPlan, amountCents: result.amountCents,
+        }, 0);
+        return res.status(402).json({ ok: false, message: "Payment failed (simulated)." });
+      }
+      await orchestrator.emit(userId, "billing.checkout.completed", {
+        fromPlan: result.fromPlan, toPlan: result.toPlan,
+        amountCents: result.amountCents, transition: result.transition,
+      }, 0);
+      const { password: _, ...safeUser } = result.user as any;
+      return res.json({ ok: true, user: safeUser, session: result.session });
+    } catch (err: any) {
+      const status = err.status || 500;
+      if (status >= 500) console.error("Billing complete error:", err);
+      return res.status(status).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/billing/cancel", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const plan = (user.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
+      if (!isPaidPlan(plan)) return res.status(409).json({ message: "Nothing to cancel on a free plan." });
+      if (user.subscriptionCanceledAt) return res.status(409).json({ message: "Already scheduled for cancellation." });
+
+      const now = new Date();
+      const periodEnd = user.subscriptionCurrentPeriodEnd || nextPeriodEnd(now);
+      await storage.updateUser(userId, {
+        subscriptionStatus: "canceling",
+        subscriptionCanceledAt: now,
+        subscriptionCurrentPeriodEnd: periodEnd,
+      } as any);
+      await storage.createBillingEvent({
+        userId,
+        type: "subscription.canceled",
+        fromPlan: plan,
+        toPlan: "INDIVIDUAL_FREE",
+        amountCents: 0,
+        externalId: user.stripeSubscriptionId,
+        payload: { effectiveAt: periodEnd.toISOString(), simulated: true },
+      });
+      await orchestrator.emit(userId, "billing.subscription.canceled", {
+        plan, effectiveAt: periodEnd.toISOString(),
+      }, 0);
+      return res.json({ ok: true, effectiveAt: periodEnd });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Admin-only webhook simulator: lets us trigger Stripe-like events for testing.
+  app.post("/api/admin/billing/webhook-simulate", requireAuth, async (req, res) => {
+    try {
+      const adminId = process.env.ADMIN_USER_ID;
+      const userId = currentUserId(req)!;
+      if (!adminId || userId !== adminId) return res.status(403).json({ message: "Admin only." });
+
+      const schema = z.object({
+        targetUserId: z.string(),
+        type: z.enum(["payment.failed", "subscription.canceled", "subscription.deleted"]),
+      });
+      const p = schema.safeParse(req.body);
+      if (!p.success) return res.status(400).json({ message: "targetUserId + type required" });
+
+      const target = await storage.getUser(p.data.targetUserId);
+      if (!target) return res.status(404).json({ message: "Target user not found" });
+      const fromPlan = (target.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
+
+      if (p.data.type === "payment.failed") {
+        await storage.updateUser(target.id, { subscriptionStatus: "past_due" } as any);
+        await storage.createBillingEvent({
+          userId: target.id, type: "payment.failed", fromPlan, toPlan: fromPlan,
+          amountCents: priceCentsForPlan(fromPlan), externalId: target.stripeSubscriptionId,
+          payload: { simulated: true, source: "admin.webhook" },
+        });
+        await orchestrator.emit(target.id, "billing.payment.failed", { plan: fromPlan }, 0);
+      } else {
+        await storage.updateUser(target.id, {
+          subscriptionPlan: "INDIVIDUAL_FREE", subscriptionStatus: "active",
+          subscriptionCanceledAt: null, subscriptionCurrentPeriodEnd: null, stripeSubscriptionId: null,
+        } as any);
+        await storage.createBillingEvent({
+          userId: target.id, type: "subscription.canceled", fromPlan, toPlan: "INDIVIDUAL_FREE",
+          amountCents: 0, externalId: target.stripeSubscriptionId,
+          payload: { simulated: true, source: "admin.webhook" },
+        });
+        await orchestrator.emit(target.id, "billing.subscription.canceled", { plan: fromPlan, immediate: true }, 0);
+      }
+      return res.json({ ok: true });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
