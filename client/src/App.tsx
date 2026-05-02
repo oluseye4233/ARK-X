@@ -18,6 +18,7 @@ import SubscriptionPage from "@/pages/subscription";
 import ProfilePage from "@/pages/profile";
 import SchoolDashboard from "@/pages/school-dashboard";
 import PlayPage from "@/pages/play";
+import MarketplacePage from "@/pages/marketplace";
 
 function Router() {
   return (
@@ -36,6 +37,9 @@ function Router() {
         <Route path="/profile" component={ProfilePage} />
         <Route path="/school" component={SchoolDashboard} />
         <Route path="/play" component={PlayPage} />
+        <Route path="/marketplace/publish" component={MarketplacePage} />
+        <Route path="/marketplace/:id" component={MarketplacePage} />
+        <Route path="/marketplace" component={MarketplacePage} />
         {/* Fallback to 404 */}
         <Route component={NotFound} />
       </Switch>

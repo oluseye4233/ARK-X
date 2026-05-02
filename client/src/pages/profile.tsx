@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/useAuth";
 import { api } from "@/lib/api";
-import { SUBSCRIPTION_PLANS, CONTEXT_CRAFT_LEVELS, type SubscriptionPlan, type ContextCraftLevel } from "@shared/schema";
+import { SUBSCRIPTION_PLANS, CONTEXT_CRAFT_LEVELS, type SubscriptionPlan, type ContextCraftLevel, type UserCredits } from "@shared/schema";
 import {
   User,
   Mail,
@@ -16,6 +16,8 @@ import {
   CheckCircle2,
   GraduationCap,
   Award,
+  Coins,
+  ShoppingBag,
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -43,6 +45,13 @@ export default function ProfilePage() {
   const cert = CONTEXT_CRAFT_LEVELS[(user.contextCraftCertLevel || "NONE") as ContextCraftLevel];
 
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [credits, setCredits] = useState<UserCredits | null>(null);
+  const [sales, setSales] = useState<{ totalEarned: number; salesCount: number } | null>(null);
+
+  useEffect(() => {
+    api.getCredits(user.id).then(setCredits).catch(() => null);
+    api.getSpcSales(user.id).then(setSales).catch(() => null);
+  }, [user.id]);
 
   const handleSave = async () => {
     setSaveError(null);
@@ -188,6 +197,38 @@ export default function ProfilePage() {
               <p className="font-display font-bold text-lg text-white">{user.institution}</p>
             </div>
           )}
+
+          <Link href="/marketplace" className="block" data-testid="link-profile-marketplace">
+            <div className="glass-card p-5 rounded-xl hover:border-primary/30 transition-all hover:scale-[1.02] cursor-pointer border border-transparent space-y-3">
+              <div className="flex items-center gap-3">
+                <ShoppingBag className="h-5 w-5 text-primary" />
+                <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">SPHINX Marketplace</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-[9px] uppercase font-mono tracking-widest text-muted-foreground">Credits</div>
+                  <div className="flex items-center gap-1.5">
+                    <Coins className="h-4 w-4 text-amber-400" />
+                    <span className="font-display font-bold text-xl text-amber-400" data-testid="text-profile-credits">
+                      {credits ? credits.balance : "—"}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[9px] uppercase font-mono tracking-widest text-muted-foreground">Earned</div>
+                  <div className="font-display font-bold text-xl text-secondary" data-testid="text-profile-earned">
+                    {sales ? sales.totalEarned : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[9px] uppercase font-mono tracking-widest text-muted-foreground">Sales</div>
+                  <div className="font-display font-bold text-xl text-white" data-testid="text-profile-sales">
+                    {sales ? sales.salesCount : "—"}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Link>
         </div>
       </div>
     </div>

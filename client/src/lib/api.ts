@@ -100,6 +100,57 @@ export const api = {
   getCcgeUserSessions: (userId: string) =>
     apiRequest(`/api/ccge/sessions/user/${userId}`),
 
+  // ── SPHINX Marketplace ───────────────────────────────
+  hivePrecheck: (data: { title: string; description: string; body: string; pillar: string }) =>
+    apiRequest("/api/sphinx/hive-precheck", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  publishSpcListing: (data: {
+    creatorId: string;
+    title: string;
+    description: string;
+    body: string;
+    pillar: string;
+    priceCredits: number;
+  }) =>
+    apiRequest("/api/sphinx/listings", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  getSpcListings: (filters?: { pillar?: string }) => {
+    const params = new URLSearchParams();
+    if (filters?.pillar && filters.pillar !== "All") params.set("pillar", filters.pillar);
+    const qs = params.toString();
+    return apiRequest(`/api/sphinx/listings${qs ? `?${qs}` : ""}`);
+  },
+
+  getSpcListing: (id: string, viewerId?: string) =>
+    apiRequest(`/api/sphinx/listings/${id}${viewerId ? `?viewerId=${encodeURIComponent(viewerId)}` : ""}`),
+
+  delistSpc: (id: string, creatorId: string) =>
+    apiRequest(`/api/sphinx/listings/${id}`, {
+      method: "DELETE",
+      body: JSON.stringify({ creatorId }),
+    }),
+
+  purchaseSpc: (listingId: string, buyerId: string) =>
+    apiRequest(`/api/sphinx/listings/${listingId}/purchase`, {
+      method: "POST",
+      body: JSON.stringify({ buyerId }),
+    }),
+
+  getCredits: (userId: string) => apiRequest(`/api/sphinx/credits/${userId}`),
+
+  getSpcListingsByCreator: (userId: string) =>
+    apiRequest(`/api/sphinx/listings/by-creator/${userId}`),
+
+  getSpcSales: (userId: string) => apiRequest(`/api/sphinx/sales/${userId}`),
+
+  getSpcPurchases: (userId: string) => apiRequest(`/api/sphinx/purchases/${userId}`),
+
   seed: () => apiRequest("/api/seed", { method: "POST" }),
 
   uploadResume: async (file: File, userId: string) => {

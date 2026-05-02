@@ -13,9 +13,10 @@ const _require = createRequire(_filename);
 const pdfParse = _require("pdf-parse");
 import { storage } from "./storage";
 import { analyzeResume } from "./resumeAnalyzer";
-import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, type SubscriptionPlan, CCGE_TIERS, type CcgeTier, jcseToTier } from "@shared/schema";
+import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, type SubscriptionPlan, CCGE_TIERS, type CcgeTier, jcseToTier, ALL_CARD_PILLARS, SPC_MIN_CERT_TO_PUBLISH, SPC_PRICE_MIN, SPC_PRICE_MAX, SPC_STATUSES, CERT_LEVEL_RANK, type CardPillar, type SpcStatus } from "@shared/schema";
 import { dealHand, scoreSession, applyFlywheel } from "./ccge";
 import { seedCcge } from "./ccgeSeed";
+import { runHivePrecheck, executePurchase, getOrCreateCredits } from "./sphinx";
 import { z } from "zod";
 
 const upload = multer({
@@ -498,6 +499,205 @@ export async function registerRoutes(
     }
   });
 
+  // ── SPHINX Marketplace ────────────────────────────────
+  const hivePrecheckSchema = z.object({
+    title: z.string(),
+    description: z.string(),
+    body: z.string(),
+    pillar: z.enum(ALL_CARD_PILLARS as unknown as [string, ...string[]]),
+  });
+
+  app.post("/api/sphinx/hive-precheck", async (req, res) => {
+    try {
+      const parsed = hivePrecheckSchema.parse(req.body);
+      const result = runHivePrecheck(parsed);
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(400).json({ message: err.message });
+    }
+  });
+
+  const publishListingSchema = z.object({
+    creatorId: z.string().min(1),
+    title: z.string().min(6).max(80),
+    description: z.string().min(20).max(500),
+    body: z.string().min(80).max(4000),
+    pillar: z.enum(ALL_CARD_PILLARS as unknown as [string, ...string[]]),
+    priceCredits: z.number().int().min(SPC_PRICE_MIN).max(SPC_PRICE_MAX),
+  });
+
+  app.post("/api/sphinx/listings", async (req, res) => {
+    try {
+      const parsed = publishListingSchema.parse(req.body);
+      const creator = await storage.getUser(parsed.creatorId);
+      if (!creator) return res.status(404).json({ message: "Creator not found." });
+
+      const certLevel = (creator.contextCraftCertLevel as ContextCraftLevel) || "NONE";
+      if (CERT_LEVEL_RANK[certLevel] < CERT_LEVEL_RANK[SPC_MIN_CERT_TO_PUBLISH]) {
+        return res.status(403).json({
+          message: `Publishing requires ${CONTEXT_CRAFT_LEVELS[SPC_MIN_CERT_TO_PUBLISH].label} or higher. Your level: ${CONTEXT_CRAFT_LEVELS[certLevel].label}. Win Gold tier in CCGE Arena to qualify.`,
+        });
+      }
+
+      const precheck = runHivePrecheck({
+        title: parsed.title,
+        description: parsed.description,
+        body: parsed.body,
+        pillar: parsed.pillar,
+      });
+      if (!precheck.passes) {
+        return res.status(422).json({
+          message: "HIVE pre-check failed — improve the prompt and re-submit.",
+          precheck,
+        });
+      }
+
+      const listing = await storage.createSpcListing({
+        creatorId: parsed.creatorId,
+        title: parsed.title,
+        description: parsed.description,
+        body: parsed.body,
+        pillar: parsed.pillar,
+        priceCredits: parsed.priceCredits,
+        kcseScore: precheck.kcseScore,
+        hiveScore: precheck.hiveScore,
+        status: "active",
+      });
+
+      return res.status(201).json({ listing, precheck });
+    } catch (err: any) {
+      console.error("Publish SPC error:", err);
+      return res.status(400).json({ message: err.message });
+    }
+  });
+
+  const listingFiltersSchema = z.object({
+    pillar: z.string().optional(),
+    status: z.string().optional(),
+  });
+
+  // Server-side body redaction protects paid prompt content from being scraped
+  // via direct API calls (UI truncation alone is bypassable).
+  const SPC_PREVIEW_LEN = 280;
+  const redactBody = (body: string) =>
+    body.length > SPC_PREVIEW_LEN
+      ? body.slice(0, SPC_PREVIEW_LEN) + "\n\n[ … purchase to unlock full prompt … ]"
+      : body;
+
+  app.get("/api/sphinx/listings", async (req, res) => {
+    try {
+      const filters = listingFiltersSchema.parse(req.query);
+      const all = await storage.getAllSpcListings({
+        pillar: filters.pillar,
+        status: filters.status ?? "active",
+      });
+      // List endpoint always returns redacted bodies — no viewer context here.
+      const redacted = all.map((l) => ({ ...l, body: redactBody(l.body), bodyLocked: true }));
+      return res.json(redacted);
+    } catch (err: any) {
+      return res.status(400).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/sphinx/listings/:id", async (req, res) => {
+    try {
+      const listing = await storage.getSpcListing(req.params.id);
+      if (!listing) return res.status(404).json({ message: "Listing not found." });
+      const creator = await storage.getUser(listing.creatorId);
+      const safeCreator = creator
+        ? { id: creator.id, name: creator.name, contextCraftCertLevel: creator.contextCraftCertLevel }
+        : null;
+      const viewerId = typeof req.query.viewerId === "string" ? req.query.viewerId : null;
+      let canViewBody = false;
+      if (viewerId) {
+        if (viewerId === listing.creatorId) {
+          canViewBody = true;
+        } else {
+          canViewBody = await storage.hasBuyerPurchasedListing(viewerId, listing.id);
+        }
+      }
+      const safeListing = canViewBody
+        ? { ...listing, bodyLocked: false }
+        : { ...listing, body: redactBody(listing.body), bodyLocked: true };
+      return res.json({ listing: safeListing, creator: safeCreator });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/sphinx/listings/:id", async (req, res) => {
+    try {
+      const { creatorId } = req.body;
+      if (!creatorId) return res.status(400).json({ message: "creatorId required." });
+      const listing = await storage.getSpcListing(req.params.id);
+      if (!listing) return res.status(404).json({ message: "Listing not found." });
+      if (listing.creatorId !== creatorId) {
+        return res.status(403).json({ message: "Only the creator can delist." });
+      }
+      const updated = await storage.updateSpcListing(req.params.id, { status: "delisted" });
+      return res.json(updated);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  const purchaseSchema = z.object({ buyerId: z.string().min(1) });
+
+  app.post("/api/sphinx/listings/:id/purchase", async (req, res) => {
+    try {
+      const { buyerId } = purchaseSchema.parse(req.body);
+      const buyer = await storage.getUser(buyerId);
+      if (!buyer) return res.status(404).json({ message: "Buyer not found." });
+      const outcome = await executePurchase(buyerId, req.params.id);
+      return res.json(outcome);
+    } catch (err: any) {
+      console.error("Purchase error:", err);
+      const status = /not found|insufficient|own SPC|not available/.test(err.message) ? 400 : 500;
+      return res.status(status).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/sphinx/credits/:userId", async (req, res) => {
+    try {
+      const credits = await getOrCreateCredits(req.params.userId);
+      return res.json(credits);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/sphinx/listings/by-creator/:userId", async (req, res) => {
+    try {
+      const listings = await storage.getSpcListingsByCreator(req.params.userId);
+      return res.json(listings);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/sphinx/sales/:userId", async (req, res) => {
+    try {
+      const purchases = await storage.getSpcPurchasesByCreator(req.params.userId);
+      const totalEarned = purchases.reduce((s, p) => s + p.creatorShare, 0);
+      return res.json({ purchases, totalEarned, salesCount: purchases.length });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/sphinx/purchases/:userId", async (req, res) => {
+    try {
+      const purchases = await storage.getSpcPurchasesByBuyer(req.params.userId);
+      const listingIds = Array.from(new Set(purchases.map((p) => p.listingId)));
+      const listings = await Promise.all(listingIds.map((id) => storage.getSpcListing(id)));
+      const byId = new Map(listings.filter((l): l is NonNullable<typeof l> => !!l).map((l) => [l.id, l]));
+      const enriched = purchases.map((p) => ({ ...p, listing: byId.get(p.listingId) ?? null }));
+      return res.json(enriched);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
   // ── Seed endpoint (for initial data population) ───────
   app.post("/api/seed", async (_req, res) => {
     try {
@@ -597,7 +797,98 @@ export async function registerRoutes(
       // Seed CCGE cards + scenarios
       const ccge = await seedCcge();
 
-      return res.json({ message: "Seed complete", ccgeCards: ccge.cards, ccgeScenarios: ccge.scenarios });
+      // Seed SPHINX marketplace: a second creator user + a few sample listings
+      let creatorId: string | undefined;
+      const existingCreator = await storage.getUserByUsername("creator@sphinx.io");
+      if (!existingCreator) {
+        const creator = await storage.createUser({
+          username: "creator@sphinx.io",
+          password: "arkplatform",
+          name: "Maya Chen",
+          role: "Prompt Architect",
+          department: "Strategic Planning",
+          seniority: "Senior",
+          location: "NA",
+        });
+        await storage.updateUser(creator.id, { contextCraftCertLevel: "CC_500" });
+        creatorId = creator.id;
+        await storage.createAssessment({
+          userId: creator.id,
+          jstTotal: 268,
+          jstJobs: 89,
+          jstSkills: 92,
+          jstTalent: 87,
+          vulnerabilityLevel: 1,
+          readinessProfile: "Architect",
+          riskModifiers: [{ task: "Manual report generation", automatable: 75 }],
+          matchedCardIds: ["card-001", "card-006", "card-010"],
+        });
+        await getOrCreateCredits(creator.id);
+      } else {
+        creatorId = existingCreator.id;
+      }
+
+      const existingListings = await storage.getAllSpcListings();
+      let spcListingsCount = existingListings.length;
+      if (creatorId && existingListings.length === 0) {
+        const samples = [
+          {
+            title: "Tier-1 Support Triage Architect",
+            description: "Production-grade prompt that classifies, routes, and drafts responses to inbound support emails with strict policy guardrails.",
+            pillar: "System",
+            priceCredits: 25,
+            body: "You are a Tier-1 customer support triage agent for an enterprise SaaS company.\n\nYour task is to receive an inbound support email and produce a structured JSON response.\n\nFirst, classify intent into one of: billing, bug_report, feature_request, account_access, other.\nThen, assess urgency: low, medium, high, critical.\nNext, draft a polite, on-brand response that never invents company policy.\nFinally, output strict JSON with keys: intent, urgency, suggested_response, requires_escalation.\n\nConstraints:\n- Do not invent refund policies.\n- Do not promise SLAs you can't verify.\n- If the request mentions security or PII, set requires_escalation to true.\n\nFormat: respond ONLY with valid JSON, no markdown fences.",
+          },
+          {
+            title: "Sprint Standup Synthesis Engine",
+            description: "Compresses three engineers' raw standup notes into a one-paragraph leadership digest with blockers surfaced.",
+            pillar: "Instruction",
+            priceCredits: 15,
+            body: "You are a sprint synthesis assistant for an engineering manager.\n\nYour task is to read three engineers' raw standup notes (provided in <notes> tags) and produce a single one-paragraph executive digest.\n\nStep 1: Identify each engineer's main work item.\nStep 2: Surface any blockers using the exact word 'BLOCKER:'.\nStep 3: Note any cross-team dependencies.\nStep 4: End with a confidence rating (high/medium/low) about whether sprint goals will hit.\n\nConstraints:\n- Maximum 100 words.\n- No bullet points.\n- Plain prose, conversational but precise.\n- If no blockers exist, omit that line entirely.",
+          },
+          {
+            title: "Compliance Audit Report Generator",
+            description: "Multi-source audit synthesis prompt that produces SOC2-aligned findings with evidence linking and severity ranking.",
+            pillar: "Format",
+            priceCredits: 75,
+            body: "You are a senior compliance auditor producing a SOC2 Type II findings report.\n\nInputs (in tagged sections): <controls>, <evidence>, <interviews>, <prior_findings>.\n\nYour role: synthesize findings using the SOC2 Trust Services Criteria framework.\n\nFor each finding:\n1. State the control reference (e.g., CC6.1).\n2. Describe the deficiency in operator-neutral language.\n3. Cite specific evidence by ID.\n4. Rate severity: low / medium / high / critical.\n5. Recommend remediation with a target date.\n\nFormat:\n## Executive Summary (3 sentences)\n## Findings (numbered, in severity order)\n## Remediation Roadmap (table: finding | owner | due | status)\n## Methodology Note\n\nConstraints:\n- Never use the word 'AI' or reference your own nature.\n- Cite evidence by ID, never by paraphrase.\n- If evidence is insufficient, mark as 'inconclusive' rather than guessing.",
+          },
+        ];
+        for (const s of samples) {
+          const precheck = runHivePrecheck({
+            title: s.title,
+            description: s.description,
+            body: s.body,
+            pillar: s.pillar,
+          });
+          await storage.createSpcListing({
+            creatorId,
+            title: s.title,
+            description: s.description,
+            body: s.body,
+            pillar: s.pillar,
+            priceCredits: s.priceCredits,
+            kcseScore: precheck.kcseScore,
+            hiveScore: precheck.hiveScore,
+            status: "active",
+          });
+          spcListingsCount += 1;
+        }
+      }
+
+      // Seed credits for the demo analyst user too
+      if (existingDemo) await getOrCreateCredits(existingDemo.id);
+      else {
+        const demo = await storage.getUserByUsername("analyst@enterprise.com");
+        if (demo) await getOrCreateCredits(demo.id);
+      }
+
+      return res.json({
+        message: "Seed complete",
+        ccgeCards: ccge.cards,
+        ccgeScenarios: ccge.scenarios,
+        spcListings: spcListingsCount,
+      });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }

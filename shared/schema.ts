@@ -109,7 +109,23 @@ export const ARK_SCORE_DELTAS = {
   CERT_UPGRADE_TO_CC_300: 7,
   CERT_UPGRADE_TO_CC_400: 10,
   CERT_UPGRADE_TO_CC_500: 15,
+  SPC_PUBLISHED: 2,
+  SPC_PURCHASED_AS_BUYER: 1,
+  SPC_FIRST_SALE_AS_CREATOR: 8,
 } as const;
+
+// ── SPHINX Marketplace constants ───────────────────────────
+export const SPC_CREATOR_SHARE_PCT = 70;
+export const SPC_PLATFORM_SHARE_PCT = 30;
+export const SPC_STARTING_CREDITS = 100;
+export const SPC_MIN_CERT_TO_PUBLISH: ContextCraftLevel = "CC_400";
+export const SPC_PRICE_MIN = 5;
+export const SPC_PRICE_MAX = 500;
+export const SPC_HIVE_MIN_TO_PUBLISH = 60;
+export const SPC_FIRST_SALE_TALENT_BOOST = 3;
+
+export const SPC_STATUSES = ["draft", "active", "delisted"] as const;
+export type SpcStatus = typeof SPC_STATUSES[number];
 
 export const CERT_LEVEL_RANK: Record<ContextCraftLevel, number> = {
   NONE: 0,
@@ -309,3 +325,69 @@ export const insertGameSessionSchema = createInsertSchema(gameSessions).omit({
 });
 export type InsertGameSession = z.infer<typeof insertGameSessionSchema>;
 export type GameSession = typeof gameSessions.$inferSelect;
+
+// ── SPHINX Marketplace Tables ────────────────────────────────
+export const spcListings = pgTable("spc_listings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  creatorId: varchar("creator_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  body: text("body").notNull(),
+  pillar: text("pillar").notNull(),
+  priceCredits: integer("price_credits").notNull(),
+  kcseScore: real("kcse_score").notNull(),
+  hiveScore: real("hive_score").notNull(),
+  status: text("status").notNull().default("active"),
+  salesCount: integer("sales_count").notNull().default(0),
+  totalEarned: integer("total_earned").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertSpcListingSchema = createInsertSchema(spcListings).omit({
+  id: true,
+  kcseScore: true,
+  hiveScore: true,
+  status: true,
+  salesCount: true,
+  totalEarned: true,
+  createdAt: true,
+});
+export type InsertSpcListing = z.infer<typeof insertSpcListingSchema>;
+export type SpcListing = typeof spcListings.$inferSelect;
+
+export const spcPurchases = pgTable("spc_purchases", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  buyerId: varchar("buyer_id").notNull(),
+  listingId: varchar("listing_id").notNull(),
+  creatorId: varchar("creator_id").notNull(),
+  priceCredits: integer("price_credits").notNull(),
+  creatorShare: integer("creator_share").notNull(),
+  platformShare: integer("platform_share").notNull(),
+  isFirstSaleForCreator: boolean("is_first_sale_for_creator").notNull().default(false),
+  purchasedAt: timestamp("purchased_at").defaultNow().notNull(),
+});
+
+export const insertSpcPurchaseSchema = createInsertSchema(spcPurchases).omit({
+  id: true,
+  purchasedAt: true,
+});
+export type InsertSpcPurchase = z.infer<typeof insertSpcPurchaseSchema>;
+export type SpcPurchase = typeof spcPurchases.$inferSelect;
+
+export const userCredits = pgTable("user_credits", {
+  userId: varchar("user_id").primaryKey(),
+  balance: integer("balance").notNull().default(0),
+  lifetimeEarned: integer("lifetime_earned").notNull().default(0),
+  lifetimeSpent: integer("lifetime_spent").notNull().default(0),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type UserCredits = typeof userCredits.$inferSelect;
+
+export type HivePrecheck = {
+  hiveScore: number;
+  kcseScore: number;
+  passes: boolean;
+  reasons: string[];
+  warnings: string[];
+};

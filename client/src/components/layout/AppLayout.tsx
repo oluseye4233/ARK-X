@@ -16,6 +16,7 @@ import {
   User,
   GraduationCap,
   Gamepad2,
+  ShoppingBag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -43,6 +44,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     { name: "Upload CV", href: "/upload", icon: Upload },
     { name: "Intelligence Hub", href: "/dashboard", icon: BarChart3 },
     { name: "CCGE Arena", href: "/play", icon: Gamepad2 },
+    { name: "SPHINX Market", href: "/marketplace", icon: ShoppingBag },
     { name: "Career Mobility", href: "/pathways", icon: Map },
     { name: "Workforce", href: "/enterprise", icon: Users },
   ];
@@ -61,7 +63,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
         <nav className="px-4 py-6 space-y-2">
           {navigation.map((item) => {
-            const isActive = location === item.href;
+            const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href + "/"));
             return (
               <Link
                 key={item.name}

@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, sql, desc } from "drizzle-orm";
+import { eq, sql, desc, and } from "drizzle-orm";
 import {
   users, type User, type InsertUser,
   assessments, type Assessment, type InsertAssessment,
@@ -11,6 +11,9 @@ import {
   ccgeCards, type CcgeCard, type InsertCcgeCard,
   ccgeScenarios, type CcgeScenario, type InsertCcgeScenario,
   gameSessions, type GameSession, type InsertGameSession,
+  spcListings, type SpcListing, type InsertSpcListing,
+  spcPurchases, type SpcPurchase,
+  userCredits, type UserCredits,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -50,6 +53,16 @@ export interface IStorage {
   getGameSession(id: string): Promise<GameSession | undefined>;
   getGameSessionsByUser(userId: string): Promise<GameSession[]>;
   updateGameSession(id: string, data: Partial<GameSession>): Promise<GameSession | undefined>;
+
+  // SPHINX Marketplace
+  createSpcListing(listing: InsertSpcListing & { kcseScore: number; hiveScore: number; status?: string }): Promise<SpcListing>;
+  getSpcListing(id: string): Promise<SpcListing | undefined>;
+  getAllSpcListings(filters?: { pillar?: string; status?: string }): Promise<SpcListing[]>;
+  getSpcListingsByCreator(creatorId: string): Promise<SpcListing[]>;
+  updateSpcListing(id: string, data: Partial<SpcListing>): Promise<SpcListing | undefined>;
+  getSpcPurchasesByBuyer(buyerId: string): Promise<SpcPurchase[]>;
+  getSpcPurchasesByCreator(creatorId: string): Promise<SpcPurchase[]>;
+  getCredits(userId: string): Promise<UserCredits | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -208,6 +221,71 @@ export class DatabaseStorage implements IStorage {
   async updateGameSession(id: string, data: Partial<GameSession>): Promise<GameSession | undefined> {
     const [updated] = await db.update(gameSessions).set(data).where(eq(gameSessions.id, id)).returning();
     return updated;
+  }
+
+  // ── SPHINX Marketplace ──────────────────────────────────────
+  async createSpcListing(
+    listing: InsertSpcListing & { kcseScore: number; hiveScore: number; status?: string },
+  ): Promise<SpcListing> {
+    const [created] = await db.insert(spcListings).values(listing).returning();
+    return created;
+  }
+
+  async getSpcListing(id: string): Promise<SpcListing | undefined> {
+    const [s] = await db.select().from(spcListings).where(eq(spcListings.id, id));
+    return s;
+  }
+
+  async getAllSpcListings(filters?: { pillar?: string; status?: string }): Promise<SpcListing[]> {
+    const rows = await db.select().from(spcListings).orderBy(desc(spcListings.createdAt));
+    return rows.filter((r) => {
+      if (filters?.pillar && r.pillar !== filters.pillar) return false;
+      if (filters?.status && r.status !== filters.status) return false;
+      return true;
+    });
+  }
+
+  async getSpcListingsByCreator(creatorId: string): Promise<SpcListing[]> {
+    return db
+      .select()
+      .from(spcListings)
+      .where(eq(spcListings.creatorId, creatorId))
+      .orderBy(desc(spcListings.createdAt));
+  }
+
+  async updateSpcListing(id: string, data: Partial<SpcListing>): Promise<SpcListing | undefined> {
+    const [updated] = await db.update(spcListings).set(data).where(eq(spcListings.id, id)).returning();
+    return updated;
+  }
+
+  async getSpcPurchasesByBuyer(buyerId: string): Promise<SpcPurchase[]> {
+    return db
+      .select()
+      .from(spcPurchases)
+      .where(eq(spcPurchases.buyerId, buyerId))
+      .orderBy(desc(spcPurchases.purchasedAt));
+  }
+
+  async getSpcPurchasesByCreator(creatorId: string): Promise<SpcPurchase[]> {
+    return db
+      .select()
+      .from(spcPurchases)
+      .where(eq(spcPurchases.creatorId, creatorId))
+      .orderBy(desc(spcPurchases.purchasedAt));
+  }
+
+  async hasBuyerPurchasedListing(buyerId: string, listingId: string): Promise<boolean> {
+    const [row] = await db
+      .select({ id: spcPurchases.id })
+      .from(spcPurchases)
+      .where(and(eq(spcPurchases.buyerId, buyerId), eq(spcPurchases.listingId, listingId)))
+      .limit(1);
+    return !!row;
+  }
+
+  async getCredits(userId: string): Promise<UserCredits | undefined> {
+    const [c] = await db.select().from(userCredits).where(eq(userCredits.userId, userId));
+    return c;
   }
 }
 

@@ -86,20 +86,28 @@ Known limitations (deferred by design — see linked phases):
 
 ---
 
-### 🟡 Phase B — SPHINX Marketplace Stub *(start here next)*
-**Goal:** Gold+ users (CC_400 cert or higher, achievable via Phase A's CCGE Arena) can publish a "Smart Prompt Card" (SPC); anyone can browse and "purchase" with platform credits.
+### ✅ Phase B — SPHINX Marketplace Stub
+**Status: COMPLETE**
 
-**Scope:**
-- `shared/schema.ts`: `spc_listings` (id, creator_id, title, description, body, price_credits, kcse_score, hive_score, status, created_at), `spc_purchases` (id, buyer_id, listing_id, price_credits, creator_share, platform_share, purchased_at), `user_credits` (user_id, balance)
-- `/marketplace` route: list view + filter by pillar/tier, detail view with Buy button
-- `/marketplace/publish` route (Gold+ gated): form for title/desc/body/price + simulated HIVE pre-check
-- Purchase flow: deduct credits from buyer, credit 70% to creator, 30% to platform, write split rows
-- Creator dashboard widget on `/profile`: total earnings, # sales, top SPC
-- First sale of any creator → JST Talent +3 (flywheel)
+What shipped:
+- 3 new Drizzle tables (`spcListings`, `spcPurchases`, `userCredits`) + constants (`SPC_CREATOR_SHARE_PCT=70`, `SPC_PLATFORM_SHARE_PCT=30`, `SPC_STARTING_CREDITS=100`, `SPC_MIN_CERT_TO_PUBLISH=CC_400`, `SPC_HIVE_MIN_TO_PUBLISH=60`, `SPC_FIRST_SALE_TALENT_BOOST=3`); ARK_SCORE_DELTAS extended (SPC_PUBLISHED=2, SPC_PURCHASED_AS_BUYER=1, SPC_FIRST_SALE_AS_CREATOR=8)
+- 3 seed SPCs (System/Instruction/Format pillars, 15/25/75 credits) authored by a second seeded user `creator@sphinx.io` / `arkplatform` (CC-500)
+- Deterministic `runHivePrecheck` (server/sphinx.ts) — 0-100 HIVE score from length, structural keywords, formatting; rejects red-flag terms; also computes proxied KCSE 0-50 (Phase F replaces with Claude)
+- **Atomic `executePurchase`** via `db.transaction` with `FOR UPDATE` locks on buyer/creator/listing — debit/credit/insert/JST-bump in one txn; rolls back on any failure (closes Phase A architect "atomic finish" issue ahead of schedule for SPHINX)
+- 9 `/api/sphinx/*` REST endpoints (hive-precheck, listings GET/POST/DELETE, listings/:id, listings/:id/purchase, credits/:userId, listings/by-creator/:userId, sales/:userId, purchases/:userId)
+- Full marketplace UI (`client/src/pages/marketplace.tsx`, single-file router): list + pillar filter chips + credits header, detail with body preview/full-unlock, publish form with live HIVE pre-check panel, cert-locked state with CCGE Arena CTA
+- Sidebar `SPHINX Market` nav with active-state for sub-routes; profile widget for credits / earned / sales
 
-**Acceptance:** Gold cert user publishes an SPC, second user buys it, both see balances and JST update.
+Smoke test (analyst@enterprise.com buys creator@sphinx.io's "Compliance Audit Report Generator" for 75 credits):
+- Buyer: 100 → 25 credits ✓
+- Creator: 100 → 152 credits (52 = 70%), totalEarned 52, salesCount 1 ✓
+- Platform: 23 = 30% ✓
+- isFirstSaleForCreator=true → JST Talent 87 → 90 (+3), JST Total 268 → 271 ✓
+- Negative paths: self-purchase blocked, insufficient credits blocked with helpful copy, cert-gate blocks NONE-cert users, HIVE pre-check fails low-quality drafts (50/100) and passes good ones (94/100) ✓
 
-**Out of scope this phase:** NFT mint, ERC-2981 royalties, ZPOS optimization, ULTRA SI synthesis.
+Known limitations (deferred by design):
+- **IDOR**: `buyerId`/`creatorId` still trusted from request body — fixed platform-wide in **Phase D**
+- **In-app credits only**: no real Stripe purchase or fiat payout yet — Phase D wires Stripe Connect for creator payouts
 
 ---
 

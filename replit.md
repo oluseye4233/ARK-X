@@ -42,6 +42,21 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 - `/profile` — User Profile (editable profile details, subscription status, cert level, institution)
 - `/school` — Institution Dashboard (cohort JST scores, skill radar, archetype/vulnerability distributions, School plan gated)
 - `/play` — CCGE Arena (single-player Context Craft card game; lobby → session → score → flywheel)
+- `/marketplace` — SPHINX Marketplace (browse Smart Prompt Cards, filter by pillar)
+- `/marketplace/publish` — Publish a new SPC (Gold+ cert gated, runs HIVE pre-check)
+- `/marketplace/:id` — SPC detail page (preview, purchase, ownership view)
+
+## SPHINX Marketplace (Phase B of LEAN_ONECRAFT_ROADMAP.md)
+- **Schema** (`shared/schema.ts`): `spcListings` (creator, title/desc/body, pillar, priceCredits, kcseScore, hiveScore, status, salesCount, totalEarned), `spcPurchases` (buyer, listing, creator, priceCredits, creatorShare, platformShare, isFirstSaleForCreator), `userCredits` (userId PK, balance, lifetimeEarned, lifetimeSpent)
+- **Constants**: `SPC_CREATOR_SHARE_PCT=70`, `SPC_PLATFORM_SHARE_PCT=30`, `SPC_STARTING_CREDITS=100`, `SPC_MIN_CERT_TO_PUBLISH=CC_400`, `SPC_PRICE_MIN=5`, `SPC_PRICE_MAX=500`, `SPC_HIVE_MIN_TO_PUBLISH=60`, `SPC_FIRST_SALE_TALENT_BOOST=3`
+- **Engine** (`server/sphinx.ts`):
+  - `runHivePrecheck(input)` — deterministic 0-100 HIVE score from title/desc/body length, structural keyword matches, formatting heuristics; rejects red-flag terms (lorem ipsum, todo, placeholder); also computes proxied KCSE 0-50 (Phase F replaces with Claude call)
+  - `getOrCreateCredits(userId)` — idempotent starter-credit grant (100 credits)
+  - `executePurchase(buyerId, listingId)` — **fully transactional** via `db.transaction`: locks buyer + creator + listing rows `FOR UPDATE`, validates balance + non-self-purchase + active status, splits 70/30, inserts purchase row, bumps listing counters, on first sale grants creator JST Talent +3 (capped 100/300). Any failure rolls back entire purchase.
+- **Cert gate**: publishing requires `CONTEXT_CRAFT_LEVELS[user.contextCraftCertLevel]` rank ≥ CC-400 Expert (Gold tier in CCGE)
+- **Seed**: a second creator user (`creator@sphinx.io` / `arkplatform`, CC-500) with 3 sample SPCs across System/Instruction/Format pillars (15/25/75 credits)
+- **Frontend** (`client/src/pages/marketplace.tsx`): single-file router with three views (`ListingsList`, `ListingDetail`, `PublishPage`); shows credits header, pillar filter chips, locked-state for non-Gold users, live HIVE pre-check panel before publish, transactional purchase confirmation with first-sale Talent boost callout
+- **Profile widget** (`client/src/pages/profile.tsx`): SPHINX card showing credits / lifetime earned / sales count
 
 ## CCGE — Context Craft Game Engine (Phase A of LEAN_ONECRAFT_ROADMAP.md)
 - **Schema** (`shared/schema.ts`): `ccgeCards` (14 seeded across 7 pillars + SuperPrompt), `ccgeScenarios` (6: 2 Bronze / 2 Silver / 2 Gold), `gameSessions` (hand/played/score/flywheel result)
@@ -77,6 +92,16 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 - `GET /api/ccge/sessions/:id` — Get session + scenario
 - `POST /api/ccge/sessions/:id/finish` — Score and finish, body `{playedCardIds: string[1..5]}` → `{session, scenario, breakdown, tier, flywheel}`. Validates each played ID came from the dealt hand and rejects duplicates.
 - `GET /api/ccge/sessions/user/:userId` — Session history (newest first)
+- `POST /api/sphinx/hive-precheck` — Deterministic HIVE/KCSE score for a draft SPC (no DB write)
+- `POST /api/sphinx/listings` — Publish SPC (cert-gated CC_400+, body Zod-validated, runs HIVE pre-check before insert)
+- `GET /api/sphinx/listings?pillar=&status=` — List active SPCs with optional filters
+- `GET /api/sphinx/listings/:id` — SPC detail + safe creator info (id, name, cert level)
+- `DELETE /api/sphinx/listings/:id` — Delist (creator-only, sets status to "delisted")
+- `POST /api/sphinx/listings/:id/purchase` — Atomic purchase via `db.transaction` (debit/credit/insert/JST-bump in one txn)
+- `GET /api/sphinx/credits/:userId` — Get-or-create credit balance (grants 100 on first read)
+- `GET /api/sphinx/listings/by-creator/:userId` — Creator's listings
+- `GET /api/sphinx/sales/:userId` — Sales for creator (purchases + totalEarned + salesCount)
+- `GET /api/sphinx/purchases/:userId` — Buyer's purchase history (each enriched with `listing` payload for full prompt access)
 
 ## Resume Analysis Engine (`server/resumeAnalyzer.ts`)
 - Keyword-based scoring across 6 categories: technical, leadership, analytical, communication, innovation, ai_adjacent
