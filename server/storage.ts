@@ -25,6 +25,7 @@ export interface IStorage {
   updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
 
   createAssessment(assessment: InsertAssessment): Promise<Assessment>;
+  getAssessment(id: string): Promise<Assessment | undefined>;
   getAssessmentsByUser(userId: string): Promise<Assessment[]>;
   getLatestAssessment(userId: string): Promise<Assessment | undefined>;
   updateAssessmentScore(id: string, data: Partial<Pick<Assessment, "jstTotal" | "jstJobs" | "jstSkills" | "jstTalent">>): Promise<Assessment | undefined>;
@@ -113,6 +114,11 @@ export class DatabaseStorage implements IStorage {
   async createAssessment(assessment: InsertAssessment): Promise<Assessment> {
     const [created] = await db.insert(assessments).values(assessment).returning();
     return created;
+  }
+
+  async getAssessment(id: string): Promise<Assessment | undefined> {
+    const [row] = await db.select().from(assessments).where(eq(assessments.id, id));
+    return row;
   }
 
   async getAssessmentsByUser(userId: string): Promise<Assessment[]> {

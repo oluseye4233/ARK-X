@@ -46,6 +46,22 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 - `/marketplace/publish` — Publish a new SPC (Gold+ cert gated, runs HIVE pre-check)
 - `/marketplace/:id` — SPC detail page (preview, purchase, ownership view)
 
+## Claude AI Hardening (Phase F of LEAN_ONECRAFT_ROADMAP.md)
+- **Integration**: `javascript_anthropic_ai_integrations` blueprint — credentials auto-provisioned via `AI_INTEGRATIONS_ANTHROPIC_API_KEY` + `AI_INTEGRATIONS_ANTHROPIC_BASE_URL`, billed to user's Replit credits. No own API key.
+- **Models** (`server/ai/client.ts`): `MODELS.HAIKU = "claude-haiku-4-5"` (KCSE), `MODELS.SONNET = "claude-sonnet-4-6"` (narrative + scenario gen). `isClaudeAvailable()` guards every entry point.
+- **Schema additions**: `aiUsage` (append-only ledger of userId/kind/model/tokensIn/tokensOut/costCents), `aiCache` (cacheKey PK, kind, value jsonb, expiresAt). `AI_PRICING_PER_MTOK`: haiku $0.80/$4, sonnet $3/$15. `AI_TIER_MONTHLY_TOKENS`: free=20k, pro=500k, school=200k, enterprise=2M.
+- **Plumbing**:
+  - `server/ai/usage.ts` — `logUsage()` writes ledger row + computes cost. `getMonthlyTokens(userId)` aggregates current calendar month. `enforceBudget(userId, plan)` throws 429 (`BudgetExceededError`) before any Claude call.
+  - `server/ai/cache.ts` — `cacheKey(parts)` = sha256(JSON.stringify(parts)) (canonical, collision-safe). `cacheGet/cacheSet` with TTL, expired rows deleted on read; `maybeSweepExpired()` background sweep throttled to once/min.
+- **KCSE Claude scoring** (`server/ai/kcse.ts`): Haiku call with strict JSON output, 5s timeout, 1hr cache (key includes prompt version + model + scenarioId + sorted card IDs). Returns `{kcseDelta -5..+5, narrative, strengths, weaknesses}`. Any failure (timeout, parse, budget) returns null → deterministic score stands. Final score clamped 0-50 after delta.
+- **Resume narrative** (`server/ai/narrative.ts`): Sonnet call, 24hr cache. Pro/School/Enterprise gated via `ProTierRequiredError` (HTTP 402). Returns `{summary, archetypeInsight, topRisks[3], growthPath[3]}`.
+- **Scenario generation** (`server/ai/scenarioGen.ts`): Sonnet, admin-gated via `ADMIN_USER_ID` env. Validates tier ∈ CCGE_TIERS, ≥2 valid pillars, clamps tokenBudget 30-120 + difficulty 1-5. Optional `persist:true` body upserts via `storage.upsertCcgeScenario`.
+- **Routes** (`server/routes.ts`):
+  - `GET /api/ai/status` — `{available, usage:{tokensIn, tokensOut, total, costCents}}` for current user month.
+  - `POST /api/ccge/sessions/:id/finish` — accepts optional `useClaude:boolean` body flag; defaults off (backward compatible). Adds Claude `kcseDelta` to deterministic breakdown before tier/flywheel; response includes `claude` field.
+  - `POST /api/ai/resume-narrative/:assessmentId` — requireAuth + assessment ownership + Pro+ gate.
+  - `POST /api/admin/ai/generate-scenario` — requireAuth + ADMIN_USER_ID match.
+
 ## Flywheel Orchestration (Phase E of LEAN_ONECRAFT_ROADMAP.md)
 - `shared/schema.ts` defines `arkEvents` (id, userId, type, payload jsonb, scoreDelta, createdAt) + `ARK_EVENT_TYPES` + `ARK_SCORE_DELTAS`.
 - `server/orchestrator.ts` — singleton typed event bus. `emit(userId, type, payload, scoreDelta)` writes to `ark_events` and fans out to SSE subscribers (best-effort: emit failures are logged, never throw). `subscribe(userId, res)`, `getRecentEvents(userId, limit)`.

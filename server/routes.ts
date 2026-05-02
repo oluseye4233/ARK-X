@@ -17,6 +17,11 @@ import { requireAuth, requireSelf, currentUserId, loginSession } from "./auth";
 import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, type SubscriptionPlan, CCGE_TIERS, type CcgeTier, jcseToTier, ALL_CARD_PILLARS, SPC_MIN_CERT_TO_PUBLISH, SPC_PRICE_MIN, SPC_PRICE_MAX, SPC_STATUSES, CERT_LEVEL_RANK, ARK_SCORE_DELTAS, type CardPillar, type SpcStatus } from "@shared/schema";
 import { dealHand, scoreSession } from "./ccge";
 import { orchestrator } from "./orchestrator";
+import { scoreSessionWithClaude } from "./ai/kcse";
+import { generateResumeNarrative, ProTierRequiredError } from "./ai/narrative";
+import { generateScenario } from "./ai/scenarioGen";
+import { getMonthlyTokens } from "./ai/usage";
+import { isClaudeAvailable } from "./ai/client";
 import { seedCcge } from "./ccgeSeed";
 import { runHivePrecheck, executePurchase, getOrCreateCredits } from "./sphinx";
 import { buildGuinProfile, validateEndorsement } from "./guin";
@@ -75,6 +80,58 @@ export async function registerRoutes(
       return res.json(events);
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── AI / Claude ───────────────────────────────────────
+  app.get("/api/ai/status", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const usage = await getMonthlyTokens(userId);
+      return res.json({ available: isClaudeAvailable(), usage });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/ai/resume-narrative/:assessmentId", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const a = await storage.getAssessment(req.params.assessmentId);
+      if (!a) return res.status(404).json({ message: "Assessment not found" });
+      if (a.userId !== userId) return res.status(403).json({ message: "You may only generate narratives for your own assessments." });
+      const user = await storage.getUser(userId);
+      const plan = (user?.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
+      const narrative = await generateResumeNarrative({ userId, plan, assessment: a });
+      return res.json(narrative);
+    } catch (err: any) {
+      console.error("Resume narrative error:", err);
+      const status = err.status || (err instanceof ProTierRequiredError ? 402 : 500);
+      return res.status(status).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/admin/ai/generate-scenario", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const adminId = process.env.ADMIN_USER_ID;
+      if (!adminId || userId !== adminId) {
+        return res.status(403).json({ message: "Admin only." });
+      }
+      const schema = z.object({ brief: z.string().min(10).max(800), persist: z.boolean().optional() });
+      const p = schema.safeParse(req.body);
+      if (!p.success) return res.status(400).json({ message: "brief required (10–800 chars)" });
+      const user = await storage.getUser(userId);
+      const plan = (user?.subscriptionPlan as SubscriptionPlan) || "ENTERPRISE";
+      const scenario = await generateScenario({ userId, plan, brief: p.data.brief });
+      if (p.data.persist) {
+        const saved = await storage.upsertCcgeScenario(scenario);
+        return res.status(201).json({ scenario: saved, persisted: true });
+      }
+      return res.json({ scenario, persisted: false });
+    } catch (err: any) {
+      console.error("Scenario gen error:", err);
+      return res.status(err.status || 500).json({ message: err.message });
     }
   });
 
@@ -522,12 +579,12 @@ export async function registerRoutes(
 
   app.post("/api/ccge/sessions/:id/finish", requireAuth, async (req, res) => {
     try {
-      const schema = z.object({ playedCardIds: z.array(z.string()).min(1).max(5) });
+      const schema = z.object({ playedCardIds: z.array(z.string()).min(1).max(5), useClaude: z.boolean().optional() });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ message: "playedCardIds must be an array of 1–5 card IDs" });
       }
-      const { playedCardIds } = parsed.data;
+      const { playedCardIds, useClaude } = parsed.data;
 
       const session = await storage.getGameSession(req.params.id);
       if (!session) return res.status(404).json({ message: "Session not found" });
@@ -559,9 +616,25 @@ export async function registerRoutes(
         .filter((c): c is NonNullable<typeof c> => !!c);
 
       const breakdown = scoreSession(playedCards, scenario);
-      const tier = jcseToTier(breakdown.final);
 
       const actorUserId = currentUserId(req)!;
+      let claudeKcse: Awaited<ReturnType<typeof scoreSessionWithClaude>> = null;
+      if (useClaude) {
+        const actor = await storage.getUser(actorUserId);
+        const plan = (actor?.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
+        claudeKcse = await scoreSessionWithClaude({
+          userId: actorUserId,
+          plan,
+          scenario,
+          playedCards,
+          deterministic: breakdown,
+        });
+        if (claudeKcse) {
+          breakdown.final = Math.max(0, Math.min(50, Math.round((breakdown.final + claudeKcse.kcseDelta) * 10) / 10));
+        }
+      }
+      const tier = jcseToTier(breakdown.final);
+
       const { session: updated, flywheel } = await storage.finalizeSession({
         sessionId: session.id,
         actorUserId,
@@ -593,6 +666,7 @@ export async function registerRoutes(
         breakdown,
         tier,
         flywheel,
+        claude: claudeKcse,
       });
     } catch (err: any) {
       console.error("CCGE finish error:", err);

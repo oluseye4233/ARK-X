@@ -462,6 +462,50 @@ export const insertArkEventSchema = createInsertSchema(arkEvents).omit({
 export type InsertArkEvent = z.infer<typeof insertArkEventSchema>;
 export type ArkEvent = typeof arkEvents.$inferSelect;
 
+export const AI_KINDS = ["kcse", "narrative", "scenario_gen"] as const;
+export type AiKind = typeof AI_KINDS[number];
+
+export const AI_MODELS = {
+  HAIKU: "claude-haiku-4-5",
+  SONNET: "claude-sonnet-4-6",
+} as const;
+
+export const AI_PRICING_PER_MTOK = {
+  "claude-haiku-4-5": { in: 80, out: 400 },
+  "claude-sonnet-4-6": { in: 300, out: 1500 },
+} as const;
+
+export const AI_TIER_MONTHLY_TOKENS = {
+  INDIVIDUAL_FREE: 20000,
+  INDIVIDUAL_PRO: 500000,
+  SCHOOL_STUDENT: 200000,
+  ENTERPRISE: 2000000,
+} as const;
+
+export const aiUsage = pgTable("ai_usage", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  kind: text("kind").notNull(),
+  model: text("model").notNull(),
+  tokensIn: integer("tokens_in").notNull().default(0),
+  tokensOut: integer("tokens_out").notNull().default(0),
+  costCents: integer("cost_cents").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const aiCache = pgTable("ai_cache", {
+  cacheKey: varchar("cache_key").primaryKey(),
+  kind: text("kind").notNull(),
+  value: jsonb("value").$type<Record<string, unknown>>().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertAiUsageSchema = createInsertSchema(aiUsage).omit({ id: true, createdAt: true });
+export type InsertAiUsage = z.infer<typeof insertAiUsageSchema>;
+export type AiUsage = typeof aiUsage.$inferSelect;
+export type AiCache = typeof aiCache.$inferSelect;
+
 export type HivePrecheck = {
   hiveScore: number;
   kcseScore: number;
