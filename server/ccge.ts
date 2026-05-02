@@ -151,51 +151,38 @@ export type FlywheelOutcome = {
   newJstSkills: number | null;
 };
 
-/**
- * Apply the ONECRAFT flywheel after a CCGE session finishes:
- * 1. Compute ARK Score delta from JCSE result
- * 2. If JCSE is high enough to promote the user's cert level, do so
- * 3. Add cert-upgrade delta on top
- * 4. Bump the user's latest assessment jstSkills + jstTotal so the
- *    flywheel is observable on the dashboard immediately.
- */
-export async function applyFlywheel(userId: string, jcse: number): Promise<FlywheelOutcome> {
-  const user = await storage.getUser(userId);
-  if (!user) {
-    return { arkScoreDelta: 0, certUpgradedFrom: null, certUpgradedTo: null, newJstTotal: null, newJstSkills: null };
-  }
+export type FlywheelPlan = {
+  arkScoreDelta: number;
+  certUpgradedFrom: ContextCraftLevel | null;
+  certUpgradedTo: ContextCraftLevel | null;
+  newJstSkills: number | null;
+  newJstTotal: number | null;
+};
 
+export function planFlywheel(
+  currentLevel: ContextCraftLevel,
+  jcse: number,
+  latestAssessment: Assessment | null,
+): FlywheelPlan {
   let arkScoreDelta = arkDeltaForSession(jcse);
   let certUpgradedFrom: ContextCraftLevel | null = null;
   let certUpgradedTo: ContextCraftLevel | null = null;
 
-  const currentLevel = (user.contextCraftCertLevel as ContextCraftLevel) || "NONE";
   const candidateLevel = jcseToContextCraftLevel(jcse);
-  const candidateRank = CERT_LEVEL_RANK[candidateLevel];
-  const currentRank = CERT_LEVEL_RANK[currentLevel];
-
-  if (candidateRank > currentRank) {
-    await storage.updateUser(userId, { contextCraftCertLevel: candidateLevel });
+  if (CERT_LEVEL_RANK[candidateLevel] > CERT_LEVEL_RANK[currentLevel]) {
     certUpgradedFrom = currentLevel;
     certUpgradedTo = candidateLevel;
     arkScoreDelta += arkDeltaForCertUpgrade(candidateLevel);
   }
 
-  // Apply delta to latest assessment so the flywheel is visible
-  let newJstTotal: number | null = null;
   let newJstSkills: number | null = null;
-  const latest = await storage.getLatestAssessment(userId);
-  if (latest && arkScoreDelta > 0) {
-    const newSkills = Math.min(100, latest.jstSkills + arkScoreDelta);
-    const skillsDelta = newSkills - latest.jstSkills;
-    const newTotal = Math.min(300, latest.jstTotal + skillsDelta);
-    await storage.updateAssessmentScore(latest.id, {
-      jstSkills: newSkills,
-      jstTotal: newTotal,
-    });
-    newJstTotal = newTotal;
-    newJstSkills = newSkills;
+  let newJstTotal: number | null = null;
+  if (latestAssessment && arkScoreDelta > 0) {
+    const skills = Math.min(100, latestAssessment.jstSkills + arkScoreDelta);
+    const skillsDelta = skills - latestAssessment.jstSkills;
+    newJstSkills = skills;
+    newJstTotal = Math.min(300, latestAssessment.jstTotal + skillsDelta);
   }
 
-  return { arkScoreDelta, certUpgradedFrom, certUpgradedTo, newJstTotal, newJstSkills };
+  return { arkScoreDelta, certUpgradedFrom, certUpgradedTo, newJstSkills, newJstTotal };
 }

@@ -437,6 +437,31 @@ export const userCredits = pgTable("user_credits", {
 
 export type UserCredits = typeof userCredits.$inferSelect;
 
+export const ARK_EVENT_TYPES = [
+  "assessment.completed",
+  "game.session.finished",
+  "cert.upgraded",
+  "spc.published",
+  "spc.purchased",
+] as const;
+export type ArkEventType = typeof ARK_EVENT_TYPES[number];
+
+export const arkEvents = pgTable("ark_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  type: text("type").notNull(),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+  scoreDelta: integer("score_delta").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertArkEventSchema = createInsertSchema(arkEvents).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertArkEvent = z.infer<typeof insertArkEventSchema>;
+export type ArkEvent = typeof arkEvents.$inferSelect;
+
 export type HivePrecheck = {
   hiveScore: number;
   kcseScore: number;

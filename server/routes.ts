@@ -14,8 +14,9 @@ const pdfParse = _require("pdf-parse");
 import { storage } from "./storage";
 import { analyzeResume } from "./resumeAnalyzer";
 import { requireAuth, requireSelf, currentUserId, loginSession } from "./auth";
-import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, type SubscriptionPlan, CCGE_TIERS, type CcgeTier, jcseToTier, ALL_CARD_PILLARS, SPC_MIN_CERT_TO_PUBLISH, SPC_PRICE_MIN, SPC_PRICE_MAX, SPC_STATUSES, CERT_LEVEL_RANK, type CardPillar, type SpcStatus } from "@shared/schema";
-import { dealHand, scoreSession, applyFlywheel } from "./ccge";
+import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, type SubscriptionPlan, CCGE_TIERS, type CcgeTier, jcseToTier, ALL_CARD_PILLARS, SPC_MIN_CERT_TO_PUBLISH, SPC_PRICE_MIN, SPC_PRICE_MAX, SPC_STATUSES, CERT_LEVEL_RANK, ARK_SCORE_DELTAS, type CardPillar, type SpcStatus } from "@shared/schema";
+import { dealHand, scoreSession } from "./ccge";
+import { orchestrator } from "./orchestrator";
 import { seedCcge } from "./ccgeSeed";
 import { runHivePrecheck, executePurchase, getOrCreateCredits } from "./sphinx";
 import { buildGuinProfile, validateEndorsement } from "./guin";
@@ -35,6 +36,47 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  // ── Flywheel SSE stream ───────────────────────────────
+  app.get("/api/ark-score/stream", requireAuth, async (req, res) => {
+    const userId = currentUserId(req)!;
+    res.set({
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      "Connection": "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    res.flushHeaders();
+
+    const recent = await orchestrator.getRecentEvents(userId, 10);
+    const latest = await storage.getLatestAssessment(userId);
+    res.write(`event: ark.snapshot\ndata: ${JSON.stringify({
+      jstTotal: latest?.jstTotal ?? 0,
+      jstSkills: latest?.jstSkills ?? 0,
+      recent,
+    })}\n\n`);
+
+    const unsubscribe = orchestrator.subscribe(userId, res);
+    const heartbeat = setInterval(() => {
+      try { res.write(": heartbeat\n\n"); } catch {}
+    }, 25000);
+
+    req.on("close", () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+      try { res.end(); } catch {}
+    });
+  });
+
+  app.get("/api/ark-score/events", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const events = await orchestrator.getRecentEvents(userId, 10);
+      return res.json(events);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
 
   // ── Auth ──────────────────────────────────────────────
   app.post("/api/auth/login", async (req, res) => {
@@ -262,6 +304,11 @@ export async function registerRoutes(
         );
       }
 
+      await orchestrator.emit(sid, "assessment.completed", {
+        assessmentId: created.id,
+        jstTotal: created.jstTotal,
+      }, 0);
+
       return res.status(201).json({
         ...created,
         upskillingPlans: plans,
@@ -349,6 +396,11 @@ export async function registerRoutes(
           analysis.transferabilityVectors.map(v => ({ ...v, assessmentId: created.id }))
         ),
       ]);
+
+      await orchestrator.emit(userId, "assessment.completed", {
+        assessmentId: created.id,
+        jstTotal: created.jstTotal,
+      }, 0);
 
       return res.status(201).json({
         ...created,
@@ -509,20 +561,31 @@ export async function registerRoutes(
       const breakdown = scoreSession(playedCards, scenario);
       const tier = jcseToTier(breakdown.final);
 
-      // Apply ONECRAFT flywheel
-      const flywheel = await applyFlywheel(session.userId, breakdown.final);
+      const actorUserId = currentUserId(req)!;
+      const { session: updated, flywheel } = await storage.finalizeSession({
+        sessionId: session.id,
+        actorUserId,
+        playedCardIds,
+        breakdown,
+        tier,
+      });
 
-      const updated = await storage.updateGameSession(session.id, {
-        played: playedCardIds,
-        status: "finished",
+      await orchestrator.emit(actorUserId, "game.session.finished", {
+        sessionId: updated.id,
+        scenarioId: updated.scenarioId,
         kcseScore: breakdown.final,
-        kcseBreakdown: breakdown,
-        certTierEarned: tier,
-        arkScoreDelta: flywheel.arkScoreDelta,
+        tier,
         certUpgradedFrom: flywheel.certUpgradedFrom,
         certUpgradedTo: flywheel.certUpgradedTo,
-        finishedAt: new Date(),
-      });
+        newJstTotal: flywheel.newJstTotal,
+      }, flywheel.arkScoreDelta);
+
+      if (flywheel.certUpgradedTo && flywheel.certUpgradedFrom) {
+        await orchestrator.emit(actorUserId, "cert.upgraded", {
+          from: flywheel.certUpgradedFrom,
+          to: flywheel.certUpgradedTo,
+        }, 0);
+      }
 
       return res.json({
         session: updated,
@@ -533,7 +596,7 @@ export async function registerRoutes(
       });
     } catch (err: any) {
       console.error("CCGE finish error:", err);
-      return res.status(500).json({ message: err.message });
+      return res.status(err.status || 500).json({ message: err.message });
     }
   });
 
@@ -610,6 +673,11 @@ export async function registerRoutes(
         hiveScore: precheck.hiveScore,
         status: "active",
       });
+
+      await orchestrator.emit(creatorId, "spc.published", {
+        listingId: listing.id,
+        title: listing.title,
+      }, ARK_SCORE_DELTAS.SPC_PUBLISHED);
 
       return res.status(201).json({ listing, precheck });
     } catch (err: any) {
@@ -691,6 +759,15 @@ export async function registerRoutes(
     try {
       const buyerId = currentUserId(req)!;
       const outcome = await executePurchase(buyerId, req.params.id);
+      await orchestrator.emit(buyerId, "spc.purchased", {
+        listingId: outcome.listing.id,
+        asRole: "buyer",
+      }, outcome.arkScoreDelta.buyer);
+      await orchestrator.emit(outcome.listing.creatorId, "spc.purchased", {
+        listingId: outcome.listing.id,
+        asRole: "creator",
+        isFirstSaleForCreator: outcome.isFirstSaleForCreator,
+      }, outcome.arkScoreDelta.creator);
       return res.json(outcome);
     } catch (err: any) {
       console.error("Purchase error:", err);

@@ -155,7 +155,10 @@ Known limitations (deferred by design):
 
 ---
 
-### ⚙️ Phase E — Flywheel Orchestration Layer *(also adds DB transactions)*
+### ✅ Phase E — Flywheel Orchestration Layer *(complete)*
+**Status:** Shipped. `arkEvents` audit table + `server/orchestrator.ts` typed event bus + atomic `storage.finalizeSession` (FOR UPDATE on user+session, in-txn ownership re-check via authenticated actor, idempotency 409, conditional cert/JST/session writes in single `db.transaction`). SSE feed `GET /api/ark-score/stream` (snapshot + live `ark.event` push, 25s heartbeat, cleanup on close). Emits wired at: ccge finish, `/api/assessments`, `/api/resume/upload`, sphinx publish, sphinx purchase (buyer + creator). Dashboard `useArkStream` hook + Live ARK Score widget animates JST + activity feed. Emit failures are best-effort (logged, do not 500 the API). Architect-verified. Smoke: 5 concurrent finishes → 1×200 + 4×409; cross-user finish → 403; SSE delivers snapshot + live event.
+
+### ⚙️ Phase E (original spec) — Flywheel Orchestration Layer *(also adds DB transactions)*
 **Goal:** Make the flywheel observable, reactive, and atomic — every meaningful action triggers a recompute, the user *sees* the loop turn, and partial-failure split-brain becomes impossible.
 
 **Scope:**

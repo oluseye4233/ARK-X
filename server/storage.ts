@@ -3,6 +3,7 @@ import { eq, sql, desc, and } from "drizzle-orm";
 import {
   users, type User, type InsertUser,
   assessments, type Assessment, type InsertAssessment,
+  type ContextCraftLevel, type CcgeTier, type KcseBreakdown,
   upskillingPlans, type UpskillingPlan, type InsertUpskillingPlan,
   pivotOpportunities, type PivotOpportunity, type InsertPivotOpportunity,
   transferabilityVectors, type TransferabilityVector, type InsertTransferabilityVector,
@@ -54,6 +55,22 @@ export interface IStorage {
   getGameSession(id: string): Promise<GameSession | undefined>;
   getGameSessionsByUser(userId: string): Promise<GameSession[]>;
   updateGameSession(id: string, data: Partial<GameSession>): Promise<GameSession | undefined>;
+  finalizeSession(args: {
+    sessionId: string;
+    actorUserId: string;
+    playedCardIds: string[];
+    breakdown: KcseBreakdown;
+    tier: CcgeTier | null;
+  }): Promise<{
+    session: GameSession;
+    flywheel: {
+      arkScoreDelta: number;
+      certUpgradedFrom: ContextCraftLevel | null;
+      certUpgradedTo: ContextCraftLevel | null;
+      newJstTotal: number | null;
+      newJstSkills: number | null;
+    };
+  }>;
 
   // SPHINX Marketplace
   createSpcListing(listing: InsertSpcListing & { kcseScore: number; hiveScore: number; status?: string }): Promise<SpcListing>;
@@ -228,6 +245,99 @@ export class DatabaseStorage implements IStorage {
   async updateGameSession(id: string, data: Partial<GameSession>): Promise<GameSession | undefined> {
     const [updated] = await db.update(gameSessions).set(data).where(eq(gameSessions.id, id)).returning();
     return updated;
+  }
+
+  async finalizeSession(args: {
+    sessionId: string;
+    actorUserId: string;
+    playedCardIds: string[];
+    breakdown: KcseBreakdown;
+    tier: CcgeTier | null;
+  }) {
+    const { planFlywheel } = await import("./ccge");
+    return await db.transaction(async (tx) => {
+      const [session] = await tx
+        .select()
+        .from(gameSessions)
+        .where(eq(gameSessions.id, args.sessionId))
+        .for("update");
+      if (!session) {
+        const err: any = new Error("Session not found");
+        err.status = 404;
+        throw err;
+      }
+      if (session.userId !== args.actorUserId) {
+        const err: any = new Error("You may only finish your own sessions.");
+        err.status = 403;
+        throw err;
+      }
+      if (session.status !== "in_progress") {
+        const err: any = new Error("Session is already finished");
+        err.status = 409;
+        throw err;
+      }
+
+      const [user] = await tx.select().from(users).where(eq(users.id, args.actorUserId)).for("update");
+      if (!user) {
+        const err: any = new Error("User not found");
+        err.status = 404;
+        throw err;
+      }
+
+      const [latestAssessment] = await tx
+        .select()
+        .from(assessments)
+        .where(eq(assessments.userId, args.actorUserId))
+        .orderBy(sql`${assessments.createdAt} DESC`)
+        .limit(1);
+
+      const plan = planFlywheel(
+        (user.contextCraftCertLevel as ContextCraftLevel) || "NONE",
+        args.breakdown.final,
+        latestAssessment ?? null,
+      );
+
+      if (plan.certUpgradedTo) {
+        await tx
+          .update(users)
+          .set({ contextCraftCertLevel: plan.certUpgradedTo })
+          .where(eq(users.id, args.actorUserId));
+      }
+
+      if (latestAssessment && plan.newJstSkills !== null && plan.newJstTotal !== null) {
+        await tx
+          .update(assessments)
+          .set({ jstSkills: plan.newJstSkills, jstTotal: plan.newJstTotal })
+          .where(eq(assessments.id, latestAssessment.id));
+      }
+
+      const [updatedSession] = await tx
+        .update(gameSessions)
+        .set({
+          played: args.playedCardIds,
+          status: "finished",
+          kcseScore: args.breakdown.final,
+          kcseBreakdown: args.breakdown,
+          certTierEarned: args.tier,
+          arkScoreDelta: plan.arkScoreDelta,
+          certUpgradedFrom: plan.certUpgradedFrom,
+          certUpgradedTo: plan.certUpgradedTo,
+          finishedAt: new Date(),
+        })
+        .where(eq(gameSessions.id, args.sessionId))
+        .returning();
+
+      return {
+        session: updatedSession,
+        flywheel: {
+          arkScoreDelta: plan.arkScoreDelta,
+          certUpgradedFrom: plan.certUpgradedFrom,
+          certUpgradedTo: plan.certUpgradedTo,
+          newJstTotal: plan.newJstTotal,
+          newJstSkills: plan.newJstSkills,
+        },
+      };
+    });
   }
 
   // ── SPHINX Marketplace ──────────────────────────────────────

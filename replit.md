@@ -46,6 +46,15 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 - `/marketplace/publish` — Publish a new SPC (Gold+ cert gated, runs HIVE pre-check)
 - `/marketplace/:id` — SPC detail page (preview, purchase, ownership view)
 
+## Flywheel Orchestration (Phase E of LEAN_ONECRAFT_ROADMAP.md)
+- `shared/schema.ts` defines `arkEvents` (id, userId, type, payload jsonb, scoreDelta, createdAt) + `ARK_EVENT_TYPES` + `ARK_SCORE_DELTAS`.
+- `server/orchestrator.ts` — singleton typed event bus. `emit(userId, type, payload, scoreDelta)` writes to `ark_events` and fans out to SSE subscribers (best-effort: emit failures are logged, never throw). `subscribe(userId, res)`, `getRecentEvents(userId, limit)`.
+- `server/storage.ts` `finalizeSession({sessionId, actorUserId, playedCardIds, breakdown, tier})` — atomic `db.transaction` doing SELECT FOR UPDATE on session+user, in-txn ownership re-check (uses authenticated actor, not session.userId), `status≠in_progress→409`, latest assessment lookup, pure `planFlywheel` compute, conditional updates to user.cert + assessment.jst + gameSession in one txn.
+- `server/ccge.ts` `planFlywheel(currentLevel, jcse, latestAssessment)` is pure (no DB writes); txn handler does writes.
+- SSE: `GET /api/ark-score/stream` (requireAuth) — initial `ark.snapshot` event + per-user `ark.event` push, 25s heartbeat, full cleanup on `req.close`. Read-only fallback: `GET /api/ark-score/events`.
+- Emit sites: `POST /api/assessments`, `POST /api/resume/upload`, `POST /api/ccge/sessions/:id/finish` (game.session.finished + conditional cert.upgraded), `POST /api/sphinx/listings`, `POST /api/sphinx/listings/:id/purchase` (buyer + creator emits).
+- Client: `client/src/lib/useArkStream.ts` (EventSource hook with snapshot + live merge + pulse counter), Live ARK Score widget on dashboard with animated JST and last-5 activity feed.
+
 ## Auth & Authorization (Phase D.1 of LEAN_ONECRAFT_ROADMAP.md)
 - **Server-side sessions** via `express-session` + `connect-pg-simple` (PG-backed `session` table, auto-created). Cookie name `ark.sid`, httpOnly + sameSite=lax, `secure: true` in production, 14-day rolling expiry, `trust proxy` enabled. `SESSION_SECRET` is required in production — process refuses to start without it; dev falls back to a clearly-labelled insecure default with a startup warning.
 - **`server/auth.ts`** exports: `buildSessionMiddleware()`, `requireAuth`, `requireSelf(paramName)`, `currentUserId(req)`, `loginSession(req, userId)` (regenerates the session ID before binding userId to mitigate session fixation).

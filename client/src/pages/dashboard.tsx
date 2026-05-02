@@ -6,7 +6,8 @@ import { JnomicsCardList } from "@/components/dashboard/JnomicsCardList";
 import { ArchetypeHandicap } from "@/components/dashboard/ArchetypeHandicap";
 import { TaskHeatmap } from "@/components/dashboard/TaskHeatmap";
 import { VulnerabilityTimeline } from "@/components/dashboard/VulnerabilityTimeline";
-import { Cpu, FileText, Loader2, TrendingUp, Mail, CheckCircle2 } from "lucide-react";
+import { Cpu, FileText, Loader2, TrendingUp, Mail, CheckCircle2, Activity, Zap } from "lucide-react";
+import { useArkStream, describeEvent } from "@/lib/useArkStream";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/useAuth";
@@ -51,6 +52,7 @@ export default function Dashboard() {
   const [emailSent, setEmailSent] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [emailError, setEmailError] = useState(false);
+  const { snapshot, events, pulse } = useArkStream(!!user);
 
   useEffect(() => {
     if (!user) return;
@@ -136,6 +138,64 @@ export default function Dashboard() {
             <div>
               <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono">Primary Archetype</p>
               <p className="text-primary font-display font-bold uppercase tracking-wider">{assessment.readinessProfile}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="glass-card p-5 rounded-xl border border-primary/30" data-testid="card-ark-flywheel">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <motion.div
+              key={pulse}
+              initial={{ scale: 1, opacity: 0.7 }}
+              animate={{ scale: [1, 1.4, 1], opacity: [0.7, 1, 0.7] }}
+              transition={{ duration: 0.8 }}
+              className="relative"
+            >
+              <Activity className="h-5 w-5 text-primary" />
+              {pulse > 0 && (
+                <span className="absolute inset-0 rounded-full bg-primary/40 blur-md animate-pulse" />
+              )}
+            </motion.div>
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono">Live ARK Score</p>
+              <motion.p
+                key={snapshot?.jstTotal ?? 0}
+                initial={{ scale: 0.95, color: "#FFDD00" }}
+                animate={{ scale: 1, color: "#00B4D8" }}
+                transition={{ duration: 0.6 }}
+                className="text-2xl font-display font-bold"
+                data-testid="text-live-jst-total"
+              >
+                {snapshot?.jstTotal ?? assessment.jstTotal}
+              </motion.p>
+            </div>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-2">
+              <Zap className="h-3.5 w-3.5 text-secondary" />
+              <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono">Flywheel Activity</p>
+            </div>
+            <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1" data-testid="list-ark-events">
+              {events.length === 0 ? (
+                <p className="text-xs text-muted-foreground/60 font-mono italic">No activity yet — finish a CCGE session to see the loop turn.</p>
+              ) : (
+                events.slice(0, 5).map((ev) => (
+                  <div
+                    key={ev.id}
+                    className="flex items-center justify-between text-xs font-mono border-l-2 border-primary/30 pl-2"
+                    data-testid={`event-${ev.type}-${ev.id}`}
+                  >
+                    <span className="text-white/80 truncate">{describeEvent(ev)}</span>
+                    {ev.scoreDelta !== 0 && (
+                      <span className={ev.scoreDelta > 0 ? "text-secondary" : "text-destructive"}>
+                        {ev.scoreDelta > 0 ? "+" : ""}{ev.scoreDelta}
+                      </span>
+                    )}
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
