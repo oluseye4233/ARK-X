@@ -15,6 +15,7 @@ import {
   CreditCard,
   User,
   GraduationCap,
+  Gamepad2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +42,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     { name: "Terminal", href: "/", icon: TerminalSquare },
     { name: "Upload CV", href: "/upload", icon: Upload },
     { name: "Intelligence Hub", href: "/dashboard", icon: BarChart3 },
+    { name: "CCGE Arena", href: "/play", icon: Gamepad2 },
     { name: "Career Mobility", href: "/pathways", icon: Map },
     { name: "Workforce", href: "/enterprise", icon: Users },
   ];

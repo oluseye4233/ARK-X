@@ -59,6 +59,67 @@ export const CONTEXT_CRAFT_LEVELS = {
 
 export type ContextCraftLevel = keyof typeof CONTEXT_CRAFT_LEVELS;
 
+// ── CCGE: Context Craft Game Engine ──────────────────────────
+export const CC_PILLARS = ["System", "Role", "Instruction", "Example", "Constraint", "Format", "Data"] as const;
+export type CCPillar = typeof CC_PILLARS[number];
+export const ALL_CARD_PILLARS = [...CC_PILLARS, "SuperPrompt"] as const;
+export type CardPillar = typeof ALL_CARD_PILLARS[number];
+
+export const CARD_TYPES = ["Standard", "Premium", "Ultra", "SuperPrompt"] as const;
+export type CardType = typeof CARD_TYPES[number];
+
+export const CCGE_TIERS = ["Bronze", "Silver", "Gold", "Platinum"] as const;
+export type CcgeTier = typeof CCGE_TIERS[number];
+
+// JCSE thresholds (session score, 0-50) → cert tier
+export const KCSE_TIER_THRESHOLDS = {
+  BRONZE: 30,
+  SILVER: 36,
+  GOLD: 43,
+  PLATINUM: 48,
+} as const;
+
+// JCSE score → CC certification level earned this session (auto-promotion).
+// Returns NONE for sub-Bronze sessions so applyFlywheel will not promote
+// users from NONE → CC_100 just for engaging — CC_100 (Foundational) is
+// reserved for users who actually completed the foundation assessment.
+export function jcseToContextCraftLevel(jcse: number): ContextCraftLevel {
+  if (jcse >= KCSE_TIER_THRESHOLDS.PLATINUM) return "CC_500";
+  if (jcse >= KCSE_TIER_THRESHOLDS.GOLD) return "CC_400";
+  if (jcse >= KCSE_TIER_THRESHOLDS.SILVER) return "CC_300";
+  if (jcse >= KCSE_TIER_THRESHOLDS.BRONZE) return "CC_200";
+  return "NONE";
+}
+
+export function jcseToTier(jcse: number): CcgeTier | null {
+  if (jcse >= KCSE_TIER_THRESHOLDS.PLATINUM) return "Platinum";
+  if (jcse >= KCSE_TIER_THRESHOLDS.GOLD) return "Gold";
+  if (jcse >= KCSE_TIER_THRESHOLDS.SILVER) return "Silver";
+  if (jcse >= KCSE_TIER_THRESHOLDS.BRONZE) return "Bronze";
+  return null;
+}
+
+// ARK Score deltas per flywheel event (PDD §3.10, lean adaptation)
+export const ARK_SCORE_DELTAS = {
+  SESSION_BRONZE: 2,
+  SESSION_SILVER: 4,
+  SESSION_GOLD: 6,
+  SESSION_PLATINUM: 9,
+  CERT_UPGRADE_TO_CC_200: 4,
+  CERT_UPGRADE_TO_CC_300: 7,
+  CERT_UPGRADE_TO_CC_400: 10,
+  CERT_UPGRADE_TO_CC_500: 15,
+} as const;
+
+export const CERT_LEVEL_RANK: Record<ContextCraftLevel, number> = {
+  NONE: 0,
+  CC_100: 1,
+  CC_200: 2,
+  CC_300: 3,
+  CC_400: 4,
+  CC_500: 5,
+};
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
@@ -179,3 +240,72 @@ export const departments = pgTable("departments", {
 export const insertDepartmentSchema = createInsertSchema(departments).omit({ id: true });
 export type InsertDepartment = z.infer<typeof insertDepartmentSchema>;
 export type Department = typeof departments.$inferSelect;
+
+// ── CCGE Tables ───────────────────────────────────────────────
+export const ccgeCards = pgTable("ccge_cards", {
+  id: varchar("id").primaryKey(),
+  name: text("name").notNull(),
+  pillar: text("pillar").notNull(),
+  type: text("type").notNull(),
+  baseKcse: integer("base_kcse").notNull(),
+  tokenCost: integer("token_cost").notNull(),
+  emoji: text("emoji").notNull(),
+  description: text("description").notNull(),
+  body: text("body").notNull(),
+});
+
+export const insertCcgeCardSchema = createInsertSchema(ccgeCards);
+export type InsertCcgeCard = z.infer<typeof insertCcgeCardSchema>;
+export type CcgeCard = typeof ccgeCards.$inferSelect;
+
+export const ccgeScenarios = pgTable("ccge_scenarios", {
+  id: varchar("id").primaryKey(),
+  tier: text("tier").notNull(),
+  title: text("title").notNull(),
+  prompt: text("prompt").notNull(),
+  targetPillars: text("target_pillars").array().notNull(),
+  tokenBudget: integer("token_budget").notNull(),
+  difficulty: integer("difficulty").notNull(),
+});
+
+export const insertCcgeScenarioSchema = createInsertSchema(ccgeScenarios);
+export type InsertCcgeScenario = z.infer<typeof insertCcgeScenarioSchema>;
+export type CcgeScenario = typeof ccgeScenarios.$inferSelect;
+
+export type KcseBreakdown = {
+  knowledge: number;
+  clarity: number;
+  specificity: number;
+  efficiency: number;
+  pillarsCovered: string[];
+  synergies: { name: string; multiplier: number }[];
+  tokenUsed: number;
+  tokenBudget: number;
+  base: number;
+  final: number;
+};
+
+export const gameSessions = pgTable("game_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  scenarioId: varchar("scenario_id").notNull(),
+  hand: jsonb("hand").$type<string[]>().notNull(),
+  played: jsonb("played").$type<string[]>().default([]).notNull(),
+  status: text("status").notNull().default("in_progress"),
+  kcseScore: real("kcse_score"),
+  kcseBreakdown: jsonb("kcse_breakdown").$type<KcseBreakdown>(),
+  certTierEarned: text("cert_tier_earned"),
+  arkScoreDelta: integer("ark_score_delta").default(0),
+  certUpgradedFrom: text("cert_upgraded_from"),
+  certUpgradedTo: text("cert_upgraded_to"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  finishedAt: timestamp("finished_at"),
+});
+
+export const insertGameSessionSchema = createInsertSchema(gameSessions).omit({
+  id: true,
+  startedAt: true,
+  finishedAt: true,
+});
+export type InsertGameSession = z.infer<typeof insertGameSessionSchema>;
+export type GameSession = typeof gameSessions.$inferSelect;

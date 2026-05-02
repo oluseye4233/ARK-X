@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, desc } from "drizzle-orm";
 import {
   users, type User, type InsertUser,
   assessments, type Assessment, type InsertAssessment,
@@ -8,6 +8,9 @@ import {
   transferabilityVectors, type TransferabilityVector, type InsertTransferabilityVector,
   jnomicsCards, type JnomicsCard, type InsertJnomicsCard,
   departments, type Department, type InsertDepartment,
+  ccgeCards, type CcgeCard, type InsertCcgeCard,
+  ccgeScenarios, type CcgeScenario, type InsertCcgeScenario,
+  gameSessions, type GameSession, type InsertGameSession,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -19,6 +22,7 @@ export interface IStorage {
   createAssessment(assessment: InsertAssessment): Promise<Assessment>;
   getAssessmentsByUser(userId: string): Promise<Assessment[]>;
   getLatestAssessment(userId: string): Promise<Assessment | undefined>;
+  updateAssessmentScore(id: string, data: Partial<Pick<Assessment, "jstTotal" | "jstJobs" | "jstSkills" | "jstTalent">>): Promise<Assessment | undefined>;
 
   createUpskillingPlans(plans: InsertUpskillingPlan[]): Promise<UpskillingPlan[]>;
   getUpskillingPlansByAssessment(assessmentId: string): Promise<UpskillingPlan[]>;
@@ -35,6 +39,17 @@ export interface IStorage {
 
   getAllDepartments(): Promise<Department[]>;
   createDepartment(dept: InsertDepartment): Promise<Department>;
+
+  // CCGE
+  getAllCcgeCards(): Promise<CcgeCard[]>;
+  upsertCcgeCard(card: InsertCcgeCard): Promise<CcgeCard>;
+  getAllCcgeScenarios(): Promise<CcgeScenario[]>;
+  getCcgeScenario(id: string): Promise<CcgeScenario | undefined>;
+  upsertCcgeScenario(scenario: InsertCcgeScenario): Promise<CcgeScenario>;
+  createGameSession(session: InsertGameSession): Promise<GameSession>;
+  getGameSession(id: string): Promise<GameSession | undefined>;
+  getGameSessionsByUser(userId: string): Promise<GameSession[]>;
+  updateGameSession(id: string, data: Partial<GameSession>): Promise<GameSession | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -75,6 +90,14 @@ export class DatabaseStorage implements IStorage {
       .orderBy(sql`${assessments.createdAt} DESC`)
       .limit(1);
     return results[0];
+  }
+
+  async updateAssessmentScore(
+    id: string,
+    data: Partial<Pick<Assessment, "jstTotal" | "jstJobs" | "jstSkills" | "jstTalent">>
+  ): Promise<Assessment | undefined> {
+    const [updated] = await db.update(assessments).set(data).where(eq(assessments.id, id)).returning();
+    return updated;
   }
 
   async createUpskillingPlans(plans: InsertUpskillingPlan[]): Promise<UpskillingPlan[]> {
@@ -130,6 +153,61 @@ export class DatabaseStorage implements IStorage {
   async createDepartment(dept: InsertDepartment): Promise<Department> {
     const [created] = await db.insert(departments).values(dept).returning();
     return created;
+  }
+
+  // ── CCGE ────────────────────────────────────────────────────
+  async getAllCcgeCards(): Promise<CcgeCard[]> {
+    return db.select().from(ccgeCards);
+  }
+
+  async upsertCcgeCard(card: InsertCcgeCard): Promise<CcgeCard> {
+    const [created] = await db
+      .insert(ccgeCards)
+      .values(card)
+      .onConflictDoUpdate({ target: ccgeCards.id, set: card })
+      .returning();
+    return created;
+  }
+
+  async getAllCcgeScenarios(): Promise<CcgeScenario[]> {
+    return db.select().from(ccgeScenarios);
+  }
+
+  async getCcgeScenario(id: string): Promise<CcgeScenario | undefined> {
+    const [s] = await db.select().from(ccgeScenarios).where(eq(ccgeScenarios.id, id));
+    return s;
+  }
+
+  async upsertCcgeScenario(scenario: InsertCcgeScenario): Promise<CcgeScenario> {
+    const [created] = await db
+      .insert(ccgeScenarios)
+      .values(scenario)
+      .onConflictDoUpdate({ target: ccgeScenarios.id, set: scenario })
+      .returning();
+    return created;
+  }
+
+  async createGameSession(session: InsertGameSession): Promise<GameSession> {
+    const [created] = await db.insert(gameSessions).values(session).returning();
+    return created;
+  }
+
+  async getGameSession(id: string): Promise<GameSession | undefined> {
+    const [s] = await db.select().from(gameSessions).where(eq(gameSessions.id, id));
+    return s;
+  }
+
+  async getGameSessionsByUser(userId: string): Promise<GameSession[]> {
+    return db
+      .select()
+      .from(gameSessions)
+      .where(eq(gameSessions.userId, userId))
+      .orderBy(desc(gameSessions.startedAt));
+  }
+
+  async updateGameSession(id: string, data: Partial<GameSession>): Promise<GameSession | undefined> {
+    const [updated] = await db.update(gameSessions).set(data).where(eq(gameSessions.id, id)).returning();
+    return updated;
   }
 }
 

@@ -13,7 +13,9 @@ const _require = createRequire(_filename);
 const pdfParse = _require("pdf-parse");
 import { storage } from "./storage";
 import { analyzeResume } from "./resumeAnalyzer";
-import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, type SubscriptionPlan } from "@shared/schema";
+import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, type SubscriptionPlan, CCGE_TIERS, type CcgeTier, jcseToTier } from "@shared/schema";
+import { dealHand, scoreSession, applyFlywheel } from "./ccge";
+import { seedCcge } from "./ccgeSeed";
 import { z } from "zod";
 
 const upload = multer({
@@ -348,6 +350,154 @@ export async function registerRoutes(
     }
   });
 
+  // ── CCGE: Context Craft Game Engine ──────────────────
+  app.get("/api/ccge/cards", async (_req, res) => {
+    try {
+      const cards = await storage.getAllCcgeCards();
+      return res.json(cards);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/ccge/scenarios", async (req, res) => {
+    try {
+      const all = await storage.getAllCcgeScenarios();
+      const tier = typeof req.query.tier === "string" ? req.query.tier : null;
+      const filtered = tier ? all.filter((s) => s.tier === tier) : all;
+      return res.json(filtered);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/ccge/sessions", async (req, res) => {
+    try {
+      const schema = z.object({
+        userId: z.string().min(1),
+        scenarioId: z.string().min(1),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "userId and scenarioId required" });
+      }
+      const { userId, scenarioId } = parsed.data;
+
+      const scenario = await storage.getCcgeScenario(scenarioId);
+      if (!scenario) return res.status(404).json({ message: "Scenario not found" });
+
+      const allCards = await storage.getAllCcgeCards();
+      if (allCards.length === 0) {
+        return res.status(503).json({ message: "Card library not seeded. Call POST /api/seed first." });
+      }
+
+      const hand = dealHand(allCards, scenario, 5);
+      const session = await storage.createGameSession({
+        userId,
+        scenarioId,
+        hand,
+        played: [],
+        status: "in_progress",
+        kcseScore: null,
+        kcseBreakdown: null,
+        certTierEarned: null,
+        arkScoreDelta: 0,
+        certUpgradedFrom: null,
+        certUpgradedTo: null,
+      });
+
+      return res.status(201).json({ session, scenario });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/ccge/sessions/:id", async (req, res) => {
+    try {
+      const session = await storage.getGameSession(req.params.id);
+      if (!session) return res.status(404).json({ message: "Session not found" });
+      const scenario = await storage.getCcgeScenario(session.scenarioId);
+      return res.json({ session, scenario });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/ccge/sessions/:id/finish", async (req, res) => {
+    try {
+      const schema = z.object({ playedCardIds: z.array(z.string()).min(1).max(5) });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "playedCardIds must be an array of 1–5 card IDs" });
+      }
+      const { playedCardIds } = parsed.data;
+
+      const session = await storage.getGameSession(req.params.id);
+      if (!session) return res.status(404).json({ message: "Session not found" });
+      if (session.status !== "in_progress") {
+        return res.status(409).json({ message: "Session is already finished" });
+      }
+
+      // Validate every played card came from the dealt hand (no cheating)
+      const handSet = new Set(session.hand);
+      for (const id of playedCardIds) {
+        if (!handSet.has(id)) {
+          return res.status(400).json({ message: `Card ${id} was not in the dealt hand` });
+        }
+      }
+      // No duplicate plays
+      if (new Set(playedCardIds).size !== playedCardIds.length) {
+        return res.status(400).json({ message: "Cannot play the same card twice" });
+      }
+
+      const scenario = await storage.getCcgeScenario(session.scenarioId);
+      if (!scenario) return res.status(404).json({ message: "Scenario not found" });
+
+      const allCards = await storage.getAllCcgeCards();
+      const playedCards = playedCardIds
+        .map((id) => allCards.find((c) => c.id === id))
+        .filter((c): c is NonNullable<typeof c> => !!c);
+
+      const breakdown = scoreSession(playedCards, scenario);
+      const tier = jcseToTier(breakdown.final);
+
+      // Apply ONECRAFT flywheel
+      const flywheel = await applyFlywheel(session.userId, breakdown.final);
+
+      const updated = await storage.updateGameSession(session.id, {
+        played: playedCardIds,
+        status: "finished",
+        kcseScore: breakdown.final,
+        kcseBreakdown: breakdown,
+        certTierEarned: tier,
+        arkScoreDelta: flywheel.arkScoreDelta,
+        certUpgradedFrom: flywheel.certUpgradedFrom,
+        certUpgradedTo: flywheel.certUpgradedTo,
+        finishedAt: new Date(),
+      });
+
+      return res.json({
+        session: updated,
+        scenario,
+        breakdown,
+        tier,
+        flywheel,
+      });
+    } catch (err: any) {
+      console.error("CCGE finish error:", err);
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/ccge/sessions/user/:userId", async (req, res) => {
+    try {
+      const sessions = await storage.getGameSessionsByUser(req.params.userId);
+      return res.json(sessions);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
   // ── Seed endpoint (for initial data population) ───────
   app.post("/api/seed", async (_req, res) => {
     try {
@@ -444,7 +594,10 @@ export async function registerRoutes(
         ]);
       }
 
-      return res.json({ message: "Seed complete" });
+      // Seed CCGE cards + scenarios
+      const ccge = await seedCcge();
+
+      return res.json({ message: "Seed complete", ccgeCards: ccge.cards, ccgeScenarios: ccge.scenarios });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }

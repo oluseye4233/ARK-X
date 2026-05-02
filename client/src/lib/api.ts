@@ -77,6 +77,31 @@ export const api = {
       body: JSON.stringify({ plan, institution }),
     }),
 
+  // ── CCGE Game Engine ─────────────────────────────────
+  getCcgeCards: () => apiRequest("/api/ccge/cards"),
+
+  getCcgeScenarios: (tier?: string) =>
+    apiRequest(`/api/ccge/scenarios${tier ? `?tier=${encodeURIComponent(tier)}` : ""}`),
+
+  startCcgeSession: (userId: string, scenarioId: string) =>
+    apiRequest("/api/ccge/sessions", {
+      method: "POST",
+      body: JSON.stringify({ userId, scenarioId }),
+    }),
+
+  getCcgeSession: (id: string) => apiRequest(`/api/ccge/sessions/${id}`),
+
+  finishCcgeSession: (id: string, playedCardIds: string[]) =>
+    apiRequest(`/api/ccge/sessions/${id}/finish`, {
+      method: "POST",
+      body: JSON.stringify({ playedCardIds }),
+    }),
+
+  getCcgeUserSessions: (userId: string) =>
+    apiRequest(`/api/ccge/sessions/user/${userId}`),
+
+  seed: () => apiRequest("/api/seed", { method: "POST" }),
+
   uploadResume: async (file: File, userId: string) => {
     const formData = new FormData();
     formData.append("resume", file);

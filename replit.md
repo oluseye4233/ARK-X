@@ -41,6 +41,17 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 - `/subscription` — Subscription Plans with Stripe checkout modal (Individual Free/Pro, School/Student, Enterprise tiers with feature comparison)
 - `/profile` — User Profile (editable profile details, subscription status, cert level, institution)
 - `/school` — Institution Dashboard (cohort JST scores, skill radar, archetype/vulnerability distributions, School plan gated)
+- `/play` — CCGE Arena (single-player Context Craft card game; lobby → session → score → flywheel)
+
+## CCGE — Context Craft Game Engine (Phase A of LEAN_ONECRAFT_ROADMAP.md)
+- **Schema** (`shared/schema.ts`): `ccgeCards` (14 seeded across 7 pillars + SuperPrompt), `ccgeScenarios` (6: 2 Bronze / 2 Silver / 2 Gold), `gameSessions` (hand/played/score/flywheel result)
+- **Constants**: `CC_PILLARS`, `CARD_TYPES`, `KCSE_TIER_THRESHOLDS` (Bronze 30, Silver 36, Gold 43, Platinum 48), `ARK_SCORE_DELTAS`, `CERT_LEVEL_RANK`
+- **Helpers**: `jcseToContextCraftLevel(jcse)` auto-promotes cert; `jcseToTier(jcse)` returns tier label
+- **Game engine** (`server/ccge.ts`):
+  - `dealHand(allCards, scenario, 5)` — biased deal toward target pillars for the scenario
+  - `scoreSession(playedCards, scenario)` — deterministic JCSE 0-50 score across 4 KCSE dimensions (Knowledge 30%, Clarity 30%, Specificity 20%, Efficiency 20%) with synergy multipliers: Alpha Prime ×1.15 (≥2 Ultra), Solo Legend ×1.10 (SuperPrompt), Full Context ×1.20 (≥5 unique pillars), Precision Engine ×1.10 (≥4 cards covering all targets), Expert Clarity ×1.08 (≥3 Premium+)
+  - `applyFlywheel(userId, jcse)` — ONECRAFT loop: computes ARK delta, auto-promotes user's `contextCraftCertLevel` if rank increases, bumps latest assessment's `jstSkills`/`jstTotal` (clamped at 100/300)
+- **Seed** (`server/ccgeSeed.ts`): exported as `seedCcge()`; called from `POST /api/seed`
 
 ## API Endpoints
 - `POST /api/auth/login` — Login
@@ -59,7 +70,13 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 - `PUT /api/users/:id/profile` — Update user profile (name, role, department, seniority, location)
 - `GET /api/assessments/user/:userId` — All assessments for user (history)
 - `POST /api/notifications/assessment-summary` — Queue email notification with assessment summary
-- `POST /api/seed` — Seed demo data
+- `POST /api/seed` — Seed demo data (now includes 14 CCGE cards + 6 scenarios)
+- `GET /api/ccge/cards` — All CCGE cards
+- `GET /api/ccge/scenarios?tier=Bronze|Silver|Gold|Platinum` — Scenarios (optional tier filter)
+- `POST /api/ccge/sessions` — Start session (deals 5 cards), body `{userId, scenarioId}` → `{session, scenario}`
+- `GET /api/ccge/sessions/:id` — Get session + scenario
+- `POST /api/ccge/sessions/:id/finish` — Score and finish, body `{playedCardIds: string[1..5]}` → `{session, scenario, breakdown, tier, flywheel}`. Validates each played ID came from the dealt hand and rejects duplicates.
+- `GET /api/ccge/sessions/user/:userId` — Session history (newest first)
 
 ## Resume Analysis Engine (`server/resumeAnalyzer.ts`)
 - Keyword-based scoring across 6 categories: technical, leadership, analytical, communication, innovation, ai_adjacent

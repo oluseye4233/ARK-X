@@ -68,27 +68,26 @@ If/when one of these substitutes becomes a real bottleneck, *that* is the moment
 
 ---
 
-### 🟡 Phase A — CCGE Card Game MVP *(start here)*
-**Goal:** A playable single-player card game whose KCSE result writes back to `ark_score`. This is the most differentiated piece of the whole platform.
+### ✅ Phase A — CCGE Card Game MVP
+**Status: COMPLETE**
 
-**Scope:**
-- `shared/schema.ts`: `cards` (id, pillar, type, base_kcse, name, description, body), `scenarios` (id, tier, prompt, target_pillars), `game_sessions` (id, user_id, scenario_id, hand jsonb, kcse_score, status, started_at, finished_at), `card_plays` (session_id, card_id, order, kcse_delta)
-- 12-15 starter cards across the 7 pillars (System, Role, Instruction, Example, Constraint, Format, Data) + 1 Super Prompt
-- 6 starter scenarios (2 Bronze, 2 Silver, 2 Gold)
-- `/play` route: Lobby → Deal (5 cards) → Turn (drag-drop card into prompt slot) → Score → Win/Retry
-- KCSE scoring: in-session deterministic scoring first; Claude Haiku integration in Phase A.5
-- Cert tier auto-promotion on threshold (Bronze 30, Silver 36, Gold 43, Platinum 48)
-- Hook into existing CC cert multiplier — winning a session bumps the user's `contextCraftCertLevel` if threshold crossed
-- Live ARK Score recompute on session finish (the flywheel turns visibly)
+What shipped:
+- 4 new Drizzle tables (`ccgeCards`, `ccgeScenarios`, `gameSessions`) + constants (`CC_PILLARS`, `CARD_TYPES`, `KCSE_TIER_THRESHOLDS`, `ARK_SCORE_DELTAS`, `CERT_LEVEL_RANK`)
+- 14 seed cards across 7 pillars + Sphinx Super Prompt; 6 seed scenarios (2 Bronze / 2 Silver / 2 Gold)
+- Deterministic JCSE 0–50 scoring engine (`server/ccge.ts`) with 5 synergy multipliers (Alpha Prime, Solo Legend, Full Context, Precision Engine, Expert Clarity)
+- ONECRAFT flywheel: session finish auto-promotes `contextCraftCertLevel` (only at Bronze threshold or higher) and bumps latest assessment `jstSkills`/`jstTotal`
+- 6 `/api/ccge/*` REST endpoints with anti-cheat validation (played cards must be in dealt hand; no duplicates)
+- Full `/play` UI: lobby → active session → result screen with KCSE breakdown, tier badge, ARK delta, cert upgrade banner
+- Sidebar `CCGE Arena` nav link
 
-**Acceptance:** User plays a hand, sees a KCSE score, watches their JST score tick up on the dashboard.
-
-**Out of scope this phase:** XState, multiplayer, tournaments, NFT mint, badge system.
+Known limitations (deferred by design — see linked phases):
+- **IDOR / broken access control**: `userId` is trusted from request body. Same pattern as every other endpoint in the app today. Locked down platform-wide in **Phase D**.
+- **Non-atomic finish**: `applyFlywheel` performs 3 independent writes (user, assessment, session). Wrapped in a DB transaction in **Phase E**.
 
 ---
 
-### 🟢 Phase B — SPHINX Marketplace Stub
-**Goal:** Gold+ users can publish a "Smart Prompt Card" (SPC); anyone can browse and "purchase" with platform credits.
+### 🟡 Phase B — SPHINX Marketplace Stub *(start here next)*
+**Goal:** Gold+ users (CC_400 cert or higher, achievable via Phase A's CCGE Arena) can publish a "Smart Prompt Card" (SPC); anyone can browse and "purchase" with platform credits.
 
 **Scope:**
 - `shared/schema.ts`: `spc_listings` (id, creator_id, title, description, body, price_credits, kcse_score, hive_score, status, created_at), `spc_purchases` (id, buyer_id, listing_id, price_credits, creator_share, platform_share, purchased_at), `user_credits` (user_id, balance)
@@ -121,29 +120,30 @@ If/when one of these substitutes becomes a real bottleneck, *that* is the moment
 
 ---
 
-### 💳 Phase D — Real Stripe + Real Auth
-**Goal:** Replace the simulated checkout and localStorage auth with real, billable infrastructure.
+### 💳 Phase D — Real Stripe + Real Auth *(absorbs ALL platform IDOR fixes)*
+**Goal:** Replace the simulated checkout and localStorage auth with real, billable infrastructure. **This is the phase where every existing API endpoint that currently trusts `userId` from the request body gets locked down.**
 
 **Scope:**
 - Wire the Replit Stripe integration (connector `ccfg_stripe_default_org_ejpl33`)
 - Real Stripe Checkout sessions for all 4 plans (Free/Pro/School/Enterprise)
 - Webhook receiver: `payment_succeeded` → activate, `payment_failed` → suspend, `subscription.deleted` → downgrade
 - Replace localStorage `useAuth` with Replit Auth (or a server-session cookie)
-- Add IDOR protection: every endpoint that takes `:id` must verify session.userId matches
+- **Platform-wide IDOR sweep** — every endpoint that takes `:userId` (in body or path) must derive the acting user from the auth session, not the request payload. Apply to: `/api/notifications/assessment-summary`, `/api/users/:id/profile`, `/api/users/:id/subscription`, `/api/users/:id/context-craft-cert`, `/api/resume/upload`, `/api/assessments`, all `/api/ccge/*` routes
 - Stripe Connect (Express accounts) for SPHINX creator payouts in credits → fiat conversion
 
-**Acceptance:** Real card payment promotes user to Pro tier; real creator payout request transfers funds.
+**Acceptance:** Real card payment promotes user to Pro tier; real creator payout request transfers funds; no endpoint accepts a userId in its body.
 
 **Out of scope this phase:** SAML, SSO, MFA enforcement, seat management for institutions.
 
 ---
 
-### ⚙️ Phase E — Flywheel Orchestration Layer
-**Goal:** Make the flywheel observable and reactive — every meaningful action triggers a recompute, the user *sees* the loop turn.
+### ⚙️ Phase E — Flywheel Orchestration Layer *(also adds DB transactions)*
+**Goal:** Make the flywheel observable, reactive, and atomic — every meaningful action triggers a recompute, the user *sees* the loop turn, and partial-failure split-brain becomes impossible.
 
 **Scope:**
 - `server/orchestrator.ts`: in-process EventEmitter with typed events (`assessment.completed`, `game.session.finished`, `cert.upgraded`, `spc.published`, `spc.purchased`)
 - Each event handler appends to an `ark_events` table (audit log + analytics source)
+- **Wrap every multi-write flywheel mutation in a DB transaction.** Specifically the CCGE `/finish` path (currently `applyFlywheel` user/assessment updates + `updateGameSession` are 3 independent writes). Add `storage.finalizeSession(sessionId, sessionPatch, userPatch, assessmentPatch)` that does all writes inside `db.transaction(...)`.
 - Live ARK Score endpoint via Server-Sent Events: `GET /api/ark-score/stream/:userId`
 - Dashboard ARK Score widget subscribes to SSE and animates score changes in real time
 - "Flywheel Activity" feed on dashboard — last 10 events with score deltas
@@ -247,8 +247,8 @@ Revisit each item only when blocked by a real, observed limitation — not by th
 | Phase | Status | Session | Notes |
 |---|---|---|---|
 | 0 — Foundation | ✅ Done | prior | commit `f97251341` |
-| A — CCGE Card Game MVP | ⬜ Next | — | Most differentiated piece — start here |
-| B — SPHINX Marketplace Stub | ⬜ | — | Depends on A (cert tiers) |
+| A — CCGE Card Game MVP | ✅ Done | this | Game playable end-to-end; flywheel wired; IDOR + atomicity deferred to D & E (documented) |
+| B — SPHINX Marketplace Stub | ⬜ Next | — | Depends on A (cert tiers) |
 | C — GUIN+ Identity | ⬜ | — | Depends on A + B (radar/SPC data) |
 | D — Real Stripe + Auth | ⬜ | — | Independent; can run in parallel |
 | E — Flywheel Orchestration | ⬜ | — | Best after A+B; touches both |

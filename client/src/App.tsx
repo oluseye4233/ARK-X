@@ -17,6 +17,7 @@ import ContextCraftPage from "@/pages/context-craft";
 import SubscriptionPage from "@/pages/subscription";
 import ProfilePage from "@/pages/profile";
 import SchoolDashboard from "@/pages/school-dashboard";
+import PlayPage from "@/pages/play";
 
 function Router() {
   return (
@@ -34,6 +35,7 @@ function Router() {
         <Route path="/subscription" component={SubscriptionPage} />
         <Route path="/profile" component={ProfilePage} />
         <Route path="/school" component={SchoolDashboard} />
+        <Route path="/play" component={PlayPage} />
         {/* Fallback to 404 */}
         <Route component={NotFound} />
       </Switch>
