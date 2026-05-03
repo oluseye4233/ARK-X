@@ -304,7 +304,6 @@ export async function registerRoutes(
       if (!assessment) {
         return res.status(404).json({ message: "No assessment found for this user" });
       }
-      console.log(`[EMAIL] Assessment summary queued for ${email} (userId: ${userId}, JST: ${assessment.jstTotal})`);
       return res.json({
         success: true,
         message: `Assessment summary will be sent to ${email}`,
