@@ -1398,6 +1398,9 @@ export async function registerRoutes(
 
   // ── Seed endpoint (for initial data population) ───────
   app.post("/api/seed", async (_req, res) => {
+    if (process.env.NODE_ENV === "production") {
+      return res.status(403).json({ message: "Forbidden" });
+    }
     try {
       // Seed Jnomics Cards
       const cardSeeds = [
@@ -1593,7 +1596,7 @@ export async function registerRoutes(
   });
 
   // ── GUIN+ Identity ────────────────────────────────────
-  app.get("/api/guin/by-id/:userId", async (req, res) => {
+  app.get("/api/guin/by-id/:userId", requireAuth, async (req, res) => {
     try {
       const profile = await buildGuinProfile(String(req.params.userId));
       if (!profile) return res.status(404).json({ message: "User not found." });
@@ -1603,7 +1606,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/guin/by-username/:username", async (req, res) => {
+  app.get("/api/guin/by-username/:username", requireAuth, async (req, res) => {
     try {
       const u = await storage.getUserByUsername(req.params.username);
       if (!u) return res.status(404).json({ message: "User not found." });

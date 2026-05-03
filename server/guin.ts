@@ -90,7 +90,6 @@ export async function buildGuinProfile(userId: string) {
           ? {
               id: endorser.id,
               name: endorser.name,
-              username: endorser.username,
               contextCraftCertLevel: endorser.contextCraftCertLevel,
             }
           : null,
@@ -112,7 +111,6 @@ export async function buildGuinProfile(userId: string) {
   return {
     user: {
       id: safeUser.id,
-      username: safeUser.username,
       name: safeUser.name,
       role: safeUser.role,
       department: safeUser.department,
