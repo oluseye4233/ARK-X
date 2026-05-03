@@ -1,5 +1,6 @@
-import { Hexagon, Fingerprint } from "lucide-react";
+import { Hexagon, Fingerprint, TrendingUp } from "lucide-react";
 import { ARK_TIERS, type ArkTierKey } from "@shared/schema";
+import { getNextTier } from "@/lib/arkCoaching";
 
 export type ArkIdentity = {
   arkScore: number;
@@ -32,6 +33,7 @@ function tierFromScore(s: number): ArkTierKey {
 export function ArkIdentityCard({ identity }: { identity: ArkIdentity }) {
   const tier = tierFromScore(identity.arkScore);
   const tierClass = TIER_COLOR[tier];
+  const next = getNextTier(identity.arkScore);
   return (
     <div
       className={`glass-card p-6 rounded-xl border-2 ${tierClass.split(" ")[1]}`}
@@ -54,6 +56,41 @@ export function ArkIdentityCard({ identity }: { identity: ArkIdentity }) {
             <p className={`text-xs font-mono uppercase tracking-widest mt-1 ${tierClass.split(" ")[0]}`}>
               {tier} · VMST {identity.vmstLevel}
             </p>
+            {next.nextTier ? (
+              <div
+                className="mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded border border-white/10 bg-white/5"
+                data-testid="badge-next-tier"
+              >
+                <TrendingUp className="h-3 w-3 text-secondary" />
+                <span className="font-mono text-[10px] uppercase tracking-widest text-white">
+                  Next tier{" "}
+                  <span className="text-secondary" data-testid="text-next-tier-name">
+                    {next.nextTier}
+                  </span>{" "}
+                  in{" "}
+                  <span className="text-secondary tabular-nums" data-testid="text-next-tier-points">
+                    {next.pointsToNext}
+                  </span>{" "}
+                  pts
+                </span>
+                <span
+                  className="font-mono text-[10px] text-muted-foreground normal-case ml-1"
+                  data-testid="text-next-tier-path"
+                >
+                  · {next.pathLabel}
+                </span>
+              </div>
+            ) : (
+              <div
+                className="mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded border border-fuchsia-400/30 bg-fuchsia-400/5"
+                data-testid="badge-next-tier"
+              >
+                <TrendingUp className="h-3 w-3 text-fuchsia-300" />
+                <span className="font-mono text-[10px] uppercase tracking-widest text-fuchsia-200">
+                  Top tier · maintain weekly
+                </span>
+              </div>
+            )}
           </div>
         </div>
         <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-right">

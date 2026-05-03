@@ -1,7 +1,10 @@
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell,
 } from "recharts";
-import { Layers } from "lucide-react";
+import { Layers, Lightbulb, ArrowRight } from "lucide-react";
+import { Link } from "wouter";
+import { PILLAR_TIPS } from "@/lib/arkCoaching";
+import type { CcmiPillarKey } from "@shared/schema";
 
 export type CcmiPillarData = {
   P1: number; P2: number; P3: number; P4: number; P5: number; P6: number; P7: number;
@@ -100,6 +103,33 @@ export function CcmiPillars({ data }: { data: CcmiPillarData | null }) {
           {weakest.pillar} · {weakest.label} · {weakest.score}/100
         </span>
       </p>
+      <div
+        className="mt-3 p-3 rounded-lg border border-rose-400/20 bg-rose-400/5"
+        data-testid="card-weakest-tip"
+      >
+        <div className="flex items-start gap-2">
+          <Lightbulb className="h-4 w-4 text-rose-300 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-rose-300 mb-0.5">
+              Why this score · {weakest.pillar} {weakest.label}
+            </p>
+            <p
+              className="font-mono text-xs text-white/80 leading-relaxed"
+              data-testid="text-weakest-tip"
+            >
+              {PILLAR_TIPS[weakest.pillar as CcmiPillarKey]}
+            </p>
+          </div>
+          <Link
+            href="/play"
+            className="flex items-center gap-1 px-2 py-1 rounded border border-rose-400/40 hover:border-rose-300 hover:bg-rose-400/10 transition-all font-mono text-[10px] uppercase tracking-widest text-rose-200 flex-shrink-0"
+            data-testid="link-practice-pillar"
+          >
+            Practice in CCGE
+            <ArrowRight className="h-3 w-3" />
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }

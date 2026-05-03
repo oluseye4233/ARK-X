@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { Loader2, ArrowLeft, TrendingUp } from "lucide-react";
+import { Loader2, ArrowLeft, TrendingUp, Lightbulb, ArrowRight } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
+import { getWeakestPillar, getNextTier } from "@/lib/arkCoaching";
+import type { CcmiPillarKey } from "@shared/schema";
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
   ReferenceDot,
@@ -49,6 +51,7 @@ export default function ArkHistoryPage() {
   const { user } = useAuth();
   const [rows, setRows] = useState<HistoryRow[]>([]);
   const [pillars, setPillars] = useState<CcmiPillarsLite | null>(null);
+  const [arkScore, setArkScore] = useState(0);
   const [days, setDays] = useState(90);
   const [loading, setLoading] = useState(true);
 
@@ -61,11 +64,15 @@ export default function ArkHistoryPage() {
     ])
       .then(([r, id]) => {
         setRows(Array.isArray(r) ? (r as HistoryRow[]) : []);
-        const p = (id as { pillars?: CcmiPillarsLite } | null)?.pillars ?? null;
-        setPillars(p);
+        const idTyped = id as { pillars?: CcmiPillarsLite; arkScore?: number } | null;
+        setPillars(idTyped?.pillars ?? null);
+        setArkScore(idTyped?.arkScore ?? 0);
       })
       .finally(() => setLoading(false));
   }, [user, days]);
+
+  const weakest = getWeakestPillar(pillars as Partial<Record<CcmiPillarKey, number>> | null);
+  const nextTier = getNextTier(arkScore);
 
   const chartData = rows.map((r, i) => ({
     label: `#${i + 1}`,
@@ -155,6 +162,85 @@ export default function ArkHistoryPage() {
               {d}d
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Coaching panel — same "Why this score / What unlocks the next tier" surface as the dashboard. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div
+          className="glass-card p-4 rounded-xl border border-secondary/20"
+          data-testid="card-history-next-tier"
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <TrendingUp className="h-4 w-4 text-secondary" />
+            <p className="font-mono text-[10px] uppercase tracking-widest text-secondary">
+              What unlocks the next tier
+            </p>
+          </div>
+          {nextTier.nextTier ? (
+            <>
+              <p className="font-display font-bold text-lg text-white">
+                Next tier{" "}
+                <span className="text-secondary" data-testid="text-history-next-tier-name">
+                  {nextTier.nextTier}
+                </span>{" "}
+                in{" "}
+                <span className="text-secondary tabular-nums" data-testid="text-history-next-tier-points">
+                  {nextTier.pointsToNext}
+                </span>{" "}
+                pts
+              </p>
+              <p
+                className="font-mono text-xs text-muted-foreground mt-1"
+                data-testid="text-history-next-tier-path"
+              >
+                Cheapest path: {nextTier.pathLabel}
+              </p>
+            </>
+          ) : (
+            <p className="font-mono text-xs text-fuchsia-200">
+              Top tier reached — maintain with a weekly CCGE drill.
+            </p>
+          )}
+        </div>
+        <div
+          className="glass-card p-4 rounded-xl border border-rose-400/20"
+          data-testid="card-history-weakest-tip"
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <Lightbulb className="h-4 w-4 text-rose-300" />
+            <p className="font-mono text-[10px] uppercase tracking-widest text-rose-300">
+              Why this score
+            </p>
+          </div>
+          {weakest ? (
+            <>
+              <p className="font-display font-bold text-sm text-white">
+                {weakest.key} · {weakest.label}{" "}
+                <span className="text-muted-foreground font-mono text-xs">
+                  ({weakest.score}/100)
+                </span>
+              </p>
+              <p
+                className="font-mono text-xs text-white/80 mt-1 leading-relaxed"
+                data-testid="text-history-weakest-tip"
+              >
+                {weakest.tip}
+              </p>
+              <Link
+                href="/play"
+                className="inline-flex items-center gap-1 mt-2 px-2 py-1 rounded border border-rose-400/40 hover:border-rose-300 hover:bg-rose-400/10 transition-all font-mono text-[10px] uppercase tracking-widest text-rose-200"
+                data-testid="link-history-practice-pillar"
+              >
+                Practice in CCGE
+                <ArrowRight className="h-3 w-3" />
+              </Link>
+            </>
+          ) : (
+            <p className="font-mono text-xs text-muted-foreground">
+              Finish a CCGE session to unlock pillar coaching.
+            </p>
+          )}
         </div>
       </div>
 
