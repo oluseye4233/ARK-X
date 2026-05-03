@@ -12,8 +12,11 @@ import {
   GraduationCap,
   Gamepad2,
   ShoppingBag,
+  HelpCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { OnboardingTour } from "@/components/OnboardingTour";
+import { useOnboarding } from "@/lib/useOnboarding";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -21,6 +24,7 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const [location] = useLocation();
+  const { isOpen, open, close } = useOnboarding();
 
   if (location === '/login') {
     return <main className="min-h-screen bg-background text-foreground font-sans">{children}</main>;
@@ -139,6 +143,15 @@ export function AppLayout({ children }: AppLayoutProps) {
         </div>
 
         <div className="absolute bottom-0 w-full p-4 border-t border-primary/20 bg-background/80 backdrop-blur-sm space-y-3">
+          <button
+            type="button"
+            onClick={open}
+            data-testid="button-launch-onboarding"
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-[10px] font-mono uppercase tracking-widest text-muted-foreground hover:text-primary hover:bg-primary/5 border border-transparent hover:border-primary/30 transition-all duration-300 group"
+          >
+            <HelpCircle className="h-3.5 w-3.5 opacity-70 group-hover:opacity-100" />
+            <span>Take the tour</span>
+          </button>
           <div className="flex items-center justify-between text-xs font-mono text-muted-foreground">
             <span>SYS.STATUS</span>
             <span className="text-secondary flex items-center gap-1">
@@ -166,12 +179,22 @@ export function AppLayout({ children }: AppLayoutProps) {
           <div className="flex flex-wrap items-center justify-between gap-3 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/60">
             <span>© 2026 ARK Platform</span>
             <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={open}
+                data-testid="button-footer-tour"
+                className="hover:text-primary transition-colors"
+              >
+                Tour
+              </button>
               <Link href="/privacy" data-testid="link-privacy" className="hover:text-primary transition-colors">Privacy</Link>
               <Link href="/terms" data-testid="link-terms" className="hover:text-primary transition-colors">Terms</Link>
             </div>
           </div>
         </footer>
       </main>
+
+      <OnboardingTour open={isOpen} onClose={close} />
     </div>
   );
 }
