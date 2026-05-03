@@ -9,10 +9,11 @@
  * (no API key, budget exceeded, parse error). Never throws.
  */
 import { getAnthropic, MODELS, isClaudeAvailable } from "./client";
-import { logUsage } from "./usage";
+import { logUsage, enforceBudget } from "./usage";
 import {
   CCMI_PILLAR_LABELS,
   type ArkTriggerType,
+  type SubscriptionPlan,
 } from "@shared/schema";
 import type { ArkScoreSnapshot } from "../scoringEngine";
 
@@ -58,6 +59,7 @@ Be specific, reference the actual numbers, name the weakest pillar by its label,
 
 export async function generateIdentityNarrative(opts: {
   userId: string;
+  plan: SubscriptionPlan;
   snapshot: ArkScoreSnapshot;
   trigger: ArkTriggerType;
 }): Promise<IdentityNarrative> {
@@ -72,6 +74,7 @@ export async function generateIdentityNarrative(opts: {
   if (!isClaudeAvailable()) return fallback();
 
   try {
+    await enforceBudget(opts.userId, opts.plan);
     const client = getAnthropic();
     const userPayload = JSON.stringify({
       jst: { index: opts.snapshot.jstIndex, sub: opts.snapshot.jstSub, replacementPct: opts.snapshot.resumeReplacementPct },

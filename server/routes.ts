@@ -707,7 +707,21 @@ export async function registerRoutes(
       let resumeText = "";
 
       if (file.mimetype === "application/pdf") {
-        const pdfData = await pdfParse(file.buffer);
+        let pdfTimeoutHandle: ReturnType<typeof setTimeout> | undefined;
+        const pdfTimeout = new Promise<never>((_, reject) => {
+          pdfTimeoutHandle = setTimeout(() => reject(new Error("PDF parsing timed out")), 15_000);
+        });
+        let pdfData: { text: string };
+        try {
+          pdfData = await Promise.race([pdfParse(file.buffer), pdfTimeout]);
+          clearTimeout(pdfTimeoutHandle);
+        } catch (parseErr: any) {
+          clearTimeout(pdfTimeoutHandle);
+          if (parseErr.message === "PDF parsing timed out") {
+            return res.status(422).json({ message: "The uploaded PDF took too long to process. Please try a smaller or simpler file." });
+          }
+          throw parseErr;
+        }
         resumeText = pdfData.text;
       } else if (file.mimetype === "text/plain") {
         resumeText = file.buffer.toString("utf-8");
@@ -722,6 +736,7 @@ export async function registerRoutes(
       const userId = currentUserId(req)!;
       const user = await storage.getUser(userId);
       const certLevel = (user?.contextCraftCertLevel as ContextCraftLevel) || "NONE";
+      const userPlan = (user?.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
 
       const analysis = analyzeResume(resumeText, certLevel);
 
@@ -789,6 +804,7 @@ export async function registerRoutes(
           const { generateIdentityNarrative } = await import("./ai/identity");
           narrative = await generateIdentityNarrative({
             userId,
+            plan: userPlan,
             snapshot: recalc.snapshot,
             trigger: "assessment.completed",
           });
