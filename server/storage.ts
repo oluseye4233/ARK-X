@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, sql, desc, and } from "drizzle-orm";
+import { eq, sql, desc, and, inArray } from "drizzle-orm";
 import {
   users, type User, type InsertUser,
   assessments, type Assessment, type InsertAssessment,
@@ -18,7 +18,10 @@ import {
   endorsements, type Endorsement, type InsertEndorsement,
   checkoutSessions, type CheckoutSession, type InsertCheckoutSession,
   billingEvents, type BillingEvent, type InsertBillingEvent,
+  arkEvents,
+  aiUsage,
 } from "@shared/schema";
+import { or } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -97,6 +100,8 @@ export interface IStorage {
   updateCheckoutSession(id: string, data: Partial<CheckoutSession>): Promise<CheckoutSession | undefined>;
   createBillingEvent(e: InsertBillingEvent): Promise<BillingEvent>;
   getBillingEventsByUser(userId: string, limit?: number): Promise<BillingEvent[]>;
+  exportUserData(userId: string): Promise<Record<string, any>>;
+  deleteUserCascade(userId: string): Promise<{ deletedTables: Record<string, number> }>;
   completeCheckoutSession(args: {
     sessionId: string;
     actorUserId: string;
@@ -484,6 +489,98 @@ export class DatabaseStorage implements IStorage {
       .where(eq(billingEvents.userId, userId))
       .orderBy(desc(billingEvents.createdAt))
       .limit(limit);
+  }
+
+  async exportUserData(userId: string): Promise<Record<string, any>> {
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user) {
+      const err: any = new Error("User not found");
+      err.status = 404;
+      throw err;
+    }
+    const { password: _pw, ...safeUser } = user as any;
+    const [
+      userAssessments, userGameSessions, userListings, userPurchasesBuyer, userPurchasesCreator,
+      userEndorsementsGiven, userEndorsementsReceived, credits, userCheckouts, userBilling, userArk, userAi,
+    ] = await Promise.all([
+      db.select().from(assessments).where(eq(assessments.userId, userId)),
+      db.select().from(gameSessions).where(eq(gameSessions.userId, userId)),
+      db.select().from(spcListings).where(eq(spcListings.creatorId, userId)),
+      db.select().from(spcPurchases).where(eq(spcPurchases.buyerId, userId)),
+      db.select().from(spcPurchases).where(eq(spcPurchases.creatorId, userId)),
+      db.select().from(endorsements).where(eq(endorsements.endorserId, userId)),
+      db.select().from(endorsements).where(eq(endorsements.recipientId, userId)),
+      db.select().from(userCredits).where(eq(userCredits.userId, userId)),
+      db.select().from(checkoutSessions).where(eq(checkoutSessions.userId, userId)),
+      db.select().from(billingEvents).where(eq(billingEvents.userId, userId)),
+      db.select().from(arkEvents).where(eq(arkEvents.userId, userId)),
+      db.select().from(aiUsage).where(eq(aiUsage.userId, userId)),
+    ]);
+    const assessmentIds = userAssessments.map((a) => a.id);
+    const [plans, pivots, vectors] = assessmentIds.length
+      ? await Promise.all([
+          db.select().from(upskillingPlans).where(inArray(upskillingPlans.assessmentId, assessmentIds)),
+          db.select().from(pivotOpportunities).where(inArray(pivotOpportunities.assessmentId, assessmentIds)),
+          db.select().from(transferabilityVectors).where(inArray(transferabilityVectors.assessmentId, assessmentIds)),
+        ])
+      : [[], [], []];
+    return {
+      exportedAt: new Date().toISOString(),
+      schemaVersion: "1.0",
+      user: safeUser,
+      assessments: userAssessments,
+      upskillingPlans: plans,
+      pivotOpportunities: pivots,
+      transferabilityVectors: vectors,
+      gameSessions: userGameSessions,
+      spcListings: userListings,
+      spcPurchasesAsBuyer: userPurchasesBuyer,
+      spcPurchasesAsCreator: userPurchasesCreator,
+      endorsementsGiven: userEndorsementsGiven,
+      endorsementsReceived: userEndorsementsReceived,
+      credits: credits[0] || null,
+      checkoutSessions: userCheckouts,
+      billingEvents: userBilling,
+      arkEvents: userArk,
+      aiUsage: userAi,
+    };
+  }
+
+  async deleteUserCascade(userId: string): Promise<{ deletedTables: Record<string, number> }> {
+    return await db.transaction(async (tx) => {
+      const [user] = await tx.select().from(users).where(eq(users.id, userId)).for("update");
+      if (!user) {
+        const err: any = new Error("User not found");
+        err.status = 404;
+        throw err;
+      }
+      const userAssessments = await tx.select({ id: assessments.id }).from(assessments).where(eq(assessments.userId, userId));
+      const aIds = userAssessments.map((a) => a.id);
+      const counts: Record<string, number> = {};
+      const del = async (label: string, q: any) => {
+        const r = await q.returning();
+        counts[label] = r.length;
+      };
+      if (aIds.length) {
+        await del("upskillingPlans", tx.delete(upskillingPlans).where(inArray(upskillingPlans.assessmentId, aIds)));
+        await del("pivotOpportunities", tx.delete(pivotOpportunities).where(inArray(pivotOpportunities.assessmentId, aIds)));
+        await del("transferabilityVectors", tx.delete(transferabilityVectors).where(inArray(transferabilityVectors.assessmentId, aIds)));
+      } else {
+        counts.upskillingPlans = 0; counts.pivotOpportunities = 0; counts.transferabilityVectors = 0;
+      }
+      await del("aiUsage", tx.delete(aiUsage).where(eq(aiUsage.userId, userId)));
+      await del("arkEvents", tx.delete(arkEvents).where(eq(arkEvents.userId, userId)));
+      await del("billingEvents", tx.delete(billingEvents).where(eq(billingEvents.userId, userId)));
+      await del("checkoutSessions", tx.delete(checkoutSessions).where(eq(checkoutSessions.userId, userId)));
+      await del("userCredits", tx.delete(userCredits).where(eq(userCredits.userId, userId)));
+      await del("endorsements", tx.delete(endorsements).where(or(eq(endorsements.endorserId, userId), eq(endorsements.recipientId, userId))));
+      await del("spcPurchases", tx.delete(spcPurchases).where(or(eq(spcPurchases.buyerId, userId), eq(spcPurchases.creatorId, userId))));
+      await del("spcListings", tx.delete(spcListings).where(eq(spcListings.creatorId, userId)));
+      await del("gameSessions", tx.delete(gameSessions).where(eq(gameSessions.userId, userId)));
+      await del("assessments", tx.delete(assessments).where(eq(assessments.userId, userId)));
+      await del("users", tx.delete(users).where(eq(users.id, userId)));
+      return { deletedTables: counts };
+    });
   }
 
   async completeCheckoutSession(args: {

@@ -46,6 +46,22 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 - `/marketplace/publish` — Publish a new SPC (Gold+ cert gated, runs HIVE pre-check)
 - `/marketplace/:id` — SPC detail page (preview, purchase, ownership view)
 
+## Launch Readiness (Phase I of LEAN_ONECRAFT_ROADMAP.md)
+- **Security headers**: `helmet()` in `server/index.ts` — production CSP, HSTS, X-Frame-Options SAMEORIGIN, COOP/CORP, no-referrer. Verified in response headers.
+- **Body limits**: `express.json({ limit: "1mb" })` and urlencoded matching to mitigate payload-bomb DoS.
+- **Rate limiting** (`express-rate-limit`):
+  - `apiLimiter` — 240 req/min per IP, applied globally to `/api`. Emits `RateLimit-*` headers.
+  - `authLimiter` — 20 req/15min per IP, scoped to `/api/auth/login` + `/register`, `skipSuccessfulRequests: true`. 429 on the 21st failed attempt (verified).
+- **GDPR / CCPA endpoints** (`server/routes.ts`):
+  - `GET /api/users/me/export` — streams full JSON dump of every user-scoped row across 16 tables (user, assessments, plans/pivots/vectors, gameSessions, listings, purchasesAsBuyer/Creator, endorsementsGiven/Received, credits, checkoutSessions, billingEvents, arkEvents, aiUsage). `Content-Disposition: attachment`.
+  - `DELETE /api/users/me` — requires JSON body `{ "confirm": "DELETE" }`; runs `storage.deleteUserCascade(userId)` inside a `db.transaction` with `FOR UPDATE` lock on the user row, cascades through 13 dependent tables in FK-safe order, then destroys the express session and clears the `ark.sid` cookie. Returns per-table delete counts.
+  - Both protected by `requireAuth`; CSRF deemed unnecessary (sameSite=lax cookies + same-origin SPA + auth limiter).
+- **Frontend**:
+  - `client/src/components/ErrorBoundary.tsx` wraps `<App>` — catches render-time crashes with a recoverable on-brand fallback.
+  - `client/src/pages/not-found.tsx` — on-brand 404 (no shadcn placeholder).
+  - `client/src/pages/legal/privacy.tsx` + `terms.tsx` — substantive policy text covering collection, processing, retention, GDPR rights, contact. Routes `/privacy`, `/terms` registered in `App.tsx`. Footer links in `AppLayout.tsx`.
+  - `DataPrivacySection` in `client/src/pages/profile.tsx` — "Download JSON Export" button + "Permanently Delete Account" flow with `DELETE` typed-confirmation gate, redirects to `/login` on success.
+
 ## Billing — Stripe Stub (Phase D.2 of LEAN_ONECRAFT_ROADMAP.md)
 - **Status**: STUBBED OUT (no Stripe key wired). Stripe integration unavailable in this Replit environment; column shapes mirror real Stripe so future swap is mechanical.
 - **Schema** (`shared/schema.ts`):

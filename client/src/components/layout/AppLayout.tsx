@@ -230,6 +230,15 @@ export function AppLayout({ children }: AppLayoutProps) {
         <div className="relative z-10 p-6 md:p-10 h-full">
           {children}
         </div>
+        <footer className="relative z-10 border-t border-primary/10 px-6 md:px-10 py-4 mt-auto">
+          <div className="flex flex-wrap items-center justify-between gap-3 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/60">
+            <span>© 2026 ARK Platform</span>
+            <div className="flex items-center gap-4">
+              <Link href="/privacy" data-testid="link-privacy" className="hover:text-primary transition-colors">Privacy</Link>
+              <Link href="/terms" data-testid="link-terms" className="hover:text-primary transition-colors">Terms</Link>
+            </div>
+          </div>
+        </footer>
       </main>
     </div>
   );

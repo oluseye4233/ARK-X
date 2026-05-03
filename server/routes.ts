@@ -183,6 +183,39 @@ export async function registerRoutes(
     });
   });
 
+  // ── GDPR ──────────────────────────────────────────────
+  app.get("/api/users/me/export", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const dump = await storage.exportUserData(userId);
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Content-Disposition", `attachment; filename="ark-export-${userId}.json"`);
+      return res.send(JSON.stringify(dump, null, 2));
+    } catch (err: any) {
+      const status = err.status || 500;
+      if (status >= 500) console.error("Export error:", err);
+      return res.status(status).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/users/me", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const confirm = (req.body?.confirm as string) || (req.query?.confirm as string);
+      if (confirm !== "DELETE") {
+        return res.status(400).json({ message: 'Pass {"confirm":"DELETE"} to permanently delete your account.' });
+      }
+      const result = await storage.deleteUserCascade(userId);
+      await new Promise<void>((resolve) => req.session.destroy(() => resolve()));
+      res.clearCookie("ark.sid");
+      return res.json({ ok: true, ...result });
+    } catch (err: any) {
+      const status = err.status || 500;
+      if (status >= 500) console.error("Delete error:", err);
+      return res.status(status).json({ message: err.message });
+    }
+  });
+
   app.get("/api/auth/me", async (req, res) => {
     const sid = currentUserId(req);
     if (!sid) return res.status(401).json({ message: "Not authenticated." });

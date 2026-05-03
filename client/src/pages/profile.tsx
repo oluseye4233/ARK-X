@@ -19,6 +19,8 @@ import {
   Award,
   Coins,
   ShoppingBag,
+  Download,
+  Trash2,
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -252,6 +254,95 @@ export default function ProfilePage() {
           <GuinProfileView profile={guin} viewerCanEndorse={false} onEndorse={loadGuin} />
         </div>
       )}
+
+      <DataPrivacySection />
+    </div>
+  );
+}
+
+function DataPrivacySection() {
+  const [confirmText, setConfirmText] = useState("");
+  const [busy, setBusy] = useState<"export" | "delete" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleExport = async () => {
+    setBusy("export"); setError(null);
+    try {
+      const res = await fetch("/api/users/me/export", { credentials: "include" });
+      if (!res.ok) throw new Error((await res.json()).message || "Export failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ark-export-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e: any) { setError(e.message); }
+    finally { setBusy(null); }
+  };
+
+  const handleDelete = async () => {
+    if (confirmText !== "DELETE") { setError('Type DELETE to confirm.'); return; }
+    setBusy("delete"); setError(null);
+    try {
+      const res = await fetch("/api/users/me", {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "DELETE" }),
+      });
+      if (!res.ok) throw new Error((await res.json()).message || "Delete failed");
+      window.location.assign("/login");
+    } catch (e: any) { setError(e.message); setBusy(null); }
+  };
+
+  return (
+    <div className="pt-6 mt-6 border-t border-white/5 space-y-4" data-testid="section-data-privacy">
+      <div>
+        <h2 className="text-xl font-display font-bold text-white">Data &amp; Privacy</h2>
+        <p className="text-xs font-mono text-muted-foreground mt-1">GDPR / CCPA rights — export or permanently delete your account.</p>
+      </div>
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="glass-card p-5 rounded-xl space-y-3">
+          <div className="flex items-center gap-2">
+            <Download className="h-5 w-5 text-primary" />
+            <span className="font-display font-bold text-white">Export My Data</span>
+          </div>
+          <p className="text-xs font-mono text-muted-foreground">Download a JSON file of every record tied to your account: profile, assessments, game sessions, billing history, ARK events, AI usage.</p>
+          <button
+            onClick={handleExport}
+            disabled={busy !== null}
+            data-testid="button-export-data"
+            className="w-full bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary font-mono text-xs uppercase tracking-wider py-2 rounded transition-all disabled:opacity-50"
+          >
+            {busy === "export" ? "Exporting…" : "Download JSON Export"}
+          </button>
+        </div>
+        <div className="glass-card p-5 rounded-xl space-y-3 border border-destructive/20">
+          <div className="flex items-center gap-2">
+            <Trash2 className="h-5 w-5 text-destructive" />
+            <span className="font-display font-bold text-white">Delete Account</span>
+          </div>
+          <p className="text-xs font-mono text-muted-foreground">Permanently erase your account and all associated data. This cannot be undone. Type <code className="text-destructive">DELETE</code> to confirm.</p>
+          <input
+            type="text"
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder="Type DELETE"
+            data-testid="input-delete-confirm"
+            className="w-full bg-background border border-border text-white font-mono text-xs px-3 py-2 rounded focus:border-destructive outline-none"
+          />
+          <button
+            onClick={handleDelete}
+            disabled={busy !== null || confirmText !== "DELETE"}
+            data-testid="button-delete-account"
+            className="w-full bg-destructive/10 hover:bg-destructive/20 border border-destructive/40 text-destructive font-mono text-xs uppercase tracking-wider py-2 rounded transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            {busy === "delete" ? "Deleting…" : "Permanently Delete Account"}
+          </button>
+        </div>
+      </div>
+      {error && <p className="text-xs font-mono text-destructive" data-testid="text-privacy-error">{error}</p>}
     </div>
   );
 }

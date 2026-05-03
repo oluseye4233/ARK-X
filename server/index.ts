@@ -1,4 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -14,17 +16,59 @@ declare module "http" {
   }
 }
 
+const isProd = process.env.NODE_ENV === "production";
+
+app.use(
+  helmet({
+    contentSecurityPolicy: isProd
+      ? {
+          useDefaults: true,
+          directives: {
+            "default-src": ["'self'"],
+            "script-src": ["'self'", "'unsafe-inline'"],
+            "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+            "font-src": ["'self'", "https://fonts.gstatic.com", "data:"],
+            "img-src": ["'self'", "data:", "https:"],
+            "connect-src": ["'self'"],
+            "frame-ancestors": ["'self'"],
+          },
+        }
+      : false,
+    crossOriginEmbedderPolicy: false,
+  }),
+);
+
 app.use(
   express.json({
+    limit: "1mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
   }),
 );
 
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 
 app.use(buildSessionMiddleware());
+
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 240,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { message: "Too many requests, please slow down." },
+});
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  message: { message: "Too many auth attempts. Try again in 15 minutes." },
+});
+app.use("/api/auth/login", authLimiter);
+app.use("/api/auth/register", authLimiter);
+app.use("/api/", apiLimiter);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

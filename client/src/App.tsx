@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import { AppLayout } from "@/components/layout/AppLayout";
 import Home from "@/pages/home";
 import UploadPage from "@/pages/upload";
@@ -21,6 +22,8 @@ import SchoolDashboard from "@/pages/school-dashboard";
 import PlayPage from "@/pages/play";
 import MarketplacePage from "@/pages/marketplace";
 import GuinPublicPage from "@/pages/guin-public";
+import PrivacyPage from "@/pages/legal/privacy";
+import TermsPage from "@/pages/legal/terms";
 
 function Router() {
   return (
@@ -44,6 +47,8 @@ function Router() {
         <Route path="/marketplace/:id" component={MarketplacePage} />
         <Route path="/marketplace" component={MarketplacePage} />
         <Route path="/u/:username" component={GuinPublicPage} />
+        <Route path="/privacy" component={PrivacyPage} />
+        <Route path="/terms" component={TermsPage} />
         {/* Fallback to 404 */}
         <Route component={NotFound} />
       </Switch>
@@ -53,12 +58,14 @@ function Router() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Router />
-      </TooltipProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <Router />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 
