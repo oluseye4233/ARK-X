@@ -296,6 +296,13 @@ export const insertUserSchema = createInsertSchema(users).omit({
   resumeReplacementPct: true,
 });
 export type InsertUser = z.infer<typeof insertUserSchema>;
+// UpdateUser is the type used by storage.updateUser for server-side patches.
+// Unlike InsertUser (which strips privileged fields to prevent registration-time
+// privilege escalation — see Task #7), updates legitimately need to write
+// contextCraftCertLevel (admin cert grant) and stripeCustomerId/SubscriptionId
+// (billing webhooks). These fields are server-controlled, never sourced from
+// untrusted client bodies without their own auth + validation.
+export type UpdateUser = Partial<typeof users.$inferInsert>;
 export type User = typeof users.$inferSelect;
 
 export const assessments = pgTable("assessments", {

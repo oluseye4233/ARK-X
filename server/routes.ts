@@ -1629,7 +1629,7 @@ export async function registerRoutes(
 
   app.get("/api/guin/by-username/:username", requireAuth, async (req, res) => {
     try {
-      const u = await storage.getUserByUsername(req.params.username);
+      const u = await storage.getUserByUsername(String(req.params.username));
       if (!u) return res.status(404).json({ message: "User not found." });
       const profile = await buildGuinProfile(u.id);
       if (!profile) return res.status(404).json({ message: "User not found." });

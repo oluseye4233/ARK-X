@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { eq, sql, desc, and, inArray } from "drizzle-orm";
 import {
-  users, type User, type InsertUser,
+  users, type User, type InsertUser, type UpdateUser,
   assessments, type Assessment, type InsertAssessment,
   type ContextCraftLevel, type CcgeTier, type KcseBreakdown,
   upskillingPlans, type UpskillingPlan, type InsertUpskillingPlan,
@@ -30,7 +30,7 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
-  updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
+  updateUser(id: string, data: UpdateUser): Promise<User | undefined>;
 
   createAssessment(assessment: InsertAssessment): Promise<Assessment>;
   getAssessment(id: string): Promise<Assessment | undefined>;
@@ -148,10 +148,10 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined> {
+  async updateUser(id: string, data: UpdateUser): Promise<User | undefined> {
     // If a fresh password is being written via updateUser, hash it the same
     // way createUser does. Already-hashed values pass through unchanged.
-    let patch: Partial<InsertUser> = data;
+    let patch: UpdateUser = data;
     if (typeof data.password === "string" && data.password.length > 0) {
       const { hashPassword, isBcryptHash } = await import("./passwords");
       const password = isBcryptHash(data.password) ? data.password : await hashPassword(data.password);
