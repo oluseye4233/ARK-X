@@ -662,6 +662,13 @@ export class DatabaseStorage implements IStorage {
         err.status = 409;
         throw err;
       }
+      if (session.amountCents > 0) {
+        const err: any = new Error(
+          "Payment verification required. Paid plan activation must be confirmed by the payment provider.",
+        );
+        err.status = 402;
+        throw err;
+      }
 
       const [user] = await tx.select().from(users).where(eq(users.id, args.actorUserId)).for("update");
       if (!user) {

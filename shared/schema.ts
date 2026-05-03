@@ -489,17 +489,21 @@ export const insertSpcListingSchema = createInsertSchema(spcListings).omit({
 export type InsertSpcListing = z.infer<typeof insertSpcListingSchema>;
 export type SpcListing = typeof spcListings.$inferSelect;
 
-export const spcPurchases = pgTable("spc_purchases", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  buyerId: varchar("buyer_id").notNull(),
-  listingId: varchar("listing_id").notNull(),
-  creatorId: varchar("creator_id").notNull(),
-  priceCredits: integer("price_credits").notNull(),
-  creatorShare: integer("creator_share").notNull(),
-  platformShare: integer("platform_share").notNull(),
-  isFirstSaleForCreator: boolean("is_first_sale_for_creator").notNull().default(false),
-  purchasedAt: timestamp("purchased_at").defaultNow().notNull(),
-});
+export const spcPurchases = pgTable(
+  "spc_purchases",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    buyerId: varchar("buyer_id").notNull(),
+    listingId: varchar("listing_id").notNull(),
+    creatorId: varchar("creator_id").notNull(),
+    priceCredits: integer("price_credits").notNull(),
+    creatorShare: integer("creator_share").notNull(),
+    platformShare: integer("platform_share").notNull(),
+    isFirstSaleForCreator: boolean("is_first_sale_for_creator").notNull().default(false),
+    purchasedAt: timestamp("purchased_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("spc_purchases_buyer_listing_uidx").on(t.buyerId, t.listingId)],
+);
 
 export const insertSpcPurchaseSchema = createInsertSchema(spcPurchases).omit({
   id: true,

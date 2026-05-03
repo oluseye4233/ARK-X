@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   userCredits,
   spcListings,
@@ -166,6 +166,13 @@ export async function executePurchase(
     if (!listing) throw new Error("Listing not found.");
     if (listing.status !== "active") throw new Error("Listing is not available for purchase.");
     if (listing.creatorId === buyerId) throw new Error("You can't buy your own SPC.");
+
+    const [existingPurchase] = await tx
+      .select({ id: spcPurchases.id })
+      .from(spcPurchases)
+      .where(and(eq(spcPurchases.buyerId, buyerId), eq(spcPurchases.listingId, listingId)))
+      .limit(1);
+    if (existingPurchase) throw new Error("You have already purchased this listing.");
 
     // Initialize credit rows inside the txn — idempotent via ON CONFLICT.
     // Lock ordering: always buyer-then-creator (sorted by id) to avoid deadlocks

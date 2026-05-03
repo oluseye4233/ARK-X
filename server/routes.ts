@@ -499,14 +499,11 @@ export async function registerRoutes(
   app.post("/api/billing/checkout/:id/complete", requireAuth, async (req, res) => {
     try {
       const userId = currentUserId(req)!;
-      const schema = z.object({ success: z.boolean().default(true) });
-      const p = schema.safeParse(req.body || {});
-      if (!p.success) return res.status(400).json({ message: "Invalid body" });
 
       const result = await storage.completeCheckoutSession({
         sessionId: String(req.params.id),
         actorUserId: userId,
-        success: p.data.success,
+        success: true,
       });
 
       if (!result.ok) {
@@ -1366,7 +1363,7 @@ export async function registerRoutes(
       return res.json(outcome);
     } catch (err: any) {
       console.error("Purchase error:", err);
-      const status = /not found|insufficient|own SPC|not available/.test(err.message) ? 400 : 500;
+      const status = /not found|insufficient|own SPC|not available|already purchased/.test(err.message) ? 400 : 500;
       return res.status(status).json({ message: err.message });
     }
   });
@@ -1382,8 +1379,16 @@ export async function registerRoutes(
 
   app.get("/api/sphinx/listings/by-creator/:userId", async (req, res) => {
     try {
-      const listings = await storage.getSpcListingsByCreator(String(req.params.userId));
-      return res.json(listings);
+      const creatorId = String(req.params.userId);
+      const viewerId = currentUserId(req);
+      const isCreator = viewerId === creatorId;
+      const listings = await storage.getSpcListingsByCreator(creatorId);
+      const result = listings.map((l) =>
+        isCreator
+          ? { ...l, bodyLocked: false }
+          : { ...l, body: redactBody(l.body), bodyLocked: true },
+      );
+      return res.json(result);
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
