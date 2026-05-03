@@ -52,7 +52,7 @@
     "cmdk": "^1.1.1",
     "connect-pg-simple": "^10.0.0",
     "date-fns": "^3.6.0",
-    "drizzle-orm": "^0.39.3",
+    "drizzle-orm": "^0.45.2",
     "drizzle-zod": "^0.7.1",
     "embla-carousel-react": "^8.6.0",
     "express": "^5.0.1",
@@ -62,7 +62,7 @@
     "helmet": "^8.1.0",
     "html2canvas": "^1.4.1",
     "input-otp": "^1.4.2",
-    "jspdf": "^4.2.0",
+    "jspdf": "^4.2.1",
     "lucide-react": "^0.545.0",
     "memorystore": "^1.6.7",
     "multer": "^2.1.1",
@@ -105,15 +105,24 @@
     "@types/ws": "^8.5.13",
     "@vitejs/plugin-react": "^5.0.4",
     "autoprefixer": "^10.4.21",
-    "drizzle-kit": "^0.31.4",
+    "drizzle-kit": "^0.31.10",
     "esbuild": "^0.25.0",
-    "postcss": "^8.5.6",
+    "postcss": "^8.5.13",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.20.5",
     "typescript": "5.6.3",
-    "vite": "^7.1.9"
+    "vite": "^7.3.2"
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8"
+  },
+  "overrides": {
+    "dompurify": "^3.4.2",
+    "lodash": "^4.18.1",
+    "path-to-regexp": "^8.4.2",
+    "picomatch": "^4.0.4",
+    "qs": "^6.15.1",
+    "rollup": "^4.60.2",
+    "esbuild": "^0.25.0"
   }
 }
