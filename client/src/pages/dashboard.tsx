@@ -6,14 +6,18 @@ import { JnomicsCardList } from "@/components/dashboard/JnomicsCardList";
 import { ArchetypeHandicap } from "@/components/dashboard/ArchetypeHandicap";
 import { TaskHeatmap } from "@/components/dashboard/TaskHeatmap";
 import { VulnerabilityTimeline } from "@/components/dashboard/VulnerabilityTimeline";
-import { Cpu, FileText, Loader2, TrendingUp, Mail, CheckCircle2, Activity, Zap } from "lucide-react";
+import { Cpu, FileText, Loader2, TrendingUp, Mail, CheckCircle2, Activity, Zap, History } from "lucide-react";
 import { useArkStream, describeEvent } from "@/lib/useArkStream";
 import { Link } from "wouter";
-import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/useAuth";
 import { api } from "@/lib/api";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { motion, AnimatePresence } from "framer-motion";
+import { ArkIdentityCard, type ArkIdentity } from "@/components/dashboard/ArkIdentityCard";
+import { LhcsSignal, type LhcsData } from "@/components/dashboard/LhcsSignal";
+import { CcmiPillars, type CcmiPillarData } from "@/components/dashboard/CcmiPillars";
+import { JstCcmiDoughnuts } from "@/components/dashboard/JstCcmiDoughnuts";
+import { FlywheelCard, type FlywheelCta } from "@/components/dashboard/FlywheelCard";
 
 interface AssessmentData {
   id: string;
@@ -39,9 +43,10 @@ interface AssessmentData {
   jstRawJobs?: number | null;
   jstRawSkills?: number | null;
   jstRawTalent?: number | null;
-  upskillingPlans: any[];
-  pivotOpportunities: any[];
-  transferabilityVectors: any[];
+  upskillingPlans: unknown[];
+  pivotOpportunities: unknown[];
+  transferabilityVectors: unknown[];
+  createdAt?: string;
 }
 
 export default function Dashboard() {
@@ -52,7 +57,33 @@ export default function Dashboard() {
   const [emailSent, setEmailSent] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [emailError, setEmailError] = useState(false);
-  const { snapshot, events, pulse } = useArkStream(!!user);
+  const [identity, setIdentity] = useState<ArkIdentity | null>(null);
+  const [pillars, setPillars] = useState<CcmiPillarData | null>(null);
+  const [lhcs, setLhcs] = useState<LhcsData | null>(null);
+  const [cta, setCta] = useState<{ top: FlywheelCta | null; ranked: FlywheelCta[] }>({ top: null, ranked: [] });
+  const { snapshot, events, pulse, lastIdentity } = useArkStream(!!user);
+
+  const loadIdentity = () => {
+    Promise.all([
+      api.getArkIdentity().catch(() => null),
+      api.getArkFlywheelCta().catch(() => ({ top: null, ranked: [] })),
+    ]).then(([id, ctaResp]) => {
+      const idResp = id as
+        | (ArkIdentity & { pillars?: CcmiPillarData; lhcs?: LhcsData })
+        | null;
+      if (idResp) {
+        setIdentity({
+          arkScore: idResp.arkScore, jstIndex: idResp.jstIndex, ccmi: idResp.ccmi,
+          ccmiTier: idResp.ccmiTier, vmstLevel: idResp.vmstLevel, typology: idResp.typology,
+          arkIdString: idResp.arkIdString, resumeReplacementPct: idResp.resumeReplacementPct,
+        });
+        if (idResp.pillars) setPillars(idResp.pillars);
+        if (idResp.lhcs) setLhcs(idResp.lhcs);
+      }
+      const ctaTyped = ctaResp as { top: FlywheelCta | null; ranked: FlywheelCta[] } | null;
+      setCta(ctaTyped || { top: null, ranked: [] });
+    });
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -63,7 +94,13 @@ export default function Dashboard() {
       setAssessment(latest);
       setAllAssessments(Array.isArray(all) ? all : []);
     }).finally(() => setLoading(false));
+    loadIdentity();
   }, [user]);
+
+  useEffect(() => {
+    if (lastIdentity) loadIdentity();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastIdentity?.arkScore]);
 
   const handleSendEmail = async () => {
     if (!user) return;
@@ -81,11 +118,13 @@ export default function Dashboard() {
     }
   };
 
-  const historyData = allAssessments
-    .sort((a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime())
-    .map((a: any, i: number) => ({
+  const historyData = [...allAssessments]
+    .sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime())
+    .map((a, i) => ({
       label: `#${i + 1}`,
-      date: a.createdAt ? new Date(a.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : `Assessment ${i + 1}`,
+      date: a.createdAt
+        ? new Date(a.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+        : `Assessment ${i + 1}`,
       total: a.jstTotal,
       jobs: a.jstJobs,
       skills: a.jstSkills,
@@ -129,6 +168,9 @@ export default function Dashboard() {
         </div>
         
         <div className="flex items-center gap-4">
+          <Link href="/ark/history" className="inline-flex items-center justify-center border border-secondary/50 text-secondary hover:bg-secondary/10 font-mono text-xs uppercase tracking-widest h-10 px-4" data-testid="link-ark-history">
+            <History className="w-4 h-4 mr-2" /> ARK History
+          </Link>
           <Link href="/report" className="inline-flex items-center justify-center border border-primary/50 text-primary hover:bg-primary/10 font-mono text-xs uppercase tracking-widest h-10 px-4">
             <FileText className="w-4 h-4 mr-2" /> Export Brief
           </Link>
@@ -140,6 +182,24 @@ export default function Dashboard() {
               <p className="text-primary font-display font-bold uppercase tracking-wider">{assessment.readinessProfile}</p>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* ── PDD §3.4 — ARK identity surface ── */}
+      {identity && <ArkIdentityCard identity={identity} />}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <LhcsSignal data={lhcs} />
+        <FlywheelCard top={cta.top} ranked={cta.ranked} />
+      </div>
+
+      {/* PDD ARK-MVP-005 Breakdown row: JST/CCMI doughnuts + 7-pillar bar. */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {identity && (
+          <JstCcmiDoughnuts jst={identity.jstIndex} ccmi={identity.ccmi} />
+        )}
+        <div className="lg:col-span-2">
+          <CcmiPillars data={pillars} />
         </div>
       </div>
 
@@ -161,14 +221,15 @@ export default function Dashboard() {
             <div>
               <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono">Live ARK Score</p>
               <motion.p
-                key={snapshot?.jstTotal ?? 0}
+                key={lastIdentity?.arkScore ?? identity?.arkScore ?? 0}
                 initial={{ scale: 0.95, color: "#FFDD00" }}
                 animate={{ scale: 1, color: "#00B4D8" }}
                 transition={{ duration: 0.6 }}
                 className="text-2xl font-display font-bold"
-                data-testid="text-live-jst-total"
+                data-testid="text-live-ark-score"
               >
-                {snapshot?.jstTotal ?? assessment.jstTotal}
+                {lastIdentity?.arkScore ?? identity?.arkScore ?? snapshot?.arkScore ?? 0}
+                <span className="text-xs text-muted-foreground/60 font-mono ml-1">/600</span>
               </motion.p>
             </div>
           </div>
@@ -203,12 +264,12 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <JSTGauge 
-          score={assessment.jstTotal}
+          score={identity?.jstIndex ?? assessment.jstTotal}
           jobsScore={assessment.jstJobs}
           skillsScore={assessment.jstSkills}
           talentScore={assessment.jstTalent}
           percentileRank={assessment.percentileRank ?? 72}
-          previousScore={assessment.previousScore ?? Math.round(assessment.jstTotal * 0.95)}
+          previousScore={assessment.previousScore ?? Math.round((identity?.jstIndex ?? assessment.jstTotal) * 0.95)}
           industryAverage={assessment.industryAverage ?? 195}
           contextCraftLevel={assessment.contextCraftLevel || undefined}
           contextCraftMultiplier={assessment.contextCraftMultiplier || undefined}

@@ -22,6 +22,7 @@ import SchoolDashboard from "@/pages/school-dashboard";
 import PlayPage from "@/pages/play";
 import MarketplacePage from "@/pages/marketplace";
 import GuinPublicPage from "@/pages/guin-public";
+import ArkHistoryPage from "@/pages/ark-history";
 import PrivacyPage from "@/pages/legal/privacy";
 import TermsPage from "@/pages/legal/terms";
 
@@ -46,6 +47,7 @@ function Router() {
         <Route path="/marketplace/publish" component={MarketplacePage} />
         <Route path="/marketplace/:id" component={MarketplacePage} />
         <Route path="/marketplace" component={MarketplacePage} />
+        <Route path="/ark/history" component={ArkHistoryPage} />
         <Route path="/u/:username" component={GuinPublicPage} />
         <Route path="/privacy" component={PrivacyPage} />
         <Route path="/terms" component={TermsPage} />

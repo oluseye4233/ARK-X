@@ -178,6 +178,13 @@ export const api = {
 
   seed: () => apiRequest("/api/seed", { method: "POST" }),
 
+  // ── PDD §3.4 — ARK identity surfaces ──
+  getArkIdentity: () => apiRequest("/api/ark/identity"),
+  recalcArk: () => apiRequest("/api/ark/recalc", { method: "POST" }),
+  getArkFlywheelCta: () => apiRequest("/api/ark/flywheel-cta"),
+  getArkHistory: (days = 90) => apiRequest(`/api/ark/history?days=${days}`),
+  getArkLhcs: () => apiRequest("/api/ark/lhcs"),
+
   uploadResume: async (file: File, _userId: string) => {
     const formData = new FormData();
     formData.append("resume", file);

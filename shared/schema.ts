@@ -114,6 +114,91 @@ export const ARK_SCORE_DELTAS = {
   SPC_FIRST_SALE_AS_CREATOR: 8,
 } as const;
 
+// ── PDD §3.4: ARK Score / JST / CCMI / VMST identity layer ──
+// JST  = [(J×0.30)+(S×0.40)+(T×0.30)]×3   (J/S/T 0-100 → JST 0-300)
+// CCMI = [(P1×0.18)+(P2×0.14)+(P3×0.18)+(P4×0.12)+(P5×0.10)+(P6×0.10)+(P7×0.18)]×3 (P1-P7 0-100 → CCMI 0-300)
+// ARK  = JST + CCMI (0-600)
+export const JST_WEIGHTS = { jobs: 0.30, skills: 0.40, talent: 0.30 } as const;
+export const CCMI_PILLAR_WEIGHTS = {
+  P1: 0.18, P2: 0.14, P3: 0.18, P4: 0.12, P5: 0.10, P6: 0.10, P7: 0.18,
+} as const;
+export type CcmiPillarKey = keyof typeof CCMI_PILLAR_WEIGHTS;
+export const CCMI_PILLAR_LABELS: Record<CcmiPillarKey, string> = {
+  P1: "System & Architecture",
+  P2: "Role Clarity",
+  P3: "Instruction Mastery",
+  P4: "Example Curation",
+  P5: "Constraint Discipline",
+  P6: "Format Precision",
+  P7: "Data Stewardship",
+};
+
+// CC multiplier bands keyed off CCMI score (PDD §3.4)
+export const CCMI_TIER_BANDS = [
+  { min: 270, max: 300, tier: "T5", label: "Master",       multiplier: 1.35 },
+  { min: 240, max: 269, tier: "T4", label: "Expert",       multiplier: 1.30 },
+  { min: 200, max: 239, tier: "T3", label: "Specialist",   multiplier: 1.20 },
+  { min: 150, max: 199, tier: "T2", label: "Practitioner", multiplier: 1.10 },
+  { min: 100, max: 149, tier: "T1", label: "Foundational", multiplier: 1.05 },
+  { min: 0,   max: 99,  tier: "T0", label: "Unverified",   multiplier: 1.00 },
+] as const;
+export type CcmiTier = typeof CCMI_TIER_BANDS[number]["tier"];
+
+// ARK Score tier labels (0-600)
+export const ARK_TIERS = [
+  { min: 540, max: 600, key: "Legendary",   color: "#AA44FF" },
+  { min: 480, max: 539, key: "Exceptional", color: "#44AA44" },
+  { min: 400, max: 479, key: "Strong",      color: "#4488FF" },
+  { min: 300, max: 399, key: "Capable",     color: "#FFDD00" },
+  { min: 200, max: 299, key: "Developing",  color: "#FFA500" },
+  { min: 0,   max: 199, key: "Foundation",  color: "#FF4444" },
+] as const;
+export type ArkTierKey = typeof ARK_TIERS[number]["key"];
+
+// VMST (Vulnerability-Mitigation Status Tier) — 5 levels L0-L4
+export const VMST_LEVELS = [
+  { key: "L0", label: "Exposed",    min: 0,   color: "#FF4444" },
+  { key: "L1", label: "At Risk",    min: 100, color: "#FFA500" },
+  { key: "L2", label: "Stable",     min: 200, color: "#FFDD00" },
+  { key: "L3", label: "Protected",  min: 350, color: "#4488FF" },
+  { key: "L4", label: "Flourishing",min: 480, color: "#44AA44" },
+] as const;
+export type VmstLevel = typeof VMST_LEVELS[number]["key"];
+
+export const TYPOLOGIES = ["A", "O", "C"] as const; // Architect / Orchestrator / Conductor
+export type TypologyKey = typeof TYPOLOGIES[number];
+
+// LHCS thresholds (PDD ARK-MVP-011) — three-light signal
+export const LHCS_THRESHOLDS = { green: 70, amber: 40 } as const;
+export type LhcsLight = "green" | "amber" | "red";
+// Aggregate status uses the same tri-state palette as the individual lights so
+// the client can render a single LhcsLight badge for either field.
+export type LhcsStatus = LhcsLight;
+
+export function lhcsLight(score: number): LhcsLight {
+  if (score >= LHCS_THRESHOLDS.green) return "green";
+  if (score >= LHCS_THRESHOLDS.amber) return "amber";
+  return "red";
+}
+
+// Daily / monthly caps per PDD §3.4 flywheel rules
+export const FLYWHEEL_CAPS = {
+  CCGE_PER_DAY: 15,
+  SPHINX_PER_30D: 20,
+} as const;
+
+export const ARK_TRIGGER_TYPES = [
+  "assessment.completed",
+  "ccge.session",
+  "cert.upgraded",
+  "spc.published",
+  "spc.sold",
+  "spc.purchased",
+  "manual.recompute",
+  "backfill",
+] as const;
+export type ArkTriggerType = typeof ARK_TRIGGER_TYPES[number];
+
 // ── SPHINX Marketplace constants ───────────────────────────
 export const SPC_CREATOR_SHARE_PCT = 70;
 export const SPC_PLATFORM_SHARE_PCT = 30;
@@ -155,6 +240,19 @@ export const users = pgTable("users", {
   institution: text("institution"),
   uploadsThisMonth: integer("uploads_this_month").default(0),
   uploadResetDate: timestamp("upload_reset_date"),
+  // PDD §3.4 ARK identity surface (denormalized snapshot of latest scoring run)
+  arkScore: integer("ark_score").notNull().default(0),
+  jstIndex: integer("jst_index").notNull().default(0),
+  ccmi: integer("ccmi").notNull().default(0),
+  ccmiTier: text("ccmi_tier").notNull().default("T0"),
+  vmstLevel: text("vmst_level").notNull().default("L0"),
+  typology: text("typology"),
+  arkIdString: text("ark_id_string"),
+  cprScore: integer("cpr_score").notNull().default(0),
+  mpsScore: integer("mps_score").notNull().default(0),
+  lcisScore: integer("lcis_score").notNull().default(0),
+  lhcsStatus: text("lhcs_status").notNull().default("red"),
+  resumeReplacementPct: integer("resume_replacement_pct").notNull().default(0),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({
@@ -164,6 +262,18 @@ export const insertUserSchema = createInsertSchema(users).omit({
   institution: true,
   uploadsThisMonth: true,
   uploadResetDate: true,
+  arkScore: true,
+  jstIndex: true,
+  ccmi: true,
+  ccmiTier: true,
+  vmstLevel: true,
+  typology: true,
+  arkIdString: true,
+  cprScore: true,
+  mpsScore: true,
+  lcisScore: true,
+  lhcsStatus: true,
+  resumeReplacementPct: true,
 });
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -417,7 +527,7 @@ export const KNIGHT_RANKS = [
 export type KnightRankKey = typeof KNIGHT_RANKS[number]["key"];
 
 export function computeKnightRank(totalKcseEarned: number) {
-  let current = KNIGHT_RANKS[0];
+  let current: (typeof KNIGHT_RANKS)[number] = KNIGHT_RANKS[0];
   for (const r of KNIGHT_RANKS) {
     if (totalKcseEarned >= r.min) current = r;
   }
@@ -574,3 +684,58 @@ export type HivePrecheck = {
   reasons: string[];
   warnings: string[];
 };
+
+// ── PDD §3.4 new identity tables ───────────────────────────
+// CCMI pillar scores — 1 row per user (latest snapshot), pillars 0-100
+export const ccmiPillarScores = pgTable("ccmi_pillar_scores", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique(),
+  p1: integer("p1").notNull().default(0),
+  p2: integer("p2").notNull().default(0),
+  p3: integer("p3").notNull().default(0),
+  p4: integer("p4").notNull().default(0),
+  p5: integer("p5").notNull().default(0),
+  p6: integer("p6").notNull().default(0),
+  p7: integer("p7").notNull().default(0),
+  composite: integer("composite").notNull().default(0),
+  tier: text("tier").notNull().default("T0"),
+  multiplier: real("multiplier").notNull().default(1.0),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+export const insertCcmiPillarScoresSchema = createInsertSchema(ccmiPillarScores).omit({ id: true, updatedAt: true });
+export type InsertCcmiPillarScores = z.infer<typeof insertCcmiPillarScoresSchema>;
+export type CcmiPillarScores = typeof ccmiPillarScores.$inferSelect;
+
+// ARK score history — append-only timeline of score deltas + triggers
+export const arkScoreHistory = pgTable("ark_score_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  arkScore: integer("ark_score").notNull(),
+  jstIndex: integer("jst_index").notNull(),
+  ccmi: integer("ccmi").notNull(),
+  delta: integer("delta").notNull().default(0),
+  trigger: text("trigger").notNull(),
+  triggerMeta: jsonb("trigger_meta").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export const insertArkScoreHistorySchema = createInsertSchema(arkScoreHistory).omit({ id: true, createdAt: true });
+export type InsertArkScoreHistory = z.infer<typeof insertArkScoreHistorySchema>;
+export type ArkScoreHistory = typeof arkScoreHistory.$inferSelect;
+
+// LHCS signals — 1 row per user (latest CPR/MPS/LCIS snapshot)
+export const lhcsSignals = pgTable("lhcs_signals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique(),
+  cprScore: integer("cpr_score").notNull().default(0),
+  mpsScore: integer("mps_score").notNull().default(0),
+  lcisScore: integer("lcis_score").notNull().default(0),
+  cprLight: text("cpr_light").notNull().default("red"),
+  mpsLight: text("mps_light").notNull().default("red"),
+  lcisLight: text("lcis_light").notNull().default("red"),
+  status: text("status").notNull().default("red"),
+  readinessPct: integer("readiness_pct").notNull().default(0),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+export const insertLhcsSignalsSchema = createInsertSchema(lhcsSignals).omit({ id: true, updatedAt: true });
+export type InsertLhcsSignals = z.infer<typeof insertLhcsSignalsSchema>;
+export type LhcsSignals = typeof lhcsSignals.$inferSelect;

@@ -1,5 +1,10 @@
 import type { InsertAssessment, InsertUpskillingPlan, InsertPivotOpportunity, InsertTransferabilityVector, ContextCraftLevel } from "@shared/schema";
 import { CONTEXT_CRAFT_LEVELS } from "@shared/schema";
+import { computeJst } from "./scoringEngine";
+
+function computeJstIndex(sub: { jobs: number; skills: number; talent: number }): number {
+  return computeJst(sub).jstIndex;
+}
 
 interface AnalysisResult {
   assessment: Omit<InsertAssessment, "userId">;
@@ -549,7 +554,11 @@ export function analyzeResume(resumeText: string, contextCraftLevel: ContextCraf
   const jstJobs = clamp(Math.round(jstRawJobs * ccMultiplier), minAfterCraft, 100);
   const jstSkills = clamp(Math.round(jstRawSkills * ccMultiplier), minAfterCraft, 100);
   const jstTalent = clamp(Math.round(jstRawTalent * ccMultiplier), minAfterCraft, 100);
-  const jstTotal = jstJobs + jstSkills + jstTalent;
+  // Source jstTotal from the canonical PDD JST formula in scoringEngine
+  // (weighted Jobs·.30 + Skills·.40 + Talent·.30) · 3, so the persisted
+  // assessment row matches what arkRecalc later derives. Avoids the prior
+  // unweighted jobs+skills+talent sum that produced a divergent dialect.
+  const jstTotal = computeJstIndex({ jobs: jstJobs, skills: jstSkills, talent: jstTalent });
 
   const riskModifiers: Array<{ task: string; automatable: number }> = [];
   for (const riskTask of AUTOMATION_RISK_TASKS) {

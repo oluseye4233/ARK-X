@@ -12,13 +12,32 @@ export type ArkEvent = {
 export type ArkSnapshot = {
   jstTotal: number;
   jstSkills: number;
+  arkScore: number;
+  ccmi: number;
+  ccmiTier: string;
+  vmstLevel: string;
+  arkIdString: string | null;
+  lhcsStatus: "green" | "amber" | "red";
   recent: ArkEvent[];
+};
+
+export type ArkIdentityUpdate = {
+  arkScore: number;
+  jstIndex: number;
+  ccmi: number;
+  ccmiTier: string;
+  vmstLevel: string;
+  arkTier: string;
+  arkIdString: string | null;
+  appliedDelta: number;
+  capReason: string | null;
 };
 
 export function useArkStream(enabled: boolean) {
   const [snapshot, setSnapshot] = useState<ArkSnapshot | null>(null);
   const [events, setEvents] = useState<ArkEvent[]>([]);
   const [pulse, setPulse] = useState(0);
+  const [lastIdentity, setLastIdentity] = useState<ArkIdentityUpdate | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
@@ -44,13 +63,29 @@ export function useArkStream(enabled: boolean) {
       });
     });
 
-    es.onerror = () => {
-    };
+    es.addEventListener("ark.identity", (e: MessageEvent) => {
+      const upd = JSON.parse(e.data) as ArkIdentityUpdate;
+      setLastIdentity(upd);
+      setSnapshot((s) =>
+        s
+          ? {
+              ...s,
+              arkScore: upd.arkScore,
+              ccmi: upd.ccmi,
+              ccmiTier: upd.ccmiTier,
+              vmstLevel: upd.vmstLevel,
+              arkIdString: upd.arkIdString,
+              jstTotal: upd.jstIndex,
+            }
+          : s,
+      );
+    });
 
+    es.onerror = () => {};
     return () => es.close();
   }, [enabled]);
 
-  return { snapshot, events, pulse };
+  return { snapshot, events, pulse, lastIdentity };
 }
 
 export function describeEvent(e: ArkEvent): string {

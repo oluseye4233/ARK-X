@@ -3,6 +3,15 @@
 ## Overview
 Full-stack AI-powered career intelligence platform featuring JST Index scoring, AI Vulnerability assessment, 12-Vector Transferability Radar, Dynamic Upskilling Navigator, Junglenomics FORGE card integration, and Enterprise Workforce Intelligence dashboard.
 
+## Phase J — PDD MVP Alignment (current)
+- ARK identity: ARK = JST + CCMI, max 600. JST = (J·.30+S·.40+T·.30)·3, CCMI = weighted P1-P7 sum · 3.
+- Single canonical scorer: `server/scoringEngine.ts` (pure, unit-tested via `npm run test:scoring`).
+- Single writer of identity fields: `server/arkRecalc.ts` updates `users` + `ccmi_pillar_scores` + `lhcs_signals` + `ark_score_history` atomically and preserves the ARK invariant under cap scaling.
+- Flywheel caps: CCGE +15 ARK/day, SPHINX +20 ARK/30d. `manual.recompute` and `backfill` triggers can never award positive ARK (downward sync only).
+- Live updates: orchestrator emits `ark.identity` SSE on flywheel events; dashboard consumes via `useArkStream`.
+- History stat semantics: `/ark/history` "Top CCMI Pillar" card reflects the current top pillar (not a per-pillar 30-day lift) — `ark_score_history` rows do not persist per-pillar snapshots, so true per-pillar lift would require a schema addition.
+- Migration: `migrations/0000_phase_j_pdd_alignment.sql` is fully idempotent (CREATE TABLE IF NOT EXISTS + ADD COLUMN IF NOT EXISTS) so it applies safely on fresh deploys and the live DB.
+
 ## Architecture
 - **Frontend**: React + Vite, TailwindCSS, Recharts, Framer Motion, wouter routing
 - **Backend**: Express.js on port 5000, serves API + Vite dev server
@@ -243,3 +252,33 @@ Run `POST /api/seed` to populate: 10 Jnomics cards (card-001 through card-010), 
 
 ## Deployment
 Target: autoscale
+## Phase J — PDD MVP Alignment (May 2026)
+
+ARK ONECRAFT now implements the Product Definition Document §3.4 scoring spec end-to-end.
+
+**Core score model:** ARK = JST (0-300) + CCMI (0-300) → 0-600.
+- JST formula: `((J×0.30 + S×0.40 + T×0.30) × 3)` from resume sub-scores.
+- CCMI formula: `((P1×0.18 + P2×0.14 + P3×0.18 + P4×0.12 + P5×0.10 + P6×0.10 + P7×0.18) × 3)` from 7 prompt-craft pillars.
+- Tiers: Foundation / Developing / Capable / Strong / Exceptional / Legendary. CCMI bands T0-T5 with multipliers 1.00-1.35. VMST levels L0-L4.
+
+**New schema (shared/schema.ts):** 12 identity columns on `users` (arkScore, jstIndex, ccmi, ccmiTier, vmstLevel, typology, arkIdString, cprScore, mpsScore, lcisScore, lhcsStatus, resumeReplacementPct) + 3 new tables: `ccmi_pillar_scores`, `ark_score_history`, `lhcs_signals`.
+
+**New server modules:**
+- `server/scoringEngine.ts` — pure JST/CCMI/ARK math + ARK-ID hash.
+- `server/ccmiDerivation.ts` — derives 7-pillar vector from resume signals + cert level.
+- `server/lhcs.ts` — Live Human Career Signal (CPR/MPS/LCIS lights).
+- `server/flywheelCta.ts` — 10-branch decision tree for the next-best-move CTA.
+- `server/arkRecalc.ts` — single recalc entry point with daily/30d caps (CCGE +15/day, SPHINX +20/30d) and atomic persistence.
+- `server/arkBackfill.ts` — migration backfill for existing users.
+- `server/ai/identity.ts` — 3-stage Claude narrative pipeline with deterministic fallback.
+
+**New API endpoints:** `GET /api/ark/identity`, `POST /api/ark/recalc`, `GET /api/ark/flywheel-cta`, `GET /api/ark/history?days=N`, `GET /api/ark/lhcs`, `POST /api/admin/ark/backfill`. The `/api/ark-score/stream` SSE channel now also emits `ark.identity` events.
+
+**Orchestrator wiring:** every `assessment.completed`, `game.session.finished`, `cert.upgraded`, `spc.published`, and `spc.purchased` event triggers `recalcArkForUser(...)` post-write. Caps bypass for assessment/cert events.
+
+**New client surfaces:**
+- `client/src/components/dashboard/ArkIdentityCard.tsx` — top-of-dashboard ARK score + ARK-ID string.
+- `client/src/components/dashboard/LhcsSignal.tsx` — 3-light readiness signal.
+- `client/src/components/dashboard/CcmiPillars.tsx` — 7-pillar radar.
+- `client/src/components/dashboard/FlywheelCard.tsx` — next highest-leverage move CTA.
+- `client/src/pages/ark-history.tsx` — `/ark/history` route with 30/90/180/365-day score-trajectory area chart and event log.

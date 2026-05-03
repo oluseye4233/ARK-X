@@ -20,6 +20,9 @@ import {
   billingEvents, type BillingEvent, type InsertBillingEvent,
   arkEvents,
   aiUsage,
+  ccmiPillarScores, type CcmiPillarScores,
+  arkScoreHistory, type ArkScoreHistory,
+  lhcsSignals, type LhcsSignals,
 } from "@shared/schema";
 import { or } from "drizzle-orm";
 
@@ -102,6 +105,11 @@ export interface IStorage {
   getBillingEventsByUser(userId: string, limit?: number): Promise<BillingEvent[]>;
   exportUserData(userId: string): Promise<Record<string, any>>;
   deleteUserCascade(userId: string): Promise<{ deletedTables: Record<string, number> }>;
+  // PDD §3.4 — ARK identity surfaces
+  getCcmiPillars(userId: string): Promise<CcmiPillarScores | undefined>;
+  getLhcsSignals(userId: string): Promise<LhcsSignals | undefined>;
+  getArkScoreHistory(userId: string, days?: number): Promise<ArkScoreHistory[]>;
+
   completeCheckoutSession(args: {
     sessionId: string;
     actorUserId: string;
@@ -577,10 +585,35 @@ export class DatabaseStorage implements IStorage {
       await del("spcPurchases", tx.delete(spcPurchases).where(or(eq(spcPurchases.buyerId, userId), eq(spcPurchases.creatorId, userId))));
       await del("spcListings", tx.delete(spcListings).where(eq(spcListings.creatorId, userId)));
       await del("gameSessions", tx.delete(gameSessions).where(eq(gameSessions.userId, userId)));
+      // Phase J identity tables — must be cleared before users to honor
+      // GDPR-style account deletion (no FK cascade defined in migration).
+      await del("ccmiPillarScores", tx.delete(ccmiPillarScores).where(eq(ccmiPillarScores.userId, userId)));
+      await del("arkScoreHistory", tx.delete(arkScoreHistory).where(eq(arkScoreHistory.userId, userId)));
+      await del("lhcsSignals", tx.delete(lhcsSignals).where(eq(lhcsSignals.userId, userId)));
       await del("assessments", tx.delete(assessments).where(eq(assessments.userId, userId)));
       await del("users", tx.delete(users).where(eq(users.id, userId)));
       return { deletedTables: counts };
     });
+  }
+
+  async getCcmiPillars(userId: string): Promise<CcmiPillarScores | undefined> {
+    const [row] = await db.select().from(ccmiPillarScores).where(eq(ccmiPillarScores.userId, userId));
+    return row;
+  }
+
+  async getLhcsSignals(userId: string): Promise<LhcsSignals | undefined> {
+    const [row] = await db.select().from(lhcsSignals).where(eq(lhcsSignals.userId, userId));
+    return row;
+  }
+
+  async getArkScoreHistory(userId: string, days = 90): Promise<ArkScoreHistory[]> {
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const rows = await db
+      .select()
+      .from(arkScoreHistory)
+      .where(and(eq(arkScoreHistory.userId, userId), sql`${arkScoreHistory.createdAt} >= ${since}`))
+      .orderBy(arkScoreHistory.createdAt);
+    return rows;
   }
 
   async completeCheckoutSession(args: {

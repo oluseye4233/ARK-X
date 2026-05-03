@@ -17,6 +17,10 @@ import { requireAuth, requireSelf, currentUserId, loginSession } from "./auth";
 import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, type SubscriptionPlan, CCGE_TIERS, type CcgeTier, jcseToTier, ALL_CARD_PILLARS, SPC_MIN_CERT_TO_PUBLISH, SPC_PRICE_MIN, SPC_PRICE_MAX, SPC_STATUSES, CERT_LEVEL_RANK, ARK_SCORE_DELTAS, type CardPillar, type SpcStatus } from "@shared/schema";
 import { dealHand, scoreSession } from "./ccge";
 import { orchestrator } from "./orchestrator";
+import { recalcArkForUser } from "./arkRecalc";
+import { computeLhcsForUser } from "./lhcs";
+import { pickFlywheelCta, rankAllCtas } from "./flywheelCta";
+import { backfillAllUsers } from "./arkBackfill";
 import { scoreSessionWithClaude } from "./ai/kcse";
 import { generateResumeNarrative, ProTierRequiredError } from "./ai/narrative";
 import { generateScenario } from "./ai/scenarioGen";
@@ -61,9 +65,16 @@ export async function registerRoutes(
 
     const recent = await orchestrator.getRecentEvents(userId, 10);
     const latest = await storage.getLatestAssessment(userId);
+    const u = await storage.getUser(userId);
     res.write(`event: ark.snapshot\ndata: ${JSON.stringify({
       jstTotal: latest?.jstTotal ?? 0,
       jstSkills: latest?.jstSkills ?? 0,
+      arkScore: u?.arkScore ?? 0,
+      ccmi: u?.ccmi ?? 0,
+      ccmiTier: u?.ccmiTier ?? "T0",
+      vmstLevel: u?.vmstLevel ?? "L0",
+      arkIdString: u?.arkIdString ?? null,
+      lhcsStatus: u?.lhcsStatus ?? "red",
       recent,
     })}\n\n`);
 
@@ -103,7 +114,7 @@ export async function registerRoutes(
   app.post("/api/ai/resume-narrative/:assessmentId", requireAuth, async (req, res) => {
     try {
       const userId = currentUserId(req)!;
-      const a = await storage.getAssessment(req.params.assessmentId);
+      const a = await storage.getAssessment(String(req.params.assessmentId));
       if (!a) return res.status(404).json({ message: "Assessment not found" });
       if (a.userId !== userId) return res.status(403).json({ message: "You may only generate narratives for your own assessments." });
       const user = await storage.getUser(userId);
@@ -234,7 +245,7 @@ export async function registerRoutes(
   // available to the user themselves via /api/auth/me.
   app.get("/api/users/:id", async (req, res) => {
     try {
-      const user = await storage.getUser(req.params.id);
+      const user = await storage.getUser(String(req.params.id));
       if (!user) return res.status(404).json({ message: "User not found" });
       const sid = currentUserId(req);
       if (sid === user.id) {
@@ -260,7 +271,7 @@ export async function registerRoutes(
       for (const key of allowed) {
         if (req.body[key] !== undefined) updateData[key] = req.body[key];
       }
-      const updated = await storage.updateUser(req.params.id, updateData);
+      const updated = await storage.updateUser(String(req.params.id), updateData);
       if (!updated) return res.status(404).json({ message: "User not found" });
       const { password: _, ...safeUser } = updated;
       return res.json(safeUser);
@@ -320,7 +331,7 @@ export async function registerRoutes(
         });
       }
       const level = parsed.data;
-      const updated = await storage.updateUser(req.params.id, {
+      const updated = await storage.updateUser(String(req.params.id), {
         contextCraftCertLevel: level,
       });
       if (!updated) return res.status(404).json({ message: "User not found" });
@@ -360,10 +371,10 @@ export async function registerRoutes(
       if (plan !== "ENTERPRISE") {
         return res.status(409).json({ message: "Admin endpoint reserved for ENTERPRISE provisioning. Use /api/billing/checkout otherwise.", endpoint: "/api/billing/checkout" });
       }
-      const target = await storage.getUser(req.params.id);
+      const target = await storage.getUser(String(req.params.id));
       if (!target) return res.status(404).json({ message: "User not found" });
       const fromPlan = (target.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
-      const updated = await storage.updateUser(req.params.id, {
+      const updated = await storage.updateUser(String(req.params.id), {
         subscriptionPlan: plan, subscriptionStatus: "active",
       } as any);
       await storage.createBillingEvent({
@@ -465,7 +476,7 @@ export async function registerRoutes(
   app.get("/api/billing/checkout/:id", requireAuth, async (req, res) => {
     try {
       const userId = currentUserId(req)!;
-      const session = await storage.getCheckoutSession(req.params.id);
+      const session = await storage.getCheckoutSession(String(req.params.id));
       if (!session) return res.status(404).json({ message: "Checkout session not found" });
       if (session.userId !== userId) return res.status(403).json({ message: "Not your checkout session." });
       return res.json(session);
@@ -482,7 +493,7 @@ export async function registerRoutes(
       if (!p.success) return res.status(400).json({ message: "Invalid body" });
 
       const result = await storage.completeCheckoutSession({
-        sessionId: req.params.id,
+        sessionId: String(req.params.id),
         actorUserId: userId,
         success: p.data.success,
       });
@@ -611,6 +622,22 @@ export async function registerRoutes(
         );
       }
 
+      // Recompute ARK identity from the just-persisted assessment first,
+      // then emit so the SSE broadcast that subscribers may trigger off
+      // assessment.completed reflects the new identity values. Mirrors the
+      // resume-upload ordering for consistent live-update behavior.
+      try {
+        const { recalcArkForUser } = await import("./arkRecalc");
+        const recalc = await recalcArkForUser({
+          userId: sid,
+          trigger: "assessment.completed",
+          triggerMeta: { assessmentId: created.id, source: "POST /api/assessments" },
+        });
+        orchestrator.broadcastIdentity(sid, recalc);
+      } catch (recalcErr) {
+        console.error("[/api/assessments] recalc failed (best-effort):", recalcErr);
+      }
+
       await orchestrator.emit(sid, "assessment.completed", {
         assessmentId: created.id,
         jstTotal: created.jstTotal,
@@ -629,7 +656,7 @@ export async function registerRoutes(
 
   app.get("/api/assessments/user/:userId", requireSelf("userId"), async (req, res) => {
     try {
-      const results = await storage.getAssessmentsByUser(req.params.userId);
+      const results = await storage.getAssessmentsByUser(String(req.params.userId));
       return res.json(results);
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
@@ -638,7 +665,7 @@ export async function registerRoutes(
 
   app.get("/api/assessments/user/:userId/latest", requireSelf("userId"), async (req, res) => {
     try {
-      const assessment = await storage.getLatestAssessment(req.params.userId);
+      const assessment = await storage.getLatestAssessment(String(req.params.userId));
       if (!assessment) return res.status(404).json({ message: "No assessment found" });
       
       const [plans, pivots, vectors] = await Promise.all([
@@ -687,6 +714,25 @@ export async function registerRoutes(
 
       const analysis = analyzeResume(resumeText, certLevel);
 
+      // PDD §3.4 J.3 — derive 7-pillar CCMI vector from fresh resume signals
+      // (proxied off the JST sub-scores we just computed against the same text).
+      const { derivePillarsFromResume } = await import("./ccmiDerivation");
+      const aJobs = analysis.assessment.jstJobs ?? 0;
+      const aSkills = analysis.assessment.jstSkills ?? 0;
+      const aTalent = analysis.assessment.jstTalent ?? 0;
+      const proxy = {
+        technical: Math.max(0, (aJobs - 30) / 5),
+        leadership: Math.max(0, (aTalent - 25) / 5),
+        analytical: Math.max(0, (aSkills - 25) / 5),
+        communication: Math.max(0, (aTalent - 25) / 6),
+        innovation: Math.max(0, (aSkills - 25) / 6),
+        ai_adjacent: Math.max(0, (aJobs - 30) / 6),
+      };
+      const freshPillars = derivePillarsFromResume({
+        scores: proxy,
+        contextCraftLevel: certLevel,
+      });
+
       const created = await storage.createAssessment({
         ...analysis.assessment,
         userId,
@@ -704,6 +750,43 @@ export async function registerRoutes(
         ),
       ]);
 
+      // Run recalc with the fresh pillar override before broadcasting.
+      const avgAuto = (analysis.assessment.riskModifiers || []).length
+        ? (analysis.assessment.riskModifiers || []).reduce((s, r) => s + r.automatable, 0) /
+          (analysis.assessment.riskModifiers || []).length
+        : 50;
+      let recalc: Awaited<ReturnType<typeof recalcArkForUser>> | null = null;
+      try {
+        recalc = await recalcArkForUser({
+          userId,
+          trigger: "assessment.completed",
+          triggerMeta: { assessmentId: created.id, source: "resume.upload" },
+          pillarOverride: freshPillars,
+          freshScores: { categoryScores: proxy, avgAutomation: avgAuto },
+        });
+      } catch (recalcErr) {
+        console.error("[resume.upload] recalc failed (best-effort):", recalcErr);
+      }
+
+      // Stage-3 narrative (Claude Sonnet → fallback) — best-effort.
+      type IdentityNarrativeT = Awaited<ReturnType<
+        typeof import("./ai/identity")["generateIdentityNarrative"]
+      >>;
+      let narrative: IdentityNarrativeT | null = null;
+      if (recalc) {
+        try {
+          const { generateIdentityNarrative } = await import("./ai/identity");
+          narrative = await generateIdentityNarrative({
+            userId,
+            snapshot: recalc.snapshot,
+            trigger: "assessment.completed",
+          });
+        } catch (narrErr) {
+          console.error("[resume.upload] narrative failed (best-effort):", narrErr);
+        }
+      }
+
+      // Emit AFTER recalc so the SSE arkEvent payload reflects new ARK score.
       await orchestrator.emit(userId, "assessment.completed", {
         assessmentId: created.id,
         jstTotal: created.jstTotal,
@@ -715,9 +798,170 @@ export async function registerRoutes(
         pivotOpportunities: pivots,
         transferabilityVectors: vectors,
         extractedTextLength: resumeText.length,
+        identity: recalc
+          ? {
+              arkScore: recalc.snapshot.arkScore,
+              jstIndex: recalc.snapshot.jstIndex,
+              ccmi: recalc.snapshot.ccmi,
+              ccmiTier: recalc.snapshot.ccmiTier,
+              ccmiTierLabel: recalc.snapshot.ccmiTierLabel,
+              ccmiMultiplier: recalc.snapshot.ccmiMultiplier,
+              ccmiPillars: recalc.snapshot.ccmiPillars,
+              vmstLevel: recalc.snapshot.vmstLevel,
+              vmstLabel: recalc.snapshot.vmstLabel,
+              arkTier: recalc.snapshot.arkTierKey,
+              arkIdString: recalc.snapshot.arkIdString,
+              typology: recalc.snapshot.typology,
+              resumeReplacementPct: recalc.snapshot.resumeReplacementPct,
+            }
+          : null,
+        narrative,
       });
     } catch (err: any) {
       console.error("Resume upload error:", err);
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── PDD §3.4 — ARK identity surfaces ───────────────────
+  app.get("/api/ark/identity", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const [user, pillars, lhcs] = await Promise.all([
+        storage.getUser(userId),
+        storage.getCcmiPillars(userId),
+        storage.getLhcsSignals(userId),
+      ]);
+      if (!user) return res.status(404).json({ message: "User not found." });
+      if (user.arkScore !== user.jstIndex + user.ccmi) {
+        console.warn(
+          `[ark/identity] invariant drift userId=${userId} ark=${user.arkScore} ` +
+            `jst=${user.jstIndex} ccmi=${user.ccmi} (expected ${user.jstIndex + user.ccmi})`,
+        );
+      }
+      return res.json({
+        userId,
+        arkScore: user.arkScore,
+        jstIndex: user.jstIndex,
+        ccmi: user.ccmi,
+        ccmiTier: user.ccmiTier,
+        vmstLevel: user.vmstLevel,
+        typology: user.typology,
+        arkIdString: user.arkIdString,
+        cprScore: user.cprScore,
+        mpsScore: user.mpsScore,
+        lcisScore: user.lcisScore,
+        lhcsStatus: user.lhcsStatus,
+        resumeReplacementPct: user.resumeReplacementPct,
+        pillars: pillars
+          ? {
+              P1: pillars.p1, P2: pillars.p2, P3: pillars.p3, P4: pillars.p4,
+              P5: pillars.p5, P6: pillars.p6, P7: pillars.p7,
+              composite: pillars.composite,
+              tier: pillars.tier,
+              multiplier: pillars.multiplier,
+            }
+          : null,
+        lhcs: lhcs
+          ? {
+              cprScore: lhcs.cprScore,
+              mpsScore: lhcs.mpsScore,
+              lcisScore: lhcs.lcisScore,
+              cprLight: lhcs.cprLight,
+              mpsLight: lhcs.mpsLight,
+              lcisLight: lhcs.lcisLight,
+              status: lhcs.status,
+              readinessPct: lhcs.readinessPct,
+            }
+          : null,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/ark/recalc", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const result = await recalcArkForUser({
+        userId,
+        trigger: "manual.recompute",
+        triggerMeta: { source: "user.manual" },
+      });
+      return res.json({
+        snapshot: result.snapshot,
+        appliedDelta: result.appliedDelta,
+        rawDelta: result.rawDelta,
+        capReason: result.capReason,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/ark/flywheel-cta", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const [user, pillars, lhcs, latest] = await Promise.all([
+        storage.getUser(userId),
+        storage.getCcmiPillars(userId),
+        storage.getLhcsSignals(userId),
+        storage.getLatestAssessment(userId),
+      ]);
+      if (!user) return res.status(404).json({ message: "User not found." });
+      const input = {
+        user,
+        pillars: pillars ?? null,
+        lhcs: lhcs ?? null,
+        hasResumeUploaded: !!latest,
+      };
+      const top = pickFlywheelCta(input);
+      const all = rankAllCtas(input, 3);
+      return res.json({ top, ranked: all });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/ark/history", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const days = Math.max(1, Math.min(365, Number(req.query.days) || 90));
+      const rows = await storage.getArkScoreHistory(userId, days);
+      return res.json(rows);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/ark/lhcs", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const lhcs = await computeLhcsForUser(userId);
+      return res.json(lhcs);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Admin-only backfill endpoint (kept simple; ADMIN_USER_ID gate).
+  app.post("/api/admin/ark/backfill", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const adminId = process.env.ADMIN_USER_ID;
+      if (!adminId || userId !== adminId) {
+        // Self-only sync: caps prevent positive ARK awards via this path.
+        const result = await recalcArkForUser({
+          userId,
+          trigger: "backfill",
+          triggerMeta: { selfOnly: true },
+        });
+        return res.json({ scope: "self", snapshot: result.snapshot, appliedDelta: result.appliedDelta });
+      }
+      const summary = await backfillAllUsers();
+      return res.json({ scope: "all", ...summary });
+    } catch (err: any) {
+      console.error("Backfill error:", err);
       return res.status(500).json({ message: err.message });
     }
   });
@@ -815,7 +1059,7 @@ export async function registerRoutes(
 
   app.get("/api/ccge/sessions/:id", requireAuth, async (req, res) => {
     try {
-      const session = await storage.getGameSession(req.params.id);
+      const session = await storage.getGameSession(String(req.params.id));
       if (!session) return res.status(404).json({ message: "Session not found" });
       if (session.userId !== currentUserId(req)) {
         return res.status(403).json({ message: "You may only view your own sessions." });
@@ -836,7 +1080,7 @@ export async function registerRoutes(
       }
       const { playedCardIds, useClaude } = parsed.data;
 
-      const session = await storage.getGameSession(req.params.id);
+      const session = await storage.getGameSession(String(req.params.id));
       if (!session) return res.status(404).json({ message: "Session not found" });
       if (session.userId !== currentUserId(req)) {
         return res.status(403).json({ message: "You may only finish your own sessions." });
@@ -926,7 +1170,7 @@ export async function registerRoutes(
 
   app.get("/api/ccge/sessions/user/:userId", requireSelf("userId"), async (req, res) => {
     try {
-      const sessions = await storage.getGameSessionsByUser(req.params.userId);
+      const sessions = await storage.getGameSessionsByUser(String(req.params.userId));
       return res.json(sessions);
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
@@ -1040,7 +1284,7 @@ export async function registerRoutes(
 
   app.get("/api/sphinx/listings/:id", async (req, res) => {
     try {
-      const listing = await storage.getSpcListing(req.params.id);
+      const listing = await storage.getSpcListing(String(req.params.id));
       if (!listing) return res.status(404).json({ message: "Listing not found." });
       const creator = await storage.getUser(listing.creatorId);
       const safeCreator = creator
@@ -1067,12 +1311,12 @@ export async function registerRoutes(
   app.delete("/api/sphinx/listings/:id", requireAuth, async (req, res) => {
     try {
       const creatorId = currentUserId(req)!;
-      const listing = await storage.getSpcListing(req.params.id);
+      const listing = await storage.getSpcListing(String(req.params.id));
       if (!listing) return res.status(404).json({ message: "Listing not found." });
       if (listing.creatorId !== creatorId) {
         return res.status(403).json({ message: "Only the creator can delist." });
       }
-      const updated = await storage.updateSpcListing(req.params.id, { status: "delisted" });
+      const updated = await storage.updateSpcListing(String(req.params.id), { status: "delisted" });
       return res.json(updated);
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
@@ -1082,7 +1326,7 @@ export async function registerRoutes(
   app.post("/api/sphinx/listings/:id/purchase", requireAuth, async (req, res) => {
     try {
       const buyerId = currentUserId(req)!;
-      const outcome = await executePurchase(buyerId, req.params.id);
+      const outcome = await executePurchase(buyerId, String(req.params.id));
       await orchestrator.emit(buyerId, "spc.purchased", {
         listingId: outcome.listing.id,
         asRole: "buyer",
@@ -1102,7 +1346,7 @@ export async function registerRoutes(
 
   app.get("/api/sphinx/credits/:userId", requireSelf("userId"), async (req, res) => {
     try {
-      const credits = await getOrCreateCredits(req.params.userId);
+      const credits = await getOrCreateCredits(String(req.params.userId));
       return res.json(credits);
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
@@ -1111,7 +1355,7 @@ export async function registerRoutes(
 
   app.get("/api/sphinx/listings/by-creator/:userId", async (req, res) => {
     try {
-      const listings = await storage.getSpcListingsByCreator(req.params.userId);
+      const listings = await storage.getSpcListingsByCreator(String(req.params.userId));
       return res.json(listings);
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
@@ -1120,7 +1364,7 @@ export async function registerRoutes(
 
   app.get("/api/sphinx/sales/:userId", requireSelf("userId"), async (req, res) => {
     try {
-      const purchases = await storage.getSpcPurchasesByCreator(req.params.userId);
+      const purchases = await storage.getSpcPurchasesByCreator(String(req.params.userId));
       const totalEarned = purchases.reduce((s, p) => s + p.creatorShare, 0);
       return res.json({ purchases, totalEarned, salesCount: purchases.length });
     } catch (err: any) {
@@ -1130,7 +1374,7 @@ export async function registerRoutes(
 
   app.get("/api/sphinx/purchases/:userId", requireSelf("userId"), async (req, res) => {
     try {
-      const purchases = await storage.getSpcPurchasesByBuyer(req.params.userId);
+      const purchases = await storage.getSpcPurchasesByBuyer(String(req.params.userId));
       const listingIds = Array.from(new Set(purchases.map((p) => p.listingId)));
       const listings = await Promise.all(listingIds.map((id) => storage.getSpcListing(id)));
       const byId = new Map(listings.filter((l): l is NonNullable<typeof l> => !!l).map((l) => [l.id, l]));
@@ -1340,7 +1584,7 @@ export async function registerRoutes(
   // ── GUIN+ Identity ────────────────────────────────────
   app.get("/api/guin/by-id/:userId", async (req, res) => {
     try {
-      const profile = await buildGuinProfile(req.params.userId);
+      const profile = await buildGuinProfile(String(req.params.userId));
       if (!profile) return res.status(404).json({ message: "User not found." });
       return res.json(profile);
     } catch (err: any) {
@@ -1401,7 +1645,7 @@ export async function registerRoutes(
 
   app.get("/api/endorsements/by-recipient/:userId", async (req, res) => {
     try {
-      const list = await storage.getEndorsementsForUser(req.params.userId);
+      const list = await storage.getEndorsementsForUser(String(req.params.userId));
       return res.json(list);
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
