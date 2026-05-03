@@ -139,12 +139,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createUser(user: InsertUser): Promise<User> {
-    const [created] = await db.insert(users).values(user).returning();
+    // Hash password at the storage boundary so every code path (registration,
+    // seeders, integration tests) gets the same protection. Skip if the
+    // caller already passed a bcrypt hash (e.g. backfill replay).
+    const { hashPassword, isBcryptHash } = await import("./passwords");
+    const password = isBcryptHash(user.password) ? user.password : await hashPassword(user.password);
+    const [created] = await db.insert(users).values({ ...user, password }).returning();
     return created;
   }
 
   async updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined> {
-    const [updated] = await db.update(users).set(data).where(eq(users.id, id)).returning();
+    // If a fresh password is being written via updateUser, hash it the same
+    // way createUser does. Already-hashed values pass through unchanged.
+    let patch: Partial<InsertUser> = data;
+    if (typeof data.password === "string" && data.password.length > 0) {
+      const { hashPassword, isBcryptHash } = await import("./passwords");
+      const password = isBcryptHash(data.password) ? data.password : await hashPassword(data.password);
+      patch = { ...data, password };
+    }
+    const [updated] = await db.update(users).set(patch).where(eq(users.id, id)).returning();
     return updated;
   }
 

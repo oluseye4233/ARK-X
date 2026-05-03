@@ -72,14 +72,18 @@ async function applyCaps(
   userId: string,
   trigger: ArkTriggerType,
   rawDelta: number,
-): Promise<{ cappedDelta: number; reason: string | null }> {
-  if (rawDelta <= 0) return { cappedDelta: rawDelta, reason: null };
+): Promise<{ cappedDelta: number; intendedCap: number | null; reason: string | null }> {
+  // intendedCap is the strict upper bound on the persisted delta when a cap
+  // fires. Returned alongside cappedDelta so the caller can hard-clamp after
+  // proportional scaling rounds JST/CCMI components and would otherwise drift
+  // ±1-2 above the cap.
+  if (rawDelta <= 0) return { cappedDelta: rawDelta, intendedCap: null, reason: null };
 
   // User-driven sync paths (manual recompute, self-backfill) must never
   // award positive ARK — otherwise they'd let a user "catch up" deltas
   // previously withheld by CCGE/SPHINX caps. Downward sync still applies.
   if (trigger === "manual.recompute" || trigger === "backfill") {
-    return { cappedDelta: 0, reason: "Sync recompute does not award ARK" };
+    return { cappedDelta: 0, intendedCap: 0, reason: "Sync recompute does not award ARK" };
   }
 
   if (trigger === "ccge.session") {
@@ -97,7 +101,11 @@ async function applyCaps(
     const used = recent.reduce((s, r) => s + Math.max(0, r.delta), 0);
     const remaining = Math.max(0, FLYWHEEL_CAPS.CCGE_PER_DAY - used);
     if (rawDelta > remaining) {
-      return { cappedDelta: remaining, reason: `Daily CCGE cap (+${FLYWHEEL_CAPS.CCGE_PER_DAY}) reached` };
+      return {
+        cappedDelta: remaining,
+        intendedCap: remaining,
+        reason: `Daily CCGE cap (+${FLYWHEEL_CAPS.CCGE_PER_DAY}) reached`,
+      };
     }
   }
 
@@ -119,11 +127,15 @@ async function applyCaps(
       .reduce((s, r) => s + Math.max(0, r.delta), 0);
     const remaining = Math.max(0, FLYWHEEL_CAPS.SPHINX_PER_30D - used);
     if (rawDelta > remaining) {
-      return { cappedDelta: remaining, reason: `30-day SPHINX cap (+${FLYWHEEL_CAPS.SPHINX_PER_30D}) reached` };
+      return {
+        cappedDelta: remaining,
+        intendedCap: remaining,
+        reason: `30-day SPHINX cap (+${FLYWHEEL_CAPS.SPHINX_PER_30D}) reached`,
+      };
     }
   }
 
-  return { cappedDelta: rawDelta, reason: null };
+  return { cappedDelta: rawDelta, intendedCap: null, reason: null };
 }
 
 export async function recalcArkForUser(opts: RecalcOptions): Promise<RecalcResult> {
@@ -232,10 +244,12 @@ export async function recalcArkForUser(opts: RecalcOptions): Promise<RecalcResul
 
   // Apply caps (only on positive deltas; downward adjustments always apply).
   let cappedDelta = rawDelta;
+  let intendedCap: number | null = null;
   let capReason: string | null = null;
   if (!opts.bypassCaps && rawDelta > 0) {
     const r = await applyCaps(opts.userId, opts.trigger, rawDelta);
     cappedDelta = r.cappedDelta;
+    intendedCap = r.intendedCap;
     capReason = r.reason;
   }
 
@@ -295,25 +309,81 @@ export async function recalcArkForUser(opts: RecalcOptions): Promise<RecalcResul
         })
       : null;
 
+    // HARD-CAP ENFORCEMENT — independent integer rounding of jstIndex/ccmi
+    // can leave (scaledJstIndex + scaledCcmi - previousArk) drifting up to
+    // ±1-2 above the intended cap. Per PDD §3.4 the +15/day CCGE and
+    // +20/30d SPHINX caps are STRICT ceilings, never approximate, so we
+    // shave any overshoot off scaledCcmi (and re-derive its dependent
+    // bands). We pick CCMI as the absorber because shaving it preserves
+    // the JST sub-score recomposition (jobs/skills/talent → jstIndex).
+    let finalScaledJst = scaledJstIndex;
+    let finalScaledCcmi = scaledCcmi;
+    let finalScaledArk = scaledArk;
+    let finalCcmiBand = ccmiBand;
+    let finalArkBand = arkBand;
+    let finalVmst = vmst;
+    let finalArkId = newArkId;
+    if (intendedCap !== null && finalScaledArk - previousArk > intendedCap) {
+      const overshoot = finalScaledArk - previousArk - intendedCap;
+      // Absorber #1: shave from CCMI (preserves JST sub-score recomposition).
+      finalScaledCcmi = clampInt(finalScaledCcmi - overshoot, 0, 300);
+      finalScaledArk = clampInt(finalScaledJst + finalScaledCcmi, 0, 600);
+      // Absorber #2 (fallback): if CCMI saturated at 0 and overshoot remains
+      // (e.g. JST rounding contributed), shave the residual off JST so the
+      // post-condition `delta ≤ intendedCap` is provably strict in every
+      // branch, including invariant-drift edges. Sub-scores are not exposed
+      // by the snapshot used for cap-respecting awards, so leaving them
+      // proportional from the earlier scaling is acceptable.
+      const residual = finalScaledArk - previousArk - intendedCap;
+      if (residual > 0) {
+        finalScaledJst = clampInt(finalScaledJst - residual, 0, 300);
+        finalScaledArk = clampInt(finalScaledJst + finalScaledCcmi, 0, 600);
+      }
+      finalCcmiBand = CCMI_TIER_BANDS.find((b) => finalScaledCcmi >= b.min && finalScaledCcmi <= b.max)!;
+      finalArkBand =
+        ARK_TIERS.find((b) => finalScaledArk >= b.min && finalScaledArk <= b.max)
+        ?? ARK_TIERS[ARK_TIERS.length - 1];
+      finalVmst = VMST_LEVELS[0];
+      for (const lvl of VMST_LEVELS) if (finalScaledArk >= lvl.min) finalVmst = lvl;
+      finalArkId = snapshot.typology
+        ? buildArkIdString({
+            userId: opts.userId,
+            arkTierKey: finalArkBand.key as ArkTierKey,
+            ccmiTier: finalCcmiBand.tier as CcmiTier,
+            typology: snapshot.typology,
+            vmstLevel: finalVmst.key as VmstLevel,
+          })
+        : null;
+    }
+
     finalSnapshot = {
       ...snapshot,
-      arkScore: scaledArk,
-      jstIndex: scaledJstIndex,
+      arkScore: finalScaledArk,
+      jstIndex: finalScaledJst,
       jstSub: scaledJstSub,
-      ccmi: scaledCcmi,
-      ccmiTier: ccmiBand.tier as CcmiTier,
-      ccmiTierLabel: ccmiBand.label,
-      ccmiMultiplier: ccmiBand.multiplier,
+      ccmi: finalScaledCcmi,
+      ccmiTier: finalCcmiBand.tier as CcmiTier,
+      ccmiTierLabel: finalCcmiBand.label,
+      ccmiMultiplier: finalCcmiBand.multiplier,
       ccmiPillars: scaledPillars,
-      arkTierKey: arkBand.key as ArkTierKey,
-      arkTierColor: arkBand.color,
-      vmstLevel: vmst.key as VmstLevel,
-      vmstLabel: vmst.label,
-      arkIdString: newArkId,
+      arkTierKey: finalArkBand.key as ArkTierKey,
+      arkTierColor: finalArkBand.color,
+      vmstLevel: finalVmst.key as VmstLevel,
+      vmstLabel: finalVmst.label,
+      arkIdString: finalArkId,
     };
     // Recompute the actual applied delta after rounding so persisted history
     // is exact, and the PDD invariant arkScore === jstIndex + ccmi holds.
-    cappedDelta = scaledArk - previousArk;
+    cappedDelta = finalScaledArk - previousArk;
+    // Final post-condition — caps are STRICT ceilings per PDD §3.4. If we
+    // ever land here, both absorbers above failed (shouldn't be reachable
+    // because previousArk + intendedCap ∈ [0,600] always), so fail loud.
+    if (intendedCap !== null && cappedDelta > intendedCap) {
+      throw new Error(
+        `arkRecalc cap invariant violated: delta=${cappedDelta} > intendedCap=${intendedCap} ` +
+          `(prevArk=${previousArk}, finalJst=${finalScaledJst}, finalCcmi=${finalScaledCcmi})`,
+      );
+    }
   }
   const finalArk = finalSnapshot.arkScore;
 

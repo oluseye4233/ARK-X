@@ -19,16 +19,20 @@ import { recalcArkForUser } from "../arkRecalc";
 
 const createdUserIds: string[] = [];
 
-// After a cap clamps the raw delta, the engine proportionally scales the JST
-// and CCMI components so the persisted snapshot still satisfies the invariant
-// arkScore === jstIndex + ccmi. That scaling rounds each component to the
-// nearest integer, so the actual persisted delta can land 1-2 points above
-// or below the nominal cap. These helpers encode that tolerance so tests pin
-// the contract ("cap is enforced") without coupling to round-direction.
-function assertNear(actual: number, expected: number, tolerance: number, msg?: string) {
+// PDD §3.4 caps are STRICT ceilings. After proportional JST/CCMI scaling,
+// the engine hard-clamps any rounding overshoot off the CCMI component so
+// the persisted delta is guaranteed ≤ the nominal cap (and may be 1-2
+// points BELOW it when the round-down lands short — that's fine, under-cap
+// is permitted). Tests assert (a) delta never exceeds the cap and (b)
+// delta is within 2 points of the cap (so rounding can't silently zero it).
+function assertCapStrict(actual: number, cap: number, msg?: string) {
   assert.ok(
-    Math.abs(actual - expected) <= tolerance,
-    msg ?? `expected ${actual} within ±${tolerance} of ${expected}`,
+    actual <= cap,
+    msg ?? `cap exceeded: ${actual} > ${cap} (caps are STRICT ceilings per PDD §3.4)`,
+  );
+  assert.ok(
+    actual >= cap - 2,
+    `cap under-shot by more than 2: ${actual} < ${cap - 2} (suggests rounding regression)`,
   );
 }
 
@@ -108,7 +112,7 @@ test("recalcArkForUser: ccge.session daily cap clamps delta to FLYWHEEL_CAPS.CCG
   // Raw composed score is 600; previous user.arkScore default is 0 → rawDelta=600.
   // With no prior ccge.session rows in the 24h window, the daily cap fires.
   assert.equal(result.rawDelta, 600);
-  assertNear(result.cappedDelta, FLYWHEEL_CAPS.CCGE_PER_DAY, 2, "delta clamped near +15/day cap");
+  assertCapStrict(result.cappedDelta, FLYWHEEL_CAPS.CCGE_PER_DAY);
   assert.ok(result.cappedDelta < result.rawDelta, "cap must shrink raw delta");
   assert.match(result.capReason!, /Daily CCGE cap/);
 
@@ -138,7 +142,7 @@ test("recalcArkForUser: ccge.session subsequent calls within 24h consume remaini
     pillarOverride,
   });
   // 5 budget remaining (15 cap - 10 used). Allow ±2 rounding tolerance.
-  assertNear(r1.cappedDelta, 5, 2, "remaining budget after prior 10 used");
+  assertCapStrict(r1.cappedDelta, 5);
   assert.match(r1.capReason!, /Daily CCGE cap/);
 
   // Another call → 0 budget left → clamped to 0.
@@ -170,7 +174,7 @@ test("recalcArkForUser: ccge.session prior usage older than 24h does NOT consume
     trigger: "ccge.session",
     pillarOverride,
   });
-  assertNear(r.cappedDelta, FLYWHEEL_CAPS.CCGE_PER_DAY, 2, "old row outside window must not consume cap");
+  assertCapStrict(r.cappedDelta, FLYWHEEL_CAPS.CCGE_PER_DAY);
   assert.match(r.capReason!, /Daily CCGE cap/);
 });
 

@@ -170,6 +170,8 @@ export type TypologyKey = typeof TYPOLOGIES[number];
 
 // LHCS thresholds (PDD ARK-MVP-011) — three-light signal
 export const LHCS_THRESHOLDS = { green: 70, amber: 40 } as const;
+// PDD §3.4 — LHCS composite is a weighted blend, NOT a simple average.
+export const LHCS_WEIGHTS = { cpr: 0.35, mps: 0.35, lcis: 0.30 } as const;
 export type LhcsLight = "green" | "amber" | "red";
 // Aggregate status uses the same tri-state palette as the individual lights so
 // the client can render a single LhcsLight badge for either field.
@@ -179,6 +181,21 @@ export function lhcsLight(score: number): LhcsLight {
   if (score >= LHCS_THRESHOLDS.green) return "green";
   if (score >= LHCS_THRESHOLDS.amber) return "amber";
   return "red";
+}
+
+// PDD §3.4 — composite readiness is the threshold target, not the lights.
+//   readiness = round(0.35·CPR + 0.35·MPS + 0.30·LCIS)
+//   status:    readiness ≥ 70 → green (ACTIVE)
+//              40 ≤ readiness < 70 → amber (DEVELOPING)
+//              readiness < 40 → red (BASELINE)
+export function lhcsReadiness(cpr: number, mps: number, lcis: number): number {
+  const c = Math.max(0, Math.min(100, cpr));
+  const m = Math.max(0, Math.min(100, mps));
+  const l = Math.max(0, Math.min(100, lcis));
+  return Math.round(c * LHCS_WEIGHTS.cpr + m * LHCS_WEIGHTS.mps + l * LHCS_WEIGHTS.lcis);
+}
+export function lhcsStatusFromReadiness(readiness: number): LhcsStatus {
+  return lhcsLight(readiness);
 }
 
 // Daily / monthly caps per PDD §3.4 flywheel rules

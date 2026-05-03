@@ -221,16 +221,39 @@ test("buildArkIdString: tier prefix uses first 3 letters uppercased for every AR
 // ─────────────────────────────────────────────────────────────
 // LHCS lights
 // ─────────────────────────────────────────────────────────────
-test("computeLhcs: all >=70 → green; any <40 → red; otherwise amber", () => {
-  assert.equal(computeLhcs({ cpr: 80, mps: 75, lcis: 90 }).status, "green");
-  assert.equal(computeLhcs({ cpr: 80, mps: 75, lcis: 30 }).status, "red");
-  assert.equal(computeLhcs({ cpr: 50, mps: 50, lcis: 50 }).status, "amber");
+test("computeLhcs: readiness is weighted (0.35·CPR + 0.35·MPS + 0.30·LCIS), NOT a simple average", () => {
+  // round(80*0.35 + 60*0.35 + 40*0.30) = round(28 + 21 + 12) = 61
+  assert.equal(computeLhcs({ cpr: 80, mps: 60, lcis: 40 }).readinessPct, 61);
+  // round(100*0.35 + 0*0.35 + 0*0.30) = 35 (vs simple-avg 33)
+  assert.equal(computeLhcs({ cpr: 100, mps: 0, lcis: 0 }).readinessPct, 35);
+  // All three at 50 → exactly 50 (formula sums to 1.0)
+  assert.equal(computeLhcs({ cpr: 50, mps: 50, lcis: 50 }).readinessPct, 50);
 });
 
-test("computeLhcs: threshold boundaries (70 = green, 40 = amber, 39 = red)", () => {
+test("computeLhcs: status is the categorical band of the COMPOSITE (not a roll-up of lights)", () => {
+  // composite 70+ → green (ACTIVE)
+  assert.equal(computeLhcs({ cpr: 80, mps: 80, lcis: 80 }).status, "green");
+  // 80*0.35 + 80*0.35 + 30*0.30 = 28+28+9 = 65 → amber (DEVELOPING)
+  // even though one light is red, the COMPOSITE is in DEVELOPING
+  assert.equal(computeLhcs({ cpr: 80, mps: 80, lcis: 30 }).status, "amber");
+  // 30*0.35 + 30*0.35 + 30*0.30 = 30 → red (BASELINE)
+  assert.equal(computeLhcs({ cpr: 30, mps: 30, lcis: 30 }).status, "red");
+});
+
+test("computeLhcs: threshold boundaries on composite (70 = green, 40 = amber, 39 = red)", () => {
+  // 70 across the board → composite 70 → green
   assert.equal(computeLhcs({ cpr: 70, mps: 70, lcis: 70 }).status, "green");
+  // 40 across the board → composite 40 → amber
   assert.equal(computeLhcs({ cpr: 40, mps: 40, lcis: 40 }).status, "amber");
-  assert.equal(computeLhcs({ cpr: 39, mps: 50, lcis: 50 }).status, "red");
+  // 39 across the board → composite 39 → red
+  assert.equal(computeLhcs({ cpr: 39, mps: 39, lcis: 39 }).status, "red");
+});
+
+test("computeLhcs: per-component lights still use the 70/40 thresholds", () => {
+  const r = computeLhcs({ cpr: 80, mps: 50, lcis: 30 });
+  assert.equal(r.cprLight, "green");
+  assert.equal(r.mpsLight, "amber");
+  assert.equal(r.lcisLight, "red");
 });
 
 // ─────────────────────────────────────────────────────────────

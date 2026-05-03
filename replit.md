@@ -7,10 +7,15 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 - ARK identity: ARK = JST + CCMI, max 600. JST = (J·.30+S·.40+T·.30)·3, CCMI = weighted P1-P7 sum · 3.
 - Single canonical scorer: `server/scoringEngine.ts` (pure, unit-tested via `npm run test:scoring`).
 - Single writer of identity fields: `server/arkRecalc.ts` updates `users` + `ccmi_pillar_scores` + `lhcs_signals` + `ark_score_history` atomically and preserves the ARK invariant under cap scaling.
-- Flywheel caps: CCGE +15 ARK/day, SPHINX +20 ARK/30d. `manual.recompute` and `backfill` triggers can never award positive ARK (downward sync only).
+- Flywheel caps: CCGE +15 ARK/day, SPHINX +20 ARK/30d. Caps are STRICT ceilings — any rounding overshoot from proportional JST/CCMI scaling is hard-clamped off CCMI before persistence (`applyCaps` returns `intendedCap`; recalc enforces `delta ≤ intendedCap`). `manual.recompute` and `backfill` triggers can never award positive ARK (downward sync only).
+- LHCS composite: PDD-exact weighted blend `round(0.35·CPR + 0.35·MPS + 0.30·LCIS)`, with status as the threshold band of the COMPOSITE (≥70 green/ACTIVE, 40-69 amber/DEVELOPING, <40 red/BASELINE) — NOT a roll-up of the three lights. Constants in `shared/schema.ts::LHCS_WEIGHTS`, helpers `lhcsReadiness` / `lhcsStatusFromReadiness`.
 - Live updates: orchestrator emits `ark.identity` SSE on flywheel events; dashboard consumes via `useArkStream`.
 - History stat semantics: `/ark/history` "Top CCMI Pillar" card reflects the current top pillar (not a per-pillar 30-day lift) — `ark_score_history` rows do not persist per-pillar snapshots, so true per-pillar lift would require a schema addition.
 - Migration: `migrations/0000_phase_j_pdd_alignment.sql` is fully idempotent (CREATE TABLE IF NOT EXISTS + ADD COLUMN IF NOT EXISTS) so it applies safely on fresh deploys and the live DB.
+
+## Auth & Password Storage
+- Passwords are bcrypt-hashed at the storage boundary (`server/storage.ts::createUser` and `updateUser`) using bcryptjs cost 10. The `server/passwords.ts` helpers detect existing bcrypt hashes (`$2[aby]$` prefix) and pass them through unchanged.
+- `/api/auth/login` uses `verifyPassword`, which transparently accepts legacy plaintext rows AND silently rehashes them on first successful login — no password reset required for pre-existing users. Wrong password → 401.
 
 ## Architecture
 - **Frontend**: React + Vite, TailwindCSS, Recharts, Framer Motion, wouter routing

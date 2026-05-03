@@ -160,8 +160,20 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Username and password required" });
       }
       const user = await storage.getUserByUsername(username);
-      if (!user || user.password !== password) {
-        return res.status(401).json({ message: "Invalid credentials" });
+      if (!user) return res.status(401).json({ message: "Invalid credentials" });
+      const { verifyPassword, hashPassword } = await import("./passwords");
+      const { ok, needsRehash } = await verifyPassword(password, user.password);
+      if (!ok) return res.status(401).json({ message: "Invalid credentials" });
+      // Silently upgrade legacy plaintext rows to bcrypt on first successful
+      // login so we drain pre-existing rows without forcing a password reset.
+      if (needsRehash) {
+        try {
+          const fresh = await hashPassword(password);
+          // storage.updateUser detects bcrypt prefix and passes through.
+          await storage.updateUser(user.id, { password: fresh });
+        } catch {
+          /* best-effort; login still succeeds even if rehash write fails */
+        }
       }
       await loginSession(req, user.id);
       const { password: _, ...safeUser } = user;

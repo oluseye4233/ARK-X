@@ -6,11 +6,21 @@
  *   MPS  (Marketplace Performance Score) — derived from SPC sales / purchases / publishing
  *   LCIS (Learning Cycle Intensity)      — derived from CCGE sessions + cert upgrades over 30 days
  *
- * Each becomes a green/amber/red light at 70 / 40 thresholds.
- * Aggregate status uses the same tri-state palette: all three green → green,
- * any red → red, otherwise amber. Readiness % = round((cpr+mps+lcis)/3).
+ * Each becomes a green/amber/red light at 70 / 40 thresholds (per-component).
+ *
+ * Composite readiness % follows PDD §3.4 — a WEIGHTED blend, not an average:
+ *   readiness = round(0.35·CPR + 0.35·MPS + 0.30·LCIS)
+ * Aggregate status is the categorical bucket of that composite (green ≥70,
+ * amber 40-69, red <40), NOT a roll-up of the three lights. This matches the
+ * PDD MVP-011 status semantics (BASELINE / DEVELOPING / ACTIVE).
  */
-import { lhcsLight, type LhcsLight, type LhcsStatus } from "@shared/schema";
+import {
+  lhcsLight,
+  lhcsReadiness,
+  lhcsStatusFromReadiness,
+  type LhcsLight,
+  type LhcsStatus,
+} from "@shared/schema";
 import { storage } from "./storage";
 
 const clamp = (v: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, Math.round(v)));
@@ -25,12 +35,6 @@ export type LhcsBundle = {
   status: LhcsStatus;
   readinessPct: number;
 };
-
-function aggregateStatus(lights: LhcsLight[]): LhcsStatus {
-  if (lights.every((l) => l === "green")) return "green";
-  if (lights.some((l) => l === "red")) return "red";
-  return "amber";
-}
 
 export async function computeLhcsForUser(userId: string): Promise<LhcsBundle> {
   // CPR: average of transferability vectors from latest assessment, blended with pivot feasibility max.
@@ -89,8 +93,9 @@ export async function computeLhcsForUser(userId: string): Promise<LhcsBundle> {
   const cprLight = lhcsLight(cprScore);
   const mpsLight = lhcsLight(mpsScore);
   const lcisLight = lhcsLight(lcisScore);
-  const status = aggregateStatus([cprLight, mpsLight, lcisLight]);
-  const readinessPct = clamp((cprScore + mpsScore + lcisScore) / 3);
+  // PDD §3.4 — weighted composite, threshold-categorical status.
+  const readinessPct = lhcsReadiness(cprScore, mpsScore, lcisScore);
+  const status = lhcsStatusFromReadiness(readinessPct);
 
   return { cprScore, mpsScore, lcisScore, cprLight, mpsLight, lcisLight, status, readinessPct };
 }

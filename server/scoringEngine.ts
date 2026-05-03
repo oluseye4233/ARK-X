@@ -82,7 +82,10 @@ export function arkTierLabel(arkScore: number): ArkTierKey {
   return arkTier(arkScore).key;
 }
 
-// LHCS three-light signal. Mirrors thresholds in server/lhcs.ts.
+// LHCS three-light signal — PDD §3.4 weighted composite + threshold status.
+// Production callers use server/lhcs.ts::computeLhcsForUser; this pure helper
+// exists so the formula can be unit-tested in isolation.
+import { lhcsReadiness, lhcsStatusFromReadiness, lhcsLight } from "@shared/schema";
 export function computeLhcs(opts: { cpr: number; mps: number; lcis: number }): {
   status: "green" | "amber" | "red";
   readinessPct: number;
@@ -90,18 +93,11 @@ export function computeLhcs(opts: { cpr: number; mps: number; lcis: number }): {
   mpsLight: "green" | "amber" | "red";
   lcisLight: "green" | "amber" | "red";
 } {
-  const lightFor = (n: number): "green" | "amber" | "red" =>
-    n >= 70 ? "green" : n >= 40 ? "amber" : "red";
-  const cprLight = lightFor(opts.cpr);
-  const mpsLight = lightFor(opts.mps);
-  const lcisLight = lightFor(opts.lcis);
-  const lights = [cprLight, mpsLight, lcisLight];
-  const status: "green" | "amber" | "red" = lights.every((l) => l === "green")
-    ? "green"
-    : lights.some((l) => l === "red")
-      ? "red"
-      : "amber";
-  const readinessPct = Math.round((opts.cpr + opts.mps + opts.lcis) / 3);
+  const cprLight = lhcsLight(opts.cpr);
+  const mpsLight = lhcsLight(opts.mps);
+  const lcisLight = lhcsLight(opts.lcis);
+  const readinessPct = lhcsReadiness(opts.cpr, opts.mps, opts.lcis);
+  const status = lhcsStatusFromReadiness(readinessPct);
   return { status, readinessPct, cprLight, mpsLight, lcisLight };
 }
 
