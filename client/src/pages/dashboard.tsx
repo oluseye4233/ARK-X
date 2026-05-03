@@ -94,13 +94,32 @@ export default function Dashboard() {
       setAssessment(latest);
       setAllAssessments(Array.isArray(all) ? all : []);
     }).finally(() => setLoading(false));
+    // Initial load — re-fetch only once on mount. From here on, ark.identity
+    // SSE events update the cards in place (PDD §3.4 perf hardening) so we
+    // no longer hammer /api/ark/identity + /api/ark/flywheel-cta on every
+    // CCGE round / marketplace event.
     loadIdentity();
   }, [user]);
 
+  // Apply full-payload SSE updates directly without re-fetching.
   useEffect(() => {
-    if (lastIdentity) loadIdentity();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastIdentity?.arkScore]);
+    if (!lastIdentity) return;
+    if (lastIdentity.identity) {
+      setIdentity(lastIdentity.identity);
+    }
+    if (lastIdentity.pillars !== undefined) {
+      setPillars(lastIdentity.pillars);
+    }
+    if (lastIdentity.lhcs !== undefined) {
+      setLhcs(lastIdentity.lhcs);
+    }
+    if (lastIdentity.flywheel) {
+      setCta({
+        top: lastIdentity.flywheel.top,
+        ranked: lastIdentity.flywheel.ranked ?? [],
+      });
+    }
+  }, [lastIdentity]);
 
   const handleSendEmail = async () => {
     if (!user) return;

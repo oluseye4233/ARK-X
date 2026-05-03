@@ -4,6 +4,8 @@ import { db } from "./db";
 import { arkEvents, type ArkEvent, type ArkEventType, type ArkTriggerType } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 import type { RecalcResult } from "./arkRecalc";
+import { storage } from "./storage";
+import { pickFlywheelCta, rankAllCtas } from "./flywheelCta";
 
 // Map legacy ArkEventType → PDD §3.4 ArkTriggerType for the recalc pipeline.
 // `assessment.completed` is intentionally absent — the route handlers call
@@ -80,7 +82,7 @@ class Orchestrator {
             // cert.upgraded is unbounded; gameplay/marketplace use caps.
             bypassCaps: trigger === "cert.upgraded",
           });
-          this.broadcastIdentity(userId, result);
+          await this.broadcastIdentity(userId, result);
         } catch (recalcErr) {
           console.error("[orchestrator] recalc failed (best-effort):", trigger, recalcErr);
         }
@@ -92,17 +94,85 @@ class Orchestrator {
     }
   }
 
-  broadcastIdentity(userId: string, result: RecalcResult) {
+  async broadcastIdentity(userId: string, result: RecalcResult) {
+    // Build a *complete* identity payload so subscribed clients can update
+    // their dashboard cards in place — no follow-up GET /api/ark/identity or
+    // /api/ark/flywheel-cta required (PDD §3.4 perf hardening). The recalc
+    // pipeline already persisted user/pillars/lhcs in the same transaction;
+    // we re-read so the payload exactly matches what the REST endpoints
+    // would have served on the next refetch.
+    const snap = result.snapshot;
+    let pillarsBlock: Record<string, unknown> | null = null;
+    let lhcsBlock: Record<string, unknown> | null = null;
+    let flywheel: { top: unknown; ranked: unknown[] } = { top: null, ranked: [] };
+    try {
+      const [pillarsRow, lhcsRow, latestAssessment] = await Promise.all([
+        storage.getCcmiPillars(userId),
+        storage.getLhcsSignals(userId),
+        storage.getLatestAssessment(userId),
+      ]);
+      if (pillarsRow) {
+        pillarsBlock = {
+          P1: pillarsRow.p1, P2: pillarsRow.p2, P3: pillarsRow.p3, P4: pillarsRow.p4,
+          P5: pillarsRow.p5, P6: pillarsRow.p6, P7: pillarsRow.p7,
+          composite: pillarsRow.composite,
+          tier: pillarsRow.tier,
+          multiplier: pillarsRow.multiplier,
+        };
+      }
+      if (lhcsRow) {
+        lhcsBlock = {
+          cprScore: lhcsRow.cprScore,
+          mpsScore: lhcsRow.mpsScore,
+          lcisScore: lhcsRow.lcisScore,
+          cprLight: lhcsRow.cprLight,
+          mpsLight: lhcsRow.mpsLight,
+          lcisLight: lhcsRow.lcisLight,
+          status: lhcsRow.status,
+          readinessPct: lhcsRow.readinessPct,
+        };
+      }
+      const ctaInput = {
+        user: result.user,
+        pillars: pillarsRow ?? null,
+        lhcs: lhcsRow ?? null,
+        hasResumeUploaded: !!latestAssessment,
+      };
+      flywheel = {
+        top: pickFlywheelCta(ctaInput),
+        ranked: rankAllCtas(ctaInput, 3),
+      };
+    } catch (err) {
+      console.error("[orchestrator] identity payload enrichment failed:", err);
+    }
+
     const payload = JSON.stringify({
-      arkScore: result.snapshot.arkScore,
-      jstIndex: result.snapshot.jstIndex,
-      ccmi: result.snapshot.ccmi,
-      ccmiTier: result.snapshot.ccmiTier,
-      vmstLevel: result.snapshot.vmstLevel,
-      arkTier: result.snapshot.arkTierKey,
-      arkIdString: result.snapshot.arkIdString,
+      // Top-level (back-compat) summary fields used by the live ARK score badge.
+      arkScore: snap.arkScore,
+      jstIndex: snap.jstIndex,
+      ccmi: snap.ccmi,
+      ccmiTier: snap.ccmiTier,
+      vmstLevel: snap.vmstLevel,
+      arkTier: snap.arkTierKey,
+      arkIdString: snap.arkIdString,
       appliedDelta: result.appliedDelta,
       capReason: result.capReason,
+      // Full identity block — mirrors GET /api/ark/identity response shape so
+      // the dashboard can update ArkIdentityCard / pillars / lhcs / flywheel
+      // without a follow-up fetch.
+      identity: {
+        arkScore: snap.arkScore,
+        jstIndex: snap.jstIndex,
+        ccmi: snap.ccmi,
+        ccmiTier: snap.ccmiTier,
+        vmstLevel: snap.vmstLevel,
+        typology: snap.typology,
+        arkIdString: snap.arkIdString,
+        resumeReplacementPct: snap.resumeReplacementPct,
+      },
+      pillars: pillarsBlock,
+      lhcs: lhcsBlock,
+      flywheel,
     });
     for (const s of Array.from(this.subs)) {
       if (s.userId !== userId) continue;

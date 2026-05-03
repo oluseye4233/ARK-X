@@ -21,6 +21,47 @@ export type ArkSnapshot = {
   recent: ArkEvent[];
 };
 
+export type ArkIdentityFull = {
+  arkScore: number;
+  jstIndex: number;
+  ccmi: number;
+  ccmiTier: string;
+  vmstLevel: string;
+  typology: string | null;
+  arkIdString: string | null;
+  resumeReplacementPct: number;
+};
+
+export type ArkPillarsBlock = {
+  P1: number; P2: number; P3: number; P4: number; P5: number; P6: number; P7: number;
+  composite: number;
+  tier: string;
+  multiplier: number;
+};
+
+export type ArkLhcsBlock = {
+  cprScore: number;
+  mpsScore: number;
+  lcisScore: number;
+  cprLight: "green" | "amber" | "red";
+  mpsLight: "green" | "amber" | "red";
+  lcisLight: "green" | "amber" | "red";
+  status: "green" | "amber" | "red";
+  readinessPct: number;
+};
+
+export type ArkFlywheelCtaBlock = {
+  position: number;
+  id: string;
+  headline: string;
+  subtext: string;
+  ctaLabel: string;
+  ctaHref: string;
+  pillar?: string;
+  expectedDelta: number;
+  urgency: "critical" | "high" | "medium" | "low";
+};
+
 export type ArkIdentityUpdate = {
   arkScore: number;
   jstIndex: number;
@@ -31,6 +72,13 @@ export type ArkIdentityUpdate = {
   arkIdString: string | null;
   appliedDelta: number;
   capReason: string | null;
+  // Full payload added so dashboard cards can update in place without an
+  // extra fetch on every score tick. Optional for back-compat with any
+  // older server build still emitting the minimal shape.
+  identity?: ArkIdentityFull;
+  pillars?: ArkPillarsBlock | null;
+  lhcs?: ArkLhcsBlock | null;
+  flywheel?: { top: ArkFlywheelCtaBlock | null; ranked: ArkFlywheelCtaBlock[] };
 };
 
 export function useArkStream(enabled: boolean) {
