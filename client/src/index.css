@@ -112,4 +112,18 @@
   .neon-border {
     box-shadow: 0 0 10px hsl(var(--primary) / 0.2), inset 0 0 10px hsl(var(--primary) / 0.2);
   }
+  /* 3D flip-card utilities (used by CCGE Arena cards) */
+  .perspective-1200 {
+    perspective: 1200px;
+  }
+  .preserve-3d {
+    transform-style: preserve-3d;
+  }
+  .backface-hidden {
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+  }
+  .rotate-y-180 {
+    transform: rotateY(180deg);
+  }
 }

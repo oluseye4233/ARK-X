@@ -17,8 +17,8 @@ import {
   Loader2,
   Crown,
   Target,
-  Award,
 } from "lucide-react";
+import { CcgeCard } from "@/components/play/CcgeCard";
 
 type Card = {
   id: string;
@@ -437,24 +437,17 @@ export default function PlayPage() {
             </span>
           </div>
           {playedCards.length === 0 ? (
-            <p className="text-sm text-muted-foreground/60 italic">Click a card from your hand to play it into your prompt.</p>
+            <p className="text-sm text-muted-foreground/60 italic">Click a card from your hand to play it into your prompt. Tap the eye icon to reveal the underlying prompt.</p>
           ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
               {playedCards.map((c, i) => (
-                <button
+                <CcgeCard
                   key={c.id}
-                  onClick={() => removePlayed(c.id)}
-                  data-testid={`card-played-${c.id}`}
-                  className={cn(
-                    "text-left p-3 rounded-lg border transition-all hover:scale-95 hover:opacity-70",
-                    PILLAR_COLORS[c.pillar]
-                  )}
-                >
-                  <div className="text-xs font-mono opacity-70">#{i + 1}</div>
-                  <div className="text-2xl">{c.emoji}</div>
-                  <div className="text-xs font-bold mt-1 truncate">{c.name}</div>
-                  <div className="text-[10px] opacity-70 mt-1">Click to remove</div>
-                </button>
+                  card={c}
+                  variant="played"
+                  index={i + 1}
+                  onRemove={() => removePlayed(c.id)}
+                />
               ))}
             </div>
           )}
@@ -476,40 +469,15 @@ export default function PlayPage() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
             {handCards.map((c) => {
               const isPlayed = played.includes(c.id);
+              const handFull = played.length >= 5;
               return (
-                <button
+                <CcgeCard
                   key={c.id}
-                  onClick={() => playCard(c.id)}
-                  disabled={isPlayed || played.length >= 5}
-                  data-testid={`card-hand-${c.id}`}
-                  className={cn(
-                    "text-left p-4 rounded-lg border transition-all flex flex-col gap-2",
-                    PILLAR_COLORS[c.pillar],
-                    isPlayed
-                      ? "opacity-30 cursor-not-allowed"
-                      : "hover:scale-105 hover:shadow-lg cursor-pointer"
-                  )}
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="text-3xl">{c.emoji}</div>
-                    <Badge variant="outline" className={cn("text-[9px] font-mono uppercase", TYPE_BADGE[c.type])}>
-                      {c.type}
-                    </Badge>
-                  </div>
-                  <div>
-                    <div className="font-display font-bold text-sm leading-tight">{c.name}</div>
-                    <div className="text-[10px] font-mono uppercase opacity-70 mt-0.5">{c.pillar}</div>
-                  </div>
-                  <div className="text-xs leading-snug opacity-90 flex-1">{c.description}</div>
-                  <div className="flex items-center justify-between text-[10px] font-mono pt-1 border-t border-current/20">
-                    <span className="flex items-center gap-1">
-                      <Award className="h-3 w-3" /> KCSE {c.baseKcse}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Coins className="h-3 w-3" /> {c.tokenCost}t
-                    </span>
-                  </div>
-                </button>
+                  card={c}
+                  variant="hand"
+                  disabled={isPlayed || handFull}
+                  onPlay={() => playCard(c.id)}
+                />
               );
             })}
           </div>
