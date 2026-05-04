@@ -30,7 +30,9 @@ import {
   Loader2,
   TrendingUp,
   User,
+  FileText,
 } from "lucide-react";
+import { FlippableCard } from "@/components/ui/flippable-card";
 
 const PILLARS_FILTER = ["All", ...ALL_CARD_PILLARS] as const;
 
@@ -160,38 +162,88 @@ function ListingsList() {
       {listings && listings.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {listings.map((l) => (
-            <Link
+            <FlippableCard
               key={l.id}
-              href={`/marketplace/${l.id}`}
-              data-testid={`card-listing-${l.id}`}
-              className="glass-card p-5 rounded-xl hover:border-primary/30 border border-transparent transition-all hover:scale-[1.01] cursor-pointer flex flex-col gap-3"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <PillarBadge pillar={l.pillar} />
-                <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-amber-400/10 border border-amber-400/30">
-                  <Coins className="h-3.5 w-3.5 text-amber-400" />
-                  <span className="font-mono text-sm font-bold text-amber-400" data-testid={`text-price-${l.id}`}>
-                    {l.priceCredits}
-                  </span>
+              testId={`listing-${l.id}`}
+              minHeight="240px"
+              flipLabel={`Reveal scoring for ${l.title}`}
+              unflipLabel={`Hide scoring for ${l.title}`}
+              faceClassName="glass-card rounded-xl border border-transparent"
+              backFaceClassName="glass-card rounded-xl border border-primary/30"
+              front={
+                <Link
+                  href={`/marketplace/${l.id}`}
+                  data-testid={`card-listing-${l.id}`}
+                  className="flex flex-col gap-3 p-5 h-full hover:border-primary/30 transition-all hover:scale-[1.01] cursor-pointer"
+                >
+                  <div className="flex items-start justify-between gap-2 pr-9">
+                    <PillarBadge pillar={l.pillar} />
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-amber-400/10 border border-amber-400/30">
+                      <Coins className="h-3.5 w-3.5 text-amber-400" />
+                      <span className="font-mono text-sm font-bold text-amber-400" data-testid={`text-price-${l.id}`}>
+                        {l.priceCredits}
+                      </span>
+                    </div>
+                  </div>
+                  <h3 className="font-display font-bold text-base text-white leading-tight" data-testid={`text-title-${l.id}`}>
+                    {l.title}
+                  </h3>
+                  <p className="text-sm text-muted-foreground line-clamp-2" data-testid={`text-desc-${l.id}`}>
+                    {l.description}
+                  </p>
+                  <div className="flex items-center justify-between pt-2 border-t border-white/5 mt-auto">
+                    <div className="flex gap-3">
+                      <ScoreBadge label="HIVE" value={Math.round(l.hiveScore)} color="#4488FF" />
+                      <ScoreBadge label="KCSE" value={Math.round(l.kcseScore * 10) / 10} color="#44AA44" />
+                    </div>
+                    <div className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground">
+                      <TrendingUp className="h-3 w-3" />
+                      <span data-testid={`text-sales-${l.id}`}>{l.salesCount}</span>
+                    </div>
+                  </div>
+                </Link>
+              }
+              back={
+                <div className="flex flex-col gap-3 p-5 h-full pr-9" data-testid={`card-listing-${l.id}-back`}>
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-3.5 w-3.5 text-primary" />
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-primary">
+                      Scoring breakdown
+                    </span>
+                  </div>
+                  <h3 className="font-display font-bold text-sm text-white leading-tight">{l.title}</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="p-2 rounded bg-blue-400/5 border border-blue-400/20">
+                      <div className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground">HIVE</div>
+                      <div className="font-mono text-lg font-bold text-blue-400">{Math.round(l.hiveScore)}</div>
+                      <div className="text-[9px] font-mono text-muted-foreground">Originality + clarity</div>
+                    </div>
+                    <div className="p-2 rounded bg-emerald-400/5 border border-emerald-400/20">
+                      <div className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground">KCSE</div>
+                      <div className="font-mono text-lg font-bold text-emerald-400">
+                        {Math.round(l.kcseScore * 10) / 10}
+                      </div>
+                      <div className="text-[9px] font-mono text-muted-foreground">Context-craft rigor</div>
+                    </div>
+                  </div>
+                  <div className="text-xs font-sans text-white/80 leading-relaxed flex-1 line-clamp-4">
+                    {l.description}
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] font-mono pt-2 border-t border-white/10 mt-auto">
+                    <span className="flex items-center gap-1 text-amber-400">
+                      <Coins className="h-3 w-3" /> {l.priceCredits} credits
+                    </span>
+                    <Link
+                      href={`/marketplace/${l.id}`}
+                      data-testid={`button-open-${l.id}`}
+                      className="px-2 py-1 rounded bg-primary/15 text-primary border border-primary/40 hover:bg-primary/25 transition-colors uppercase tracking-wider"
+                    >
+                      Open detail
+                    </Link>
+                  </div>
                 </div>
-              </div>
-              <h3 className="font-display font-bold text-base text-white leading-tight" data-testid={`text-title-${l.id}`}>
-                {l.title}
-              </h3>
-              <p className="text-sm text-muted-foreground line-clamp-2" data-testid={`text-desc-${l.id}`}>
-                {l.description}
-              </p>
-              <div className="flex items-center justify-between pt-2 border-t border-white/5 mt-auto">
-                <div className="flex gap-3">
-                  <ScoreBadge label="HIVE" value={Math.round(l.hiveScore)} color="#4488FF" />
-                  <ScoreBadge label="KCSE" value={Math.round(l.kcseScore * 10) / 10} color="#44AA44" />
-                </div>
-                <div className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground">
-                  <TrendingUp className="h-3 w-3" />
-                  <span data-testid={`text-sales-${l.id}`}>{l.salesCount}</span>
-                </div>
-              </div>
-            </Link>
+              }
+            />
           ))}
         </div>
       )}

@@ -19,6 +19,28 @@ import {
   Target,
 } from "lucide-react";
 import { CcgeCard } from "@/components/play/CcgeCard";
+import { FlippableCard } from "@/components/ui/flippable-card";
+
+// Short rationale per pillar shown on the back face of scenario cards so
+// players know WHY the scenario targets them. Sourced from the same KCSE
+// framing used by CcgeCard back faces.
+const PILLAR_RATIONALE: Record<string, string> = {
+  System: "Sets the AI's operating frame and guardrails.",
+  Role: "Establishes persona, voice, and authority.",
+  Instruction: "Spells out the task and required steps.",
+  Example: "Anchors the model with a worked precedent.",
+  Constraint: "Bounds the response (length, tone, policy).",
+  Format: "Pins the output structure and schema.",
+  Data: "Injects domain context and grounding.",
+  SuperPrompt: "Composite play covering all four KCSE context types.",
+};
+
+const TIER_REWARD: Record<string, string> = {
+  Bronze: "Foundation pass — earns Bronze certification at JCSE 30+.",
+  Silver: "Solid prompt craft — Silver certification unlocks at JCSE 36+.",
+  Gold: "Senior tier — Gold certification gates SPHINX publishing (JCSE 43+).",
+  Platinum: "Apex tier — Platinum certification at JCSE 48+ marks top 1%.",
+};
 
 type Card = {
   id: string;
@@ -560,33 +582,83 @@ export default function PlayPage() {
       ) : (
         <div className="grid md:grid-cols-2 gap-4">
           {filteredScenarios.map((s) => (
-            <div
+            <FlippableCard
               key={s.id}
-              className={cn("glass-card p-5 rounded-xl border-2 hover:border-primary/40 transition-all flex flex-col", TIER_BORDER[s.tier])}
-              data-testid={`scenario-card-${s.id}`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <Badge className={cn("font-display", `bg-gradient-to-br ${TIER_COLORS[s.tier]} text-background`)}>
-                  {s.tier}
-                </Badge>
-                <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-                  Diff {s.difficulty}/5 · {s.tokenBudget}t budget
-                </span>
-              </div>
-              <h3 className="font-display font-bold text-lg text-foreground" data-testid={`scenario-title-${s.id}`}>{s.title}</h3>
-              <p className="text-sm text-muted-foreground my-3 flex-1 leading-relaxed">{s.prompt}</p>
-              <div className="flex flex-wrap gap-1.5 mb-4">
-                {s.targetPillars.map((p) => (
-                  <Badge key={p} variant="outline" className={cn("font-mono text-[10px]", PILLAR_COLORS[p])}>
-                    {p}
-                  </Badge>
-                ))}
-              </div>
-              <Button onClick={() => startSession(s.id)} disabled={!user} data-testid={`button-start-${s.id}`}>
-                <Gamepad2 className="h-4 w-4 mr-2" />
-                Start Session
-              </Button>
-            </div>
+              testId={`scenario-${s.id}`}
+              minHeight="280px"
+              flipLabel={`Reveal scoring rules for ${s.title}`}
+              unflipLabel={`Hide scoring rules for ${s.title}`}
+              faceClassName={cn("glass-card rounded-xl border-2 hover:border-primary/40 transition-all", TIER_BORDER[s.tier])}
+              backFaceClassName={cn("glass-card rounded-xl border-2", TIER_BORDER[s.tier])}
+              front={
+                <div className="p-5 h-full flex flex-col" data-testid={`scenario-card-${s.id}`}>
+                  <div className="flex items-center justify-between mb-2 pr-9">
+                    <Badge className={cn("font-display", `bg-gradient-to-br ${TIER_COLORS[s.tier]} text-background`)}>
+                      {s.tier}
+                    </Badge>
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                      Diff {s.difficulty}/5 · {s.tokenBudget}t budget
+                    </span>
+                  </div>
+                  <h3 className="font-display font-bold text-lg text-foreground" data-testid={`scenario-title-${s.id}`}>{s.title}</h3>
+                  <p className="text-sm text-muted-foreground my-3 flex-1 leading-relaxed">{s.prompt}</p>
+                  <div className="flex flex-wrap gap-1.5 mb-4">
+                    {s.targetPillars.map((p) => (
+                      <Badge key={p} variant="outline" className={cn("font-mono text-[10px]", PILLAR_COLORS[p])}>
+                        {p}
+                      </Badge>
+                    ))}
+                  </div>
+                  <Button onClick={() => startSession(s.id)} disabled={!user} data-testid={`button-start-${s.id}`}>
+                    <Gamepad2 className="h-4 w-4 mr-2" />
+                    Start Session
+                  </Button>
+                </div>
+              }
+              back={
+                <div className="p-5 h-full flex flex-col gap-3 pr-9" data-testid={`scenario-card-${s.id}-back`}>
+                  <div className="flex items-center gap-2">
+                    <Target className="h-3.5 w-3.5 text-primary" />
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-primary">
+                      Scoring rules
+                    </span>
+                  </div>
+                  <h3 className="font-display font-bold text-sm text-foreground leading-tight">{s.title}</h3>
+                  <div className="text-[11px] font-mono text-muted-foreground leading-relaxed">
+                    {TIER_REWARD[s.tier] ?? "Earn certification by passing the KCSE threshold."}
+                  </div>
+                  <div className="space-y-1.5 flex-1 overflow-y-auto">
+                    <div className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground">
+                      Target pillars
+                    </div>
+                    {s.targetPillars.map((p) => (
+                      <div key={p} className="flex items-start gap-2 text-xs">
+                        <Badge variant="outline" className={cn("font-mono text-[9px] flex-shrink-0", PILLAR_COLORS[p])}>
+                          {p}
+                        </Badge>
+                        <span className="text-white/70 leading-snug">
+                          {PILLAR_RATIONALE[p] ?? "Required pillar for this scenario."}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] font-mono pt-2 border-t border-white/10">
+                    <span className="text-muted-foreground">
+                      Difficulty {s.difficulty}/5 · {s.tokenBudget}t budget
+                    </span>
+                    <Button
+                      size="sm"
+                      onClick={() => startSession(s.id)}
+                      disabled={!user}
+                      data-testid={`button-start-back-${s.id}`}
+                      className="h-7 text-[10px]"
+                    >
+                      Start
+                    </Button>
+                  </div>
+                </div>
+              }
+            />
           ))}
         </div>
       )}
