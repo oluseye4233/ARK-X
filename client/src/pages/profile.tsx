@@ -23,6 +23,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Link } from "wouter";
+import { JnomicsCardList } from "@/components/dashboard/JnomicsCardList";
 
 export default function ProfilePage() {
   const { user, updateUser } = useAuth();
@@ -51,6 +52,10 @@ export default function ProfilePage() {
   const [credits, setCredits] = useState<UserCredits | null>(null);
   const [sales, setSales] = useState<{ totalEarned: number; salesCount: number } | null>(null);
   const [guin, setGuin] = useState<any>(null);
+  // Junglenomics Card Portfolio — pulled from the user's latest assessment.
+  // matchedCardIds is populated server-side by resumeAnalyzer.pickMatchedCards
+  // off the user's CV/skills, so any user with an assessment has a portfolio.
+  const [matchedCardIds, setMatchedCardIds] = useState<string[] | null>(null);
 
   const loadGuin = () => {
     api.getGuinById(user.id).then(setGuin).catch(() => setGuin(null));
@@ -59,6 +64,10 @@ export default function ProfilePage() {
   useEffect(() => {
     api.getCredits(user.id).then(setCredits).catch(() => null);
     api.getSpcSales(user.id).then(setSales).catch(() => null);
+    api
+      .getLatestAssessment(user.id)
+      .then((a: any) => setMatchedCardIds(Array.isArray(a?.matchedCardIds) ? a.matchedCardIds : []))
+      .catch(() => setMatchedCardIds([]));
     loadGuin();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.id]);
@@ -248,6 +257,44 @@ export default function ProfilePage() {
           </Link>
         </div>
       </div>
+
+      {/* ── Junglenomics Card Portfolio ─────────────────────────
+          Skill-to-card mapping derived from the user's latest assessment.
+          Each card represents a real skillset detected in the user's CV
+          (or system-provided skills), mapped to the FORGE Library via
+          JNOMICSDECK ALPHA. Hidden until the assessment has loaded so we
+          don't flash an empty state for users mid-onboarding. */}
+      {matchedCardIds !== null && (
+        <div className="pt-4 border-t border-white/5" data-testid="section-card-portfolio">
+          <div className="mb-4">
+            <h2 className="text-xl font-display font-bold text-white uppercase tracking-widest">
+              My Junglenomics Card Portfolio
+            </h2>
+            <p className="text-xs font-mono text-muted-foreground mt-1">
+              Your detected skillsets, mapped to FORGE Library cards. Flip any card to see its tier rationale.
+            </p>
+          </div>
+          {matchedCardIds.length === 0 ? (
+            <div className="glass-card p-8 rounded-xl text-center" data-testid="text-no-portfolio">
+              <p className="font-mono text-sm text-muted-foreground uppercase">
+                No card portfolio yet.
+              </p>
+              <p className="text-xs font-mono text-muted-foreground mt-2">
+                Upload your CV or run an assessment to map your skills to Junglenomics cards.
+              </p>
+              <Link
+                href="/upload"
+                className="inline-block mt-4 px-4 py-2 rounded-lg font-mono text-xs uppercase tracking-wider bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-colors"
+                data-testid="link-upload-cv"
+              >
+                Upload CV →
+              </Link>
+            </div>
+          ) : (
+            <JnomicsCardList matchedCardIds={matchedCardIds} />
+          )}
+        </div>
+      )}
 
       {guin && (
         <div className="pt-4 border-t border-white/5">

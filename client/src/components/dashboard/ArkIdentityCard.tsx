@@ -1,6 +1,7 @@
-import { Hexagon, Fingerprint, TrendingUp } from "lucide-react";
+import { Hexagon, Fingerprint, TrendingUp, Trophy } from "lucide-react";
 import { ARK_TIERS, type ArkTierKey } from "@shared/schema";
 import { getNextTier } from "@/lib/arkCoaching";
+import { FlippableCard } from "@/components/ui/flippable-card";
 
 export type ArkIdentity = {
   arkScore: number;
@@ -34,14 +35,14 @@ export function ArkIdentityCard({ identity }: { identity: ArkIdentity }) {
   const tier = tierFromScore(identity.arkScore);
   const tierClass = TIER_COLOR[tier];
   const next = getNextTier(identity.arkScore);
-  return (
-    <div
-      className={`glass-card p-6 rounded-xl border-2 ${tierClass.split(" ")[1]}`}
-      data-testid="card-ark-identity"
-    >
-      <div className="flex items-start justify-between gap-6 flex-wrap">
+  const borderClass = tierClass.split(" ")[1];
+  const textClass = tierClass.split(" ")[0];
+
+  const front = (
+    <div className="p-6 h-full">
+      <div className="flex items-start justify-between gap-6 flex-wrap pr-9">
         <div className="flex items-center gap-4">
-          <Hexagon className={`h-10 w-10 ${tierClass.split(" ")[0]}`} />
+          <Hexagon className={`h-10 w-10 ${textClass}`} />
           <div>
             <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
               ARK Score
@@ -53,7 +54,7 @@ export function ArkIdentityCard({ identity }: { identity: ArkIdentity }) {
               {identity.arkScore}
               <span className="text-base text-muted-foreground font-mono ml-1">/600</span>
             </p>
-            <p className={`text-xs font-mono uppercase tracking-widest mt-1 ${tierClass.split(" ")[0]}`}>
+            <p className={`text-xs font-mono uppercase tracking-widest mt-1 ${textClass}`}>
               {tier} · VMST {identity.vmstLevel}
             </p>
             {next.nextTier ? (
@@ -143,6 +144,91 @@ export function ArkIdentityCard({ identity }: { identity: ArkIdentity }) {
           </button>
         </div>
       )}
+    </div>
+  );
+
+  // Back face — climbing ladder of all 6 ARK tiers with current band
+  // highlighted, plus the canonical ARK = JST + CCMI formula. This makes
+  // the score legible without an explainer doc.
+  const back = (
+    <div className="p-6 h-full flex flex-col gap-4 pr-9" data-testid="card-ark-identity-back">
+      <div className="flex items-center gap-2">
+        <Trophy className={`h-4 w-4 ${textClass}`} />
+        <span className={`text-[10px] font-mono uppercase tracking-widest ${textClass}`}>
+          ARK Tier Ladder
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        {[...ARK_TIERS].map((band) => {
+          const active = band.key === tier;
+          return (
+            <div
+              key={band.key}
+              data-testid={`tier-row-${band.key.toLowerCase()}`}
+              className={`flex items-center justify-between px-3 py-1.5 rounded border ${
+                active
+                  ? "bg-white/10 border-white/30"
+                  : "bg-white/[0.02] border-white/5"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className="inline-block w-2 h-2 rounded-full"
+                  style={{ backgroundColor: band.color }}
+                />
+                <span
+                  className={`font-display text-xs ${active ? "text-white font-bold" : "text-muted-foreground"}`}
+                >
+                  {band.key}
+                </span>
+                {active && (
+                  <span className="text-[9px] font-mono uppercase tracking-widest text-secondary">
+                    · You
+                  </span>
+                )}
+              </div>
+              <span
+                className={`font-mono text-[10px] tabular-nums ${active ? "text-white" : "text-muted-foreground"}`}
+              >
+                {band.min}–{band.max}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-auto pt-2 border-t border-white/10">
+        <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+          Score formula
+        </p>
+        <p className="text-xs font-mono text-white/80 mt-1 leading-relaxed">
+          ARK ={" "}
+          <span className="text-secondary">JST {identity.jstIndex}</span> +{" "}
+          <span className="text-primary">CCMI {identity.ccmi}</span> ={" "}
+          <span className="text-white font-bold tabular-nums">{identity.arkScore}</span>
+          <span className="text-muted-foreground"> / 600</span>
+        </p>
+      </div>
+    </div>
+  );
+
+  // Wrapper preserves the legacy data-testid="card-ark-identity" so any
+  // external/E2E selector targeting the previous outer element still resolves.
+  // The new flip-aware test id (`ccard-ark-identity`) is also exposed by
+  // FlippableCard for future tests.
+  return (
+    <div data-testid="card-ark-identity">
+      <FlippableCard
+        testId="ark-identity"
+        minHeight="280px"
+        flipLabel="Reveal ARK tier ladder and score formula"
+        unflipLabel="Hide ARK tier ladder"
+        faceClassName={`glass-card rounded-xl border-2 ${borderClass}`}
+        backFaceClassName={`glass-card rounded-xl border-2 ${borderClass}`}
+        front={front}
+        back={back}
+      />
     </div>
   );
 }
