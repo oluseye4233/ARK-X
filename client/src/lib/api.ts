@@ -199,4 +199,12 @@ export const api = {
     }
     return res.json();
   },
+
+  // Self-assessment + LinkedIn intake. Server pipes both through the same
+  // analyze→persist→recalc pipeline as /api/resume/upload, just from raw text.
+  submitAssessmentText: (input: { text: string; source: "self" | "linkedin" }) =>
+    apiRequest("/api/assessment/text", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
 };

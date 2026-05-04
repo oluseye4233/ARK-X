@@ -731,6 +731,50 @@ export async function registerRoutes(
       }
 
       const userId = currentUserId(req)!;
+      const payload = await runAssessmentFromText(userId, resumeText, "resume.upload");
+      return res.status(201).json(payload);
+    } catch (err: any) {
+      console.error("Resume upload error:", err);
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Self-Assessment & LinkedIn Text Intake ────────────
+  // Single endpoint that runs the same analysis pipeline as /api/resume/upload
+  // but takes raw text + a source tag instead of a binary file. Lets us pipe
+  // self-assessment questionnaires and pasted LinkedIn profiles through the
+  // exact same JST/CCMI/recalc flow with zero duplication.
+  app.post("/api/assessment/text", requireAuth, async (req, res) => {
+    try {
+      const { text, source } = req.body ?? {};
+      const allowedSources = ["self", "linkedin"] as const;
+      if (typeof text !== "string" || text.trim().length < 50) {
+        return res.status(400).json({
+          message: "Please provide at least 50 characters of profile content so we can build a meaningful assessment.",
+        });
+      }
+      if (!allowedSources.includes(source)) {
+        return res.status(400).json({ message: "Invalid assessment source." });
+      }
+      const userId = currentUserId(req)!;
+      const sourceTag = source === "self" ? "self.assessment" : "linkedin.import";
+      const payload = await runAssessmentFromText(userId, text, sourceTag);
+      return res.status(201).json(payload);
+    } catch (err: any) {
+      console.error("[/api/assessment/text] error:", err);
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Helper extracted from the original /api/resume/upload body — runs the
+  // full analyze→persist→recalc→narrative pipeline against arbitrary text
+  // input. Used by both the file upload route and the text intake route so
+  // self-assessments and LinkedIn imports behave identically to CV uploads.
+  async function runAssessmentFromText(
+    userId: string,
+    resumeText: string,
+    sourceTag: string,
+  ): Promise<any> {
       const user = await storage.getUser(userId);
       const certLevel = (user?.contextCraftCertLevel as ContextCraftLevel) || "NONE";
       const userPlan = (user?.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
@@ -783,12 +827,12 @@ export async function registerRoutes(
         recalc = await recalcArkForUser({
           userId,
           trigger: "assessment.completed",
-          triggerMeta: { assessmentId: created.id, source: "resume.upload" },
+          triggerMeta: { assessmentId: created.id, source: sourceTag },
           pillarOverride: freshPillars,
           freshScores: { categoryScores: proxy, avgAutomation: avgAuto },
         });
       } catch (recalcErr) {
-        console.error("[resume.upload] recalc failed (best-effort):", recalcErr);
+        console.error(`[${sourceTag}] recalc failed (best-effort):`, recalcErr);
       }
 
       // Stage-3 narrative (Claude Sonnet → fallback) — best-effort.
@@ -806,7 +850,7 @@ export async function registerRoutes(
             trigger: "assessment.completed",
           });
         } catch (narrErr) {
-          console.error("[resume.upload] narrative failed (best-effort):", narrErr);
+          console.error(`[${sourceTag}] narrative failed (best-effort):`, narrErr);
         }
       }
 
@@ -816,7 +860,7 @@ export async function registerRoutes(
         jstTotal: created.jstTotal,
       }, 0);
 
-      return res.status(201).json({
+      return {
         ...created,
         upskillingPlans: plans,
         pivotOpportunities: pivots,
@@ -840,12 +884,8 @@ export async function registerRoutes(
             }
           : null,
         narrative,
-      });
-    } catch (err: any) {
-      console.error("Resume upload error:", err);
-      return res.status(500).json({ message: err.message });
-    }
-  });
+      };
+  }
 
   // ── PDD §3.4 — ARK identity surfaces ───────────────────
   app.get("/api/ark/identity", requireAuth, async (req, res) => {
