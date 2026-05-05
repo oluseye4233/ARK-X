@@ -92,6 +92,7 @@ export default function PathwaysPage() {
                   unflipLabel={`Hide pivot detail for ${pivot.role}`}
                   faceClassName="rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors group"
                   backFaceClassName="rounded-lg bg-primary/5 border border-primary/30"
+                  drm={{ contentId: `pivot-${i}-${pivot.role}`, contentType: "pivot" }}
                   front={
                     <div className="flex items-center justify-between p-4 h-full pr-12 cursor-pointer">
                       <div>

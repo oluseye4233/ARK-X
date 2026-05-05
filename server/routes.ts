@@ -278,11 +278,17 @@ export async function registerRoutes(
   // ── Profile Update ──────────────────────────────────
   app.put("/api/users/:id/profile", requireSelf("id"), async (req, res) => {
     try {
-      const allowed = ["name", "role", "department", "seniority", "location"];
-      const updateData: any = {};
-      for (const key of allowed) {
-        if (req.body[key] !== undefined) updateData[key] = req.body[key];
-      }
+      // Use an explicit literal mapping instead of bracket-indexing req.body
+      // with a loop variable — satisfies the SAST prototype-pollution rule
+      // (semgrep js.express.security.audit.remote-property-injection) and
+      // makes the allowlist trivially auditable.
+      const body = req.body ?? {};
+      const updateData: Record<string, unknown> = {};
+      if (typeof body.name === "string") updateData.name = body.name;
+      if (typeof body.role === "string") updateData.role = body.role;
+      if (typeof body.department === "string") updateData.department = body.department;
+      if (typeof body.seniority === "string") updateData.seniority = body.seniority;
+      if (typeof body.location === "string") updateData.location = body.location;
       const updated = await storage.updateUser(String(req.params.id), updateData);
       if (!updated) return res.status(404).json({ message: "User not found" });
       const { password: _, ...safeUser } = updated;
@@ -758,6 +764,19 @@ export async function registerRoutes(
   const DRM_RATE_MAX = 60;
   const drmRateBuckets = new Map<string, { count: number; windowStart: number }>();
 
+  // Ring buffer of recent DRM violations so an admin can see who is hammering
+  // the copy-block at /api/admin/drm/violators. We cap at 2k entries (~< 1MB
+  // memory) and drop the oldest when full. Not persisted — restarts wipe it,
+  // which is fine for a security signal that's already mirrored in stdout.
+  const DRM_EVENT_BUFFER_MAX = 2000;
+  const drmEventBuffer: Array<{
+    userId: string;
+    contentType: string;
+    contentId: string;
+    action: string;
+    ts: number;
+  }> = [];
+
   function sanitizeDrmField(value: string, maxLen = 80): string {
     // Strip control chars (\n, \r, \t, escape, etc.) so a crafted payload
     // can't inject newlines and forge additional log lines.
@@ -795,16 +814,69 @@ export async function registerRoutes(
         });
       }
       // Single-line structured log so it can be grep'd / piped to a SIEM.
+      const safeUser = sanitizeDrmField(userId, 64);
+      const safeType = sanitizeDrmField(contentType, 32);
+      const safeId = sanitizeDrmField(contentId, 64);
+      const safeAction = sanitizeDrmField(action, 32);
+      const safeTs = typeof ts === "number" ? ts : now;
       console.log(
-        `[drm] user=${sanitizeDrmField(userId, 64)} ` +
-          `type=${sanitizeDrmField(contentType, 32)} ` +
-          `id=${sanitizeDrmField(contentId, 64)} ` +
-          `action=${sanitizeDrmField(action, 32)} ` +
-          `ts=${typeof ts === "number" ? ts : now}`,
+        `[drm] user=${safeUser} type=${safeType} id=${safeId} action=${safeAction} ts=${safeTs}`,
       );
+      // Mirror into the in-memory ring buffer for the admin endpoint.
+      drmEventBuffer.push({
+        userId: safeUser,
+        contentType: safeType,
+        contentId: safeId,
+        action: safeAction,
+        ts: safeTs,
+      });
+      if (drmEventBuffer.length > DRM_EVENT_BUFFER_MAX) {
+        drmEventBuffer.splice(0, drmEventBuffer.length - DRM_EVENT_BUFFER_MAX);
+      }
       return res.status(204).end();
     } catch (err: any) {
       console.error("[/api/drm/event] error:", err);
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Admin-only aggregation over the ring buffer. Returns the top N
+  // (userId, contentType) pairs by violation count in the last 24h, plus
+  // the raw recent-events tail. Lets ops spot scrapers without standing
+  // up a full SIEM pipeline.
+  app.get("/api/admin/drm/violators", requireAuth, async (req, res) => {
+    try {
+      const callerId = currentUserId(req)!;
+      const adminId = process.env.ADMIN_USER_ID;
+      if (!adminId || callerId !== adminId) {
+        return res.status(403).json({ message: "Admin only." });
+      }
+      const windowMs = 24 * 60 * 60 * 1000;
+      const cutoff = Date.now() - windowMs;
+      const recent = drmEventBuffer.filter((e) => e.ts >= cutoff);
+      const counts = new Map<string, { userId: string; contentType: string; count: number; lastTs: number }>();
+      for (const e of recent) {
+        const k = `${e.userId}::${e.contentType}`;
+        const cur = counts.get(k);
+        if (cur) {
+          cur.count += 1;
+          if (e.ts > cur.lastTs) cur.lastTs = e.ts;
+        } else {
+          counts.set(k, { userId: e.userId, contentType: e.contentType, count: 1, lastTs: e.ts });
+        }
+      }
+      const violators = Array.from(counts.values())
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 25);
+      return res.json({
+        windowMs,
+        totalEvents: recent.length,
+        bufferSize: drmEventBuffer.length,
+        bufferCap: DRM_EVENT_BUFFER_MAX,
+        violators,
+        recentTail: recent.slice(-50).reverse(),
+      });
+    } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
   });

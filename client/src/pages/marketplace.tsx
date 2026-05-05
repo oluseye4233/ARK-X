@@ -30,7 +30,6 @@ import {
   Loader2,
   TrendingUp,
   User,
-  FileText,
 } from "lucide-react";
 import { FlippableCard } from "@/components/ui/flippable-card";
 import { SpcTaxonomyPanel } from "@/components/marketplace/SpcTaxonomyPanel";
