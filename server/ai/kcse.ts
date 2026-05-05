@@ -15,7 +15,7 @@ export type ClaudeKcseResult = {
 const KCSE_TTL_MS = 60 * 60 * 1000;
 const KCSE_PROMPT_VERSION = "v1";
 
-const SYSTEM_PROMPT = `You are KCSE Judge for Junglenomics' Context Craft Game Engine. Score how well the player's selected Smart Prompt Cards address the scenario.
+const SYSTEM_PROMPT = `You are KCSE Judge for Junglenomics' Context Craft Game Engine. Score how well the player's selected Super Prompt Cards address the scenario.
 
 Return strict JSON: {"kcseDelta": number (-5 to +5, additive bonus on top of deterministic score), "narrative": string (2 sentences max), "strengths": string[] (≤3), "weaknesses": string[] (≤3)}.
 

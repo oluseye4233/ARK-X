@@ -106,7 +106,7 @@ const ACTIONS: Array<(i: FlywheelInput) => FlywheelCta | null> = [
       ? {
           position: 5,
           id: "publish_first_spc",
-          headline: "Publish your first SPHINX prompt",
+          headline: "Publish your first Super Prompt Card",
           subtext: "Your CCMI qualifies you to monetize. Publishing earns +2 JST Talent + opens marketplace lights.",
           ctaLabel: "Publish SPC",
           ctaHref: "/marketplace/publish",

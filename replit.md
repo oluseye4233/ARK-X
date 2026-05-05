@@ -56,7 +56,7 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 - `/profile` — User Profile (editable profile details, subscription status, cert level, institution)
 - `/school` — Institution Dashboard (cohort JST scores, skill radar, archetype/vulnerability distributions, School plan gated)
 - `/play` — CCGE Arena (single-player Context Craft card game; lobby → session → score → flywheel)
-- `/marketplace` — SPHINX Marketplace (browse Smart Prompt Cards, filter by pillar)
+- `/marketplace` — SPHINX Marketplace (browse Super Prompt Cards, filter by pillar)
 - `/marketplace/publish` — Publish a new SPC (Gold+ cert gated, runs HIVE pre-check)
 - `/marketplace/:id` — SPC detail page (preview, purchase, ownership view)
 

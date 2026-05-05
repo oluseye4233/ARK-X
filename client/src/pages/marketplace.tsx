@@ -104,7 +104,7 @@ function ListingsList() {
             </h1>
           </div>
           <p className="text-muted-foreground font-mono text-sm">
-            SMART PROMPT CARDS // CREATOR/PLATFORM SPLIT {SPC_CREATOR_SHARE_PCT}/{SPC_PLATFORM_SHARE_PCT}
+            SUPER PROMPT CARDS // CREATOR/PLATFORM SPLIT {SPC_CREATOR_SHARE_PCT}/{SPC_PLATFORM_SHARE_PCT}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -469,7 +469,7 @@ function PublishPage() {
   if (!user) {
     return (
       <div className="max-w-2xl mx-auto py-16 text-center">
-        <p className="font-mono text-sm text-muted-foreground uppercase">Please log in to publish a Smart Prompt Card.</p>
+        <p className="font-mono text-sm text-muted-foreground uppercase">Please log in to publish a Super Prompt Card.</p>
         <Link href="/login" className="text-primary hover:underline font-mono text-xs uppercase mt-4 inline-block">Go to login →</Link>
       </div>
     );
@@ -547,7 +547,7 @@ function PublishPage() {
 
       <div>
         <h1 className="text-3xl font-display font-bold text-primary tracking-widest uppercase" data-testid="text-publish-title">
-          Publish Smart Prompt Card
+          Publish Super Prompt Card
         </h1>
         <p className="text-muted-foreground font-mono text-sm mt-2">
           HIVE PRE-CHECK MUST PASS BEFORE LISTING GOES LIVE

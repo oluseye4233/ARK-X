@@ -8,7 +8,7 @@ ARK Platform is a full-stack TypeScript career intelligence application. The pro
 
 - **User accounts and sessions** -- usernames/emails, bcrypt password hashes, `ark.sid` session cookies, and account profile data. Compromise allows impersonation and access to private assessment and billing information.
 - **Career and resume data** -- uploaded resume text-derived assessments, readiness profiles, risk modifiers, ARK/JST/CCMI scores, game sessions, endorsements, and export/deletion data. These can contain sensitive professional and personal data.
-- **Marketplace content and credits** -- paid Smart Prompt Card bodies, user credit balances, purchases, creator sales, and related ARK score deltas. Unauthorized access or tampering affects business logic and paid content.
+- **Marketplace content and credits** -- paid Super Prompt Card (SPC) bodies, user credit balances, purchases, creator sales, and related ARK score deltas. Unauthorized access or tampering affects business logic and paid content.
 - **Subscription and billing state** -- plan, subscription status, synthetic Stripe IDs, checkout sessions, and billing event audit history. Tampering can unlock paid features or corrupt audit trails.
 - **Application secrets and external API access** -- `DATABASE_URL`, `SESSION_SECRET`, `ADMIN_USER_ID`, and Anthropic integration credentials. Disclosure or misuse can compromise the whole deployment or create unbounded AI costs.
 

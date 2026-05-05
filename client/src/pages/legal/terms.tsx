@@ -48,7 +48,7 @@ export default function TermsPage() {
 
           <section>
             <h2 className="text-white font-display text-xl mb-3">5. SPHINX Marketplace</h2>
-            <p>Smart Prompt Cards you publish remain your IP; you grant ARK a non-exclusive license to display, distribute, and process them on-platform. Purchases are denominated in in-app credits. Creator payouts in fiat will become available when Stripe Connect is enabled (Phase D.3).</p>
+            <p>Super Prompt Cards (SPCs) you publish remain your IP; you grant ARK a non-exclusive license to display, distribute, and process them on-platform. Purchases are denominated in in-app credits. Creator payouts in fiat will become available when Stripe Connect is enabled (Phase D.3).</p>
           </section>
 
           <section>
