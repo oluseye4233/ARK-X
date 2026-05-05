@@ -1,6 +1,7 @@
 import type { InsertAssessment, InsertUpskillingPlan, InsertPivotOpportunity, InsertTransferabilityVector, ContextCraftLevel } from "@shared/schema";
 import { CONTEXT_CRAFT_LEVELS } from "@shared/schema";
 import { computeJst } from "./scoringEngine";
+import { CODEC_PRIMITIVES, CODEC_ARCHETYPE_MAP, buildKeywordIndex } from "@shared/codec-primitives";
 
 function computeJstIndex(sub: { jobs: number; skills: number; talent: number }): number {
   return computeJst(sub).jstIndex;
@@ -100,19 +101,75 @@ function determineSeniority(yearsExp: number, leadershipScore: number): string {
   return "Junior";
 }
 
-function pickMatchedCards(scores: Record<string, number>): string[] {
-  const cards: string[] = [];
-  if (scores.technical > 8) cards.push("card-002");
-  if (scores.leadership > 8) cards.push("card-004");
-  if (scores.analytical > 6) cards.push("card-003");
-  if (scores.innovation > 5) cards.push("card-001");
-  if (scores.ai_adjacent > 4) cards.push("card-010");
-  if (scores.communication > 6) cards.push("card-007");
-  if (cards.length < 2) {
-    if (!cards.includes("card-005")) cards.push("card-005");
-    if (!cards.includes("card-008")) cards.push("card-008");
+// Pre-built keyword → primitive-id index from the CODEC catalog. Each
+// resume keyword (case-insensitive whole-word) activates the primitives
+// that listed it. We rank primitives by activation count, break ties by
+// basePts × multiplier rank, and return the top N.
+const CODEC_KEYWORD_INDEX = buildKeywordIndex();
+const CODEC_BY_ID_LOCAL = Object.fromEntries(CODEC_PRIMITIVES.map(p => [p.id, p]));
+
+// Skill-category → CODEC primitive bias. Used as a tiebreaker / floor
+// when a resume is light on direct keyword hits but the categoryScores
+// pipeline already classified the seniority/specialism.
+const CATEGORY_PRIMITIVE_BIAS: Record<string, string[]> = {
+  technical:     ["codec-platform", "codec-products", "codec-business-processes"],
+  leadership:    ["codec-elephant", "codec-personnel", "codec-core-objectives"],
+  analytical:    ["codec-revenue", "codec-compliance", "codec-cheetah"],
+  communication: ["codec-culture", "codec-goodwill", "codec-partners"],
+  innovation:    ["codec-innovation", "codec-cheetah", "codec-products"],
+  ai_adjacent:   ["codec-platform", "codec-business-processes", "codec-innovation"],
+};
+
+function pickMatchedCards(scores: Record<string, number>, resumeText?: string): string[] {
+  const hits = new Map<string, number>();
+
+  // 1. Direct keyword hits from the CODEC catalog.
+  if (resumeText) {
+    const lower = resumeText.toLowerCase();
+    for (const [kw, ids] of Array.from(CODEC_KEYWORD_INDEX.entries())) {
+      const re = new RegExp(`\\b${kw.replace(/[.*+?^${}()|[\\\]\\\\]/g, "\\$&")}\\b`, "g");
+      const m = lower.match(re);
+      if (!m) continue;
+      for (const id of ids) hits.set(id, (hits.get(id) ?? 0) + m.length);
+    }
   }
-  return cards.slice(0, 5);
+
+  // 2. Category bias — boost primitives associated with the user's
+  //    strongest skill categories so resumes light on deck vocabulary
+  //    still get a reasonable mapping.
+  for (const [cat, score] of Object.entries(scores)) {
+    if (score <= 0) continue;
+    const biased = CATEGORY_PRIMITIVE_BIAS[cat] ?? [];
+    for (const id of biased) {
+      hits.set(id, (hits.get(id) ?? 0) + Math.min(score, 6) * 0.5);
+    }
+  }
+
+  // 3. Always include INNOVATION when innovation signals are strong
+  //    (matches the deck's x3 multiplier semantics).
+  if ((scores.innovation ?? 0) > 5 || (scores.ai_adjacent ?? 0) > 6) {
+    hits.set("codec-innovation", (hits.get("codec-innovation") ?? 0) + 2);
+  }
+
+  // 4. Suppress the WASP antagonist unless a clear dysfunctional
+  //    signal is present — we never auto-tag a user as a parasite.
+  hits.delete("codec-wasp");
+
+  // Floor: if nothing fired, fall back to a neutral starter hand
+  // (Ant + Personnel + Innovation) so the dashboard isn't empty.
+  if (hits.size === 0) {
+    return ["codec-ant", "codec-personnel", "codec-innovation"];
+  }
+
+  return Array.from(hits.entries())
+    .sort((a, b) => {
+      if (b[1] !== a[1]) return b[1] - a[1];
+      const pa = CODEC_BY_ID_LOCAL[a[0]];
+      const pb = CODEC_BY_ID_LOCAL[b[0]];
+      return (pb?.basePts ?? 0) - (pa?.basePts ?? 0);
+    })
+    .slice(0, 6)
+    .map(([id]) => id);
 }
 
 const JST_ARCHETYPE_MAP: Record<string, "ARCHITECT" | "ORCHESTRATOR" | "CONDUCTOR"> = {
@@ -211,18 +268,9 @@ const JST_ARCHETYPE_MAP: Record<string, "ARCHITECT" | "ORCHESTRATOR" | "CONDUCTO
   "ceo": "ARCHITECT", "cfo": "ARCHITECT", "coo": "ORCHESTRATOR", "cio": "ARCHITECT",
 };
 
-const CARD_ARCHETYPE_MAP: Record<string, "ARCHITECT" | "ORCHESTRATOR" | "CONDUCTOR"> = {
-  "card-001": "ARCHITECT",
-  "card-002": "ARCHITECT",
-  "card-003": "ARCHITECT",
-  "card-004": "ORCHESTRATOR",
-  "card-005": "ORCHESTRATOR",
-  "card-006": "CONDUCTOR",
-  "card-007": "CONDUCTOR",
-  "card-008": "CONDUCTOR",
-  "card-009": "ORCHESTRATOR",
-  "card-010": "ARCHITECT",
-};
+// Archetype mapping is now sourced from the CODEC catalog so a primitive
+// can never drift between its display metadata and its archetype weight.
+const CARD_ARCHETYPE_MAP: Record<string, "ARCHITECT" | "ORCHESTRATOR" | "CONDUCTOR"> = CODEC_ARCHETYPE_MAP;
 
 const SKILL_ARCHETYPE_WEIGHTS: Record<string, { architect: number; orchestrator: number; conductor: number }> = {
   technical:     { architect: 0.50, orchestrator: 0.30, conductor: 0.20 },
@@ -581,7 +629,7 @@ export function analyzeResume(resumeText: string, contextCraftLevel: ContextCraf
   const avgAutomation = riskSlice.reduce((s, r) => s + r.automatable, 0) / riskSlice.length;
 
   const vulnerabilityLevel = generateVulnerabilityLevel(avgAutomation, categoryScores.ai_adjacent, categoryScores.leadership);
-  const matchedCardIds = pickMatchedCards(categoryScores);
+  const matchedCardIds = pickMatchedCards(categoryScores, resumeText);
 
   const archetypeHandicap = computeArchetypeHandicap(resumeText, categoryScores, matchedCardIds);
 

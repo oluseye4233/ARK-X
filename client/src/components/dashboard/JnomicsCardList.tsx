@@ -1,29 +1,42 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Database, Link as LinkIcon, Loader2, Layers, Award } from "lucide-react";
+import { Database, Link as LinkIcon, Loader2, Layers, Award, Globe2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { FlippableCard } from "@/components/ui/flippable-card";
 
-// Map Junglenomics tiers to a short FORGE-Library narrative shown on the
-// back face. Keeps the dashboard card grounded in the JNOMICSDECK ALPHA
-// taxonomy without requiring the back-end to ship extra metadata.
-const TIER_BLURB: Record<string, string> = {
-  Foundation: "Entry-level pattern. Anchors the FORGE Library baseline.",
-  Capable: "Mid-band skillset. Drives day-to-day FORGE workflows.",
-  Strong: "High-leverage skillset. Multiplies adjacent capabilities.",
-  Exceptional: "Rare, force-multiplying capability tracked at portfolio level.",
-  Legendary: "Apex pattern. Reserved for the top of the FORGE registry.",
+// Map CODEC categories to a short narrative shown on the back face. Keeps
+// the dashboard card grounded in the JUNGLENOMICS CODEC taxonomy without
+// requiring the back-end to ship extra metadata.
+const CATEGORY_BLURB: Record<string, string> = {
+  Animal: "Cognate Tribe primitive — defines the enterprise mindset DNA.",
+  Relational: "Corporate Values primitive — anchors belief, vision and culture.",
+  People: "Business Ecosystem primitive — defines tribe, allies and customers.",
+  Give: "Business Systems primitive — what the enterprise produces and how.",
+  Get: "Marketplace primitive — how value returns from the market.",
+  Innovation: "Multiplier primitive — activates when paired with two or more identical cards.",
 };
+
+interface SkillMappings {
+  onet: string[];
+  sfia: string[];
+  wef: string[];
+}
 
 interface JnomicsCard {
   id: string;
   name: string;
-  tier: string;
-  type: string;
+  tier: string;          // CODEC category (Animal / Relational / People / ...)
+  type: string;          // Persona label
   emoji: string;
   description: string;
   basePts: number;
+  // Enriched server-side from shared/codec-primitives.ts
+  persona?: string;
+  category?: string;
+  multiplier?: string;
+  insight?: string;
+  mappings?: SkillMappings;
 }
 
 interface JnomicsCardListProps {
@@ -60,23 +73,23 @@ export function JnomicsCardList({ matchedCardIds }: JnomicsCardListProps) {
         <div>
           <h3 className="font-display font-bold text-lg text-secondary uppercase tracking-widest flex items-center gap-2">
             <Database className="w-5 h-5" />
-            Junglenomics Card Mapping
+            Junglenomics CODEC Primitives
           </h3>
           <p className="text-xs font-mono text-muted-foreground mt-1">
-            Skillsets mapped to FORGE Library via JNOMICSDECK ALPHA API
+            Skills mapped to global standards · O*NET · SFIA v8 · WEF Future of Jobs
           </p>
         </div>
 
         <div className={cn(
           "flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-mono uppercase tracking-widest",
-          isSyncing 
-            ? "border-amber-500/50 bg-amber-500/10 text-amber-500" 
+          isSyncing
+            ? "border-amber-500/50 bg-amber-500/10 text-amber-500"
             : "border-secondary/50 bg-secondary/10 text-secondary"
         )}>
           {isSyncing ? (
-            <><Loader2 className="w-3 h-3 animate-spin" /> Syncing API...</>
+            <><Loader2 className="w-3 h-3 animate-spin" /> Syncing...</>
           ) : (
-            <><LinkIcon className="w-3 h-3" /> Connected</>
+            <><LinkIcon className="w-3 h-3" /> {cards.length} matched</>
           )}
         </div>
       </div>
@@ -84,7 +97,7 @@ export function JnomicsCardList({ matchedCardIds }: JnomicsCardListProps) {
       {isSyncing ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-32 rounded-lg border border-white/5 bg-white/5 animate-pulse" />
+            <div key={i} className="h-44 rounded-lg border border-white/5 bg-white/5 animate-pulse" />
           ))}
         </div>
       ) : (
@@ -98,9 +111,9 @@ export function JnomicsCardList({ matchedCardIds }: JnomicsCardListProps) {
             >
               <FlippableCard
                 testId={`jnomics-${card.id}`}
-                minHeight="170px"
-                flipLabel={`Reveal FORGE mapping for ${card.name}`}
-                unflipLabel={`Hide FORGE mapping for ${card.name}`}
+                minHeight="220px"
+                flipLabel={`Reveal skill standard mapping for ${card.name}`}
+                unflipLabel={`Hide skill standard mapping for ${card.name}`}
                 faceClassName="p-4 rounded-lg border border-secondary/30 bg-background/50 hover:bg-white/5 transition-all hover:border-secondary/70 group"
                 backFaceClassName="p-4 rounded-lg border border-secondary/50 bg-secondary/5"
                 drm={{ contentId: card.id, contentType: "jnomics-card" }}
@@ -110,8 +123,10 @@ export function JnomicsCardList({ matchedCardIds }: JnomicsCardListProps) {
                       <div className="flex items-center gap-2">
                         <span className="text-2xl" role="img" aria-label={card.type}>{card.emoji}</span>
                         <div>
-                          <h4 className="font-display font-bold text-white text-sm group-hover:text-secondary transition-colors">{card.name}</h4>
-                          <span className="text-[10px] font-mono uppercase text-muted-foreground">{card.tier}</span>
+                          <h4 className="font-display font-bold text-white text-sm group-hover:text-secondary transition-colors" data-testid={`text-primitive-name-${card.id}`}>{card.name}</h4>
+                          <span className="text-[10px] font-mono uppercase text-muted-foreground tracking-widest">
+                            {card.tier} · CODEC
+                          </span>
                         </div>
                       </div>
                       <div className="text-right">
@@ -119,32 +134,50 @@ export function JnomicsCardList({ matchedCardIds }: JnomicsCardListProps) {
                         <span className="text-[10px] font-mono text-muted-foreground block -mt-1">BASE PTS</span>
                       </div>
                     </div>
-                    <div className="mt-1 text-xs font-sans text-muted-foreground border-t border-white/10 pt-2">
-                      <span className="text-white/70 font-medium">{card.type}:</span> {card.description}
+                    <div className="text-[10px] font-mono uppercase text-secondary/80 tracking-widest">
+                      {card.persona ?? card.type}
                     </div>
+                    <div className="mt-1 text-xs font-sans text-white/80 border-t border-white/10 pt-2 flex-1">
+                      {card.description}
+                    </div>
+                    {card.multiplier && (
+                      <div className="text-[10px] font-mono text-secondary/70 pt-1 border-t border-white/5">
+                        Multiplier · {card.multiplier}
+                      </div>
+                    )}
                   </div>
                 }
                 back={
-                  <div className="flex flex-col gap-2 h-full pr-9">
+                  <div className="flex flex-col gap-2 h-full pr-9 overflow-hidden">
                     <div className="flex items-center gap-2">
-                      <Layers className="h-3.5 w-3.5 text-secondary" />
+                      <Globe2 className="h-3.5 w-3.5 text-secondary" />
                       <div className="text-[10px] font-mono uppercase tracking-widest text-secondary">
-                        FORGE Library Mapping
+                        Global Skill Standard Mapping
                       </div>
                     </div>
                     <div className="font-display font-bold text-white text-sm leading-tight">{card.name}</div>
                     <div className="text-[10px] font-mono uppercase text-muted-foreground tracking-widest">
-                      {card.tier} · {card.type}
+                      {card.tier} · {card.persona ?? card.type}
                     </div>
-                    <p className="text-xs font-sans text-white/80 leading-relaxed flex-1">
-                      {TIER_BLURB[card.tier] ?? "Mapped to the FORGE Library via JNOMICSDECK ALPHA."}
-                    </p>
+
+                    {card.mappings ? (
+                      <div className="flex flex-col gap-1.5 mt-1 text-[11px] font-sans flex-1 min-h-0 overflow-y-auto">
+                        <MappingRow label="O*NET" tone="text-blue-300" items={card.mappings.onet} testId={`mapping-onet-${card.id}`} />
+                        <MappingRow label="SFIA" tone="text-emerald-300" items={card.mappings.sfia} testId={`mapping-sfia-${card.id}`} />
+                        <MappingRow label="WEF" tone="text-amber-300" items={card.mappings.wef} testId={`mapping-wef-${card.id}`} />
+                      </div>
+                    ) : (
+                      <p className="text-xs font-sans text-white/80 leading-relaxed flex-1">
+                        {CATEGORY_BLURB[card.tier] ?? "CODEC primitive."}
+                      </p>
+                    )}
+
                     <div className="flex items-center justify-between text-[10px] font-mono pt-2 border-t border-secondary/20">
                       <span className="flex items-center gap-1 text-secondary">
-                        <Award className="h-3 w-3" /> Base {card.basePts} pts
+                        <Award className="h-3 w-3" /> {card.basePts} pts
                       </span>
-                      <span className="text-muted-foreground uppercase tracking-widest">
-                        ID · {card.id.slice(0, 10)}
+                      <span className="text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                        <Layers className="h-3 w-3" /> {card.id.replace(/^codec-/, "").slice(0, 14)}
                       </span>
                     </div>
                   </div>
@@ -154,6 +187,16 @@ export function JnomicsCardList({ matchedCardIds }: JnomicsCardListProps) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function MappingRow({ label, tone, items, testId }: { label: string; tone: string; items: string[]; testId: string }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <div className="flex items-start gap-2" data-testid={testId}>
+      <span className={cn("font-mono text-[10px] uppercase tracking-widest pt-0.5 shrink-0 w-12", tone)}>{label}</span>
+      <span className="text-white/85 leading-snug">{items.join(" · ")}</span>
     </div>
   );
 }

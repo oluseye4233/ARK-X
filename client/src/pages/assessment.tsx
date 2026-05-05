@@ -141,7 +141,7 @@ export default function AssessmentPage() {
               { task: "System Configuration", automatable: 60 },
               { task: "Stakeholder Communication", automatable: 15 },
             ],
-            matchedCardIds: ["card-001", "card-002", "card-004", "card-005"],
+            matchedCardIds: ["codec-elephant", "codec-business-processes", "codec-platform", "codec-innovation", "codec-personnel", "codec-revenue"],
           },
           upskillingPlans: [
             { phase: "30-Day", type: "ready-skilling", title: "Prompt Engineering Foundations", description: "Master LLM interaction protocols for system analysis tasks.", hours: 15 },

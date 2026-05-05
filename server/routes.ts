@@ -23,6 +23,7 @@ import { pickFlywheelCta, rankAllCtas } from "./flywheelCta";
 import { backfillAllUsers } from "./arkBackfill";
 import { scoreSessionWithClaude } from "./ai/kcse";
 import { generateResumeNarrative, ProTierRequiredError } from "./ai/narrative";
+import { CODEC_PRIMITIVES, CODEC_BY_ID } from "@shared/codec-primitives";
 import { generateScenario } from "./ai/scenarioGen";
 import { getMonthlyTokens } from "./ai/usage";
 import { isClaudeAvailable } from "./ai/client";
@@ -1172,11 +1173,29 @@ export async function registerRoutes(
     }
   });
 
-  // ── Jnomics Cards ────────────────────────────────────
+  // ── Jnomics Cards (CODEC Primitives) ─────────────────
+  // Card rows in Postgres carry the canonical id/name/tier/type/emoji/
+  // description/basePts. The CODEC catalog enriches each row with persona,
+  // multiplier, insight, and the O*NET / SFIA / WEF skill standard
+  // mappings so the UI can render skill-standard provenance without a
+  // second round-trip.
+  function enrichJnomicsCard(card: any) {
+    const meta = CODEC_BY_ID[card.id];
+    if (!meta) return card;
+    return {
+      ...card,
+      persona: meta.persona,
+      category: meta.category,
+      multiplier: meta.multiplier,
+      insight: meta.insight,
+      mappings: meta.mappings,
+    };
+  }
+
   app.get("/api/jnomics-cards", async (_req, res) => {
     try {
       const cards = await storage.getAllJnomicsCards();
-      return res.json(cards);
+      return res.json(cards.map(enrichJnomicsCard));
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
@@ -1187,7 +1206,7 @@ export async function registerRoutes(
       const { ids } = req.body;
       if (!Array.isArray(ids)) return res.status(400).json({ message: "ids must be an array" });
       const cards = await storage.getJnomicsCardsByIds(ids);
-      return res.json(cards);
+      return res.json(cards.map(enrichJnomicsCard));
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
@@ -1621,22 +1640,22 @@ export async function registerRoutes(
       return res.status(403).json({ message: "Forbidden" });
     }
     try {
-      // Seed Jnomics Cards
-      const cardSeeds = [
-        { id: "card-001", name: "SPHINX ULTRA SI", tier: "Ultra Premium", type: "Lead Architect", emoji: "🏛", description: "Master of platform architecture & API design. High capability in structural synthesis.", basePts: 48 },
-        { id: "card-002", name: "ADA ULTRA SI", tier: "Ultra Premium", type: "Technical Lead", emoji: "💻", description: "Full-stack implementation expert. Specializes in transforming complex specs into scalable code.", basePts: 50 },
-        { id: "card-003", name: "HOLMES ULTRA SI", tier: "Ultra Premium", type: "Intelligence Lead", emoji: "🧠", description: "Bayesian scoring & API intelligence. Masters pattern recognition and anomaly detection.", basePts: 50 },
-        { id: "card-004", name: "STRATEGOS ULTRA SI", tier: "Ultra Premium", type: "Strategy Lead", emoji: "🎯", description: "Roadmap and enterprise deployment specialist. Maximizes transferability and ROI.", basePts: 50 },
-        { id: "card-005", name: "ZPOS Expert", tier: "Premium", type: "Optimization Lead", emoji: "⚙", description: "Token optimization and efficiency expert. Minimizes operational drag while preserving semantics.", basePts: 47 },
-        { id: "card-006", name: "GRO / ANT KING", tier: "Ultra Premium", type: "Security Lead", emoji: "🔐", description: "Royal DNA governance & ethics. Ensures platform compliance, data integrity, and access control.", basePts: 50 },
-        { id: "card-007", name: "LUCI ULTRA SI", tier: "Premium", type: "UX Lead", emoji: "🎨", description: "Design and UX layer specialist. Creates intuitive, data-dense interfaces with clarity.", basePts: 46 },
-        { id: "card-008", name: "KLARITY", tier: "Standard", type: "Knowledge Lead", emoji: "📚", description: "Context Craft pillar classification and knowledge store management.", basePts: 42 },
-        { id: "card-009", name: "VIBE DJ", tier: "Premium", type: "Tool Orchestrator", emoji: "🎧", description: "Tool orchestration and workflow automation. Coordinates multi-agent pipelines.", basePts: 45 },
-        { id: "card-010", name: "ANT QUEEN", tier: "Ultra Premium", type: "Agent Factory", emoji: "👑", description: "Agent factory integration and autonomous system deployment.", basePts: 49 },
-      ];
-
-      for (const card of cardSeeds) {
-        await storage.upsertJnomicsCard(card);
+      // Seed Jnomics Cards from the canonical CODEC primitive catalog.
+      // The DB row stores id/name/tier(=category)/type(=persona)/emoji/
+      // description/basePts. Skill-standard mappings (O*NET / SFIA / WEF)
+      // come from shared/codec-primitives.ts and are merged at API time.
+      // Drop legacy SPC-style rows (card-001..card-010) from the prior seed.
+      await storage.deleteJnomicsCardsByIdPrefix("card-");
+      for (const p of CODEC_PRIMITIVES) {
+        await storage.upsertJnomicsCard({
+          id: p.id,
+          name: p.name,
+          tier: p.category,
+          type: p.persona,
+          emoji: p.emoji,
+          description: p.description,
+          basePts: p.basePts,
+        });
       }
 
       // Seed Departments
@@ -1683,7 +1702,7 @@ export async function registerRoutes(
             { task: "System Configuration", automatable: 60 },
             { task: "Stakeholder Communication", automatable: 15 },
           ],
-          matchedCardIds: ["card-001", "card-002", "card-004", "card-005"],
+          matchedCardIds: ["codec-elephant", "codec-platform", "codec-business-processes", "codec-innovation", "codec-revenue"],
         });
 
         await storage.createUpskillingPlans([
@@ -1741,7 +1760,7 @@ export async function registerRoutes(
           vulnerabilityLevel: 1,
           readinessProfile: "Architect",
           riskModifiers: [{ task: "Manual report generation", automatable: 75 }],
-          matchedCardIds: ["card-001", "card-006", "card-010"],
+          matchedCardIds: ["codec-elephant", "codec-business-processes", "codec-platform", "codec-innovation"],
         });
         await getOrCreateCredits(creator.id);
       } else {

@@ -50,6 +50,7 @@ export interface IStorage {
   getAllJnomicsCards(): Promise<JnomicsCard[]>;
   getJnomicsCardsByIds(ids: string[]): Promise<JnomicsCard[]>;
   upsertJnomicsCard(card: InsertJnomicsCard): Promise<JnomicsCard>;
+  deleteJnomicsCardsByIdPrefix(prefix: string): Promise<number>;
 
   getAllDepartments(): Promise<Department[]>;
   createDepartment(dept: InsertDepartment): Promise<Department>;
@@ -237,6 +238,16 @@ export class DatabaseStorage implements IStorage {
       .onConflictDoUpdate({ target: jnomicsCards.id, set: card })
       .returning();
     return created;
+  }
+
+  async deleteJnomicsCardsByIdPrefix(prefix: string): Promise<number> {
+    const all = await db.select().from(jnomicsCards);
+    const stale = all.filter(c => c.id.startsWith(prefix)).map(c => c.id);
+    if (stale.length === 0) return 0;
+    for (const id of stale) {
+      await db.delete(jnomicsCards).where(eq(jnomicsCards.id, id));
+    }
+    return stale.length;
   }
 
   async getAllDepartments(): Promise<Department[]> {

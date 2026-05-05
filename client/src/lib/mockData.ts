@@ -54,45 +54,45 @@ export const MOCK_USER_DATA = {
     { role: "Data Strategy Lead", feasibility: 75, gapCost: "$4,100", time: "9 Months" },
     { role: "Product Operations Dir.", feasibility: 68, gapCost: "$5,500", time: "12 Months" }
   ],
-  matchedJnomicsCards: ["card-001", "card-042", "card-088", "card-112"]
+  matchedJnomicsCards: ["codec-elephant", "codec-business-processes", "codec-platform", "codec-innovation"]
 };
 
 export const JNOMICS_DECK = [
   {
-    id: "card-001",
-    name: "SPHINX ULTRA SI",
-    tier: "Ultra Premium",
-    type: "Lead Architect",
-    emoji: "🏛",
-    description: "Master of platform architecture & API design. High capability in structural synthesis.",
-    basePts: 48
+    id: "codec-elephant",
+    name: "The Elephant",
+    tier: "Animal",
+    type: "Large Enterprise",
+    emoji: "🐘",
+    description: "Huge, slow, strong and structured. Feeds on little things to survive.",
+    basePts: 10
   },
   {
-    id: "card-042",
-    name: "ADA ULTRA SI",
-    tier: "Ultra Premium",
-    type: "Technical Lead",
-    emoji: "💻",
-    description: "Full-stack implementation expert. Specializes in transforming complex specs into scalable code.",
-    basePts: 50
+    id: "codec-business-processes",
+    name: "Business Processes",
+    tier: "Give",
+    type: "Codified, repeatable execution",
+    emoji: "⚙️",
+    description: "Codification · standardization · algorithm · automation.",
+    basePts: 10
   },
   {
-    id: "card-088",
-    name: "STRATEGOS ULTRA SI",
-    tier: "Ultra Premium",
-    type: "Strategy Lead",
-    emoji: "🎯",
-    description: "Roadmap and enterprise deployment specialist. Maximizes transferability and ROI.",
-    basePts: 50
+    id: "codec-platform",
+    name: "Platform",
+    tier: "Give",
+    type: "Delivery channels & networks",
+    emoji: "🛰️",
+    description: "Workspace · channels · logistics · networks · last mile.",
+    basePts: 10
   },
   {
-    id: "card-112",
-    name: "ZPOS Expert",
-    tier: "Premium",
-    type: "Optimization Lead",
-    emoji: "⚙",
-    description: "Token optimization and efficiency expert. Minimizes operational drag while preserving semantics.",
-    basePts: 47
+    id: "codec-innovation",
+    name: "Innovation",
+    tier: "Innovation",
+    type: "Multiplier",
+    emoji: "💡",
+    description: "Replaces any other primitive · multiplies value when paired with two or more identical cards.",
+    basePts: 10
   }
 ];
 
