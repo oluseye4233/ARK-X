@@ -103,6 +103,7 @@ export function JnomicsCardList({ matchedCardIds }: JnomicsCardListProps) {
                 unflipLabel={`Hide FORGE mapping for ${card.name}`}
                 faceClassName="p-4 rounded-lg border border-secondary/30 bg-background/50 hover:bg-white/5 transition-all hover:border-secondary/70 group"
                 backFaceClassName="p-4 rounded-lg border border-secondary/50 bg-secondary/5"
+                drm={{ contentId: card.id, contentType: "jnomics-card" }}
                 front={
                   <div className="flex flex-col gap-2 h-full">
                     <div className="flex justify-between items-start mb-2 pr-9">

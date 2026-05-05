@@ -136,6 +136,12 @@ export function ArkIdentityCard({ identity }: { identity: ArkIdentity }) {
                 navigator.clipboard?.writeText(identity.arkIdString).catch(() => {});
               }
             }}
+            // Owner-initiated copy of their OWN ARK ID is allowed — the DRM
+            // boundary above blocks generic clipboard/contextmenu, but this
+            // button calls clipboard.writeText directly so it bypasses the
+            // event-level block. data-drm-allow-select keeps the button
+            // itself selectable for accessibility tooling.
+            data-drm-allow-select="true"
             className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground hover:text-white transition-colors px-2 py-0.5 rounded border border-white/10 hover:border-white/30"
             data-testid="button-copy-ark-id"
             aria-label="Copy ARK ID"
@@ -228,6 +234,12 @@ export function ArkIdentityCard({ identity }: { identity: ArkIdentity }) {
         backFaceClassName={`glass-card rounded-xl border-2 ${borderClass}`}
         front={front}
         back={back}
+        drm={{
+          contentId: identity.arkIdString || "ark-identity",
+          contentType: "ark-identity",
+          // ARK ID copy button needs to work — it's marked allow-select via
+          // a data attr inside the front face below.
+        }}
       />
     </div>
   );

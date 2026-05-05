@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DrmBoundary, type DrmBoundaryProps } from "@/components/ui/drm-boundary";
 
 export interface FlippableCardProps {
   /** Front face content. Caller owns its interactivity (button/link/div). */
@@ -27,6 +28,19 @@ export interface FlippableCardProps {
   testId?: string;
   /** Disable the flip toggle entirely (e.g. when there's nothing to reveal). */
   disabled?: boolean;
+  /**
+   * When provided, both faces are wrapped in a DrmBoundary that blocks
+   * copy/cut/paste/contextmenu/clipboard hotkeys, disables text selection,
+   * stamps a per-user watermark, and reports violations to /api/drm/event.
+   * The flip controls remain interactive because they're inside the DRM
+   * subtree but have no selectable text.
+   */
+  drm?: {
+    contentId: string;
+    contentType: DrmBoundaryProps["contentType"];
+    hideBadge?: boolean;
+    hideWatermark?: boolean;
+  };
 }
 
 /**
@@ -54,9 +68,30 @@ export function FlippableCard({
   unflipLabel = "Hide details",
   testId,
   disabled = false,
+  drm,
 }: FlippableCardProps) {
   const [flipped, setFlipped] = useState(false);
   const toggle = () => setFlipped((f) => !f);
+
+  // Wrap each face in a DrmBoundary when drm is requested. Wrapping per-face
+  // (rather than the outer perspective container) keeps the 3D transform
+  // intact since the boundary uses `position: relative` on a non-flipping
+  // element. Both faces share the same contentId so telemetry stays correlated.
+  const wrapDrm = (node: ReactNode, faceTag: "front" | "back") =>
+    drm ? (
+      <DrmBoundary
+        contentId={drm.contentId}
+        contentType={drm.contentType}
+        hideBadge={drm.hideBadge}
+        hideWatermark={drm.hideWatermark}
+        testId={`drm-${drm.contentType}-${drm.contentId}-${faceTag}`}
+        className="w-full h-full"
+      >
+        {node}
+      </DrmBoundary>
+    ) : (
+      node
+    );
 
   return (
     <div
@@ -64,6 +99,7 @@ export function FlippableCard({
       style={{ minHeight }}
       data-testid={testId ? `ccard-${testId}` : undefined}
       data-flipped={flipped ? "true" : "false"}
+      data-drm-protected={drm ? "true" : undefined}
     >
       <div
         className={cn(
@@ -84,7 +120,7 @@ export function FlippableCard({
           inert={flipped}
           aria-hidden={flipped}
         >
-          {front}
+          {wrapDrm(front, "front")}
           {!disabled && (
             <button
               type="button"
@@ -111,7 +147,7 @@ export function FlippableCard({
           inert={!flipped}
           aria-hidden={!flipped}
         >
-          {back}
+          {wrapDrm(back, "back")}
           <button
             type="button"
             onClick={toggle}

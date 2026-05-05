@@ -739,6 +739,76 @@ export async function registerRoutes(
     }
   });
 
+  // ── DRM Telemetry ─────────────────────────────────────
+  // Best-effort sink for client-side DRM events fired by DrmBoundary
+  // (copy/cut/paste/contextmenu/hotkey blocks). Logged for audit; we don't
+  // persist a dedicated table since the volume is high and the value of
+  // each individual event is low — aggregate counts in logs are enough to
+  // flag suspicious sessions. Endpoint is auth-optional so the beacon can
+  // still fire on an expired session, but unauthenticated events are tagged.
+  //
+  // Two abuse surfaces are mitigated here:
+  //   1) Log flooding — naive clients (or attackers) could fire thousands
+  //      of events per second. We rate-limit to DRM_RATE_MAX events per
+  //      DRM_RATE_WINDOW_MS per origin key (userId or IP for anon).
+  //   2) Log injection — string fields are user-controlled and go straight
+  //      to console.log. We strip control chars and cap length so attackers
+  //      can't forge fake log lines via embedded \n / \r.
+  const DRM_RATE_WINDOW_MS = 10_000;
+  const DRM_RATE_MAX = 60;
+  const drmRateBuckets = new Map<string, { count: number; windowStart: number }>();
+
+  function sanitizeDrmField(value: string, maxLen = 80): string {
+    // Strip control chars (\n, \r, \t, escape, etc.) so a crafted payload
+    // can't inject newlines and forge additional log lines.
+    return value.replace(/[\x00-\x1f\x7f]/g, "?").slice(0, maxLen);
+  }
+
+  app.post("/api/drm/event", async (req, res) => {
+    try {
+      const { contentId, contentType, action, ts } = req.body ?? {};
+      if (
+        typeof contentId !== "string" ||
+        typeof contentType !== "string" ||
+        typeof action !== "string"
+      ) {
+        return res.status(400).json({ message: "Invalid DRM event payload." });
+      }
+      const userId = currentUserId(req) ?? "anon";
+      const rateKey = userId !== "anon" ? `u:${userId}` : `ip:${req.ip ?? "?"}`;
+      const now = Date.now();
+      const bucket = drmRateBuckets.get(rateKey);
+      if (!bucket || now - bucket.windowStart > DRM_RATE_WINDOW_MS) {
+        drmRateBuckets.set(rateKey, { count: 1, windowStart: now });
+      } else {
+        bucket.count += 1;
+        if (bucket.count > DRM_RATE_MAX) {
+          // Silently drop — beacon clients ignore the response anyway, and
+          // we don't want to give the abuser feedback on the limit.
+          return res.status(204).end();
+        }
+      }
+      // Lazy GC of the rate map to keep memory bounded under churn.
+      if (drmRateBuckets.size > 5_000) {
+        Array.from(drmRateBuckets.entries()).forEach(([k, v]) => {
+          if (now - v.windowStart > DRM_RATE_WINDOW_MS * 2) drmRateBuckets.delete(k);
+        });
+      }
+      // Single-line structured log so it can be grep'd / piped to a SIEM.
+      console.log(
+        `[drm] user=${sanitizeDrmField(userId, 64)} ` +
+          `type=${sanitizeDrmField(contentType, 32)} ` +
+          `id=${sanitizeDrmField(contentId, 64)} ` +
+          `action=${sanitizeDrmField(action, 32)} ` +
+          `ts=${typeof ts === "number" ? ts : now}`,
+      );
+      return res.status(204).end();
+    } catch (err: any) {
+      console.error("[/api/drm/event] error:", err);
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
   // ── Self-Assessment & LinkedIn Text Intake ────────────
   // Single endpoint that runs the same analysis pipeline as /api/resume/upload
   // but takes raw text + a source tag instead of a binary file. Lets us pipe

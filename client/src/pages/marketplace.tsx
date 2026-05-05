@@ -170,6 +170,7 @@ function ListingsList() {
               unflipLabel={`Hide scoring for ${l.title}`}
               faceClassName="glass-card rounded-xl border border-transparent"
               backFaceClassName="glass-card rounded-xl border border-primary/30"
+              drm={{ contentId: l.id, contentType: "spc-listing" }}
               front={
                 <Link
                   href={`/marketplace/${l.id}`}
