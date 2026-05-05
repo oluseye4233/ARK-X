@@ -58,7 +58,8 @@
     --secondary-foreground: 210 40% 98%;
     
     --muted: 217 32% 17%;
-    --muted-foreground: 215 20.2% 65.1%;
+    /* a11y: bumped lightness from 65.1% → 74% for WCAG AA on dark bg */
+    --muted-foreground: 215 22% 74%;
     --accent: 217 32% 17%;
     --accent-foreground: 210 40% 98%;
     

@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { ArrowRight, ShieldAlert, Target, Zap, Crown, GraduationCap, User, Building2, Check } from "lucide-react";
+import { ArrowRight, ShieldAlert, Target, Zap, Crown, GraduationCap, User, Building2, Check, Upload, BarChart3, Compass } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SUBSCRIPTION_PLANS } from "@shared/schema";
 
@@ -19,11 +19,31 @@ export default function Home() {
         </h1>
         
         <p className="text-xl text-muted-foreground font-sans max-w-2xl leading-relaxed">
-          ARK is the world's most sophisticated AI-powered career intelligence platform. 
-          Transform career uncertainty into strategic clarity at machine speed.
+          Upload your CV and, in under 60 seconds, see how marketable you are today, where AI puts you at risk, and the smartest next move you can make.
         </p>
 
-        <div className="flex flex-col sm:flex-row gap-4 pt-8">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 max-w-3xl">
+          {[
+            { step: "1", icon: Upload, title: "Upload your CV", body: "PDF, DOCX or paste text — takes 10 seconds." },
+            { step: "2", icon: BarChart3, title: "Get your JST score", body: "Your career capital, benchmarked vs the live market." },
+            { step: "3", icon: Compass, title: "See your next move", body: "Pivot paths and skills ranked by ROI." },
+          ].map(({ step, icon: Icon, title, body }) => (
+            <div key={step} className="flex items-start gap-3 p-3 rounded-lg border border-white/10 bg-white/[0.02]" data-testid={`landing-step-${step}`}>
+              <div className="flex-shrink-0 mt-0.5 flex items-center justify-center h-7 w-7 rounded-full bg-primary/15 text-primary font-display text-sm font-bold border border-primary/30">
+                {step}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <Icon className="h-3.5 w-3.5 text-primary/80" />
+                  <h3 className="font-display font-bold text-sm text-white tracking-wide">{title}</h3>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{body}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-4 pt-4">
           <Link href="/upload" data-testid="button-start-assessment" className="inline-flex items-center justify-center bg-primary hover:bg-primary/90 text-primary-foreground font-mono uppercase tracking-wider rounded-none neon-border h-14 px-8 transition-all hover:scale-[1.02] text-sm font-medium">
             Initialize Analysis <ArrowRight className="ml-2 h-5 w-5" />
           </Link>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Database, Link as LinkIcon, Loader2, Layers, Award, Globe2 } from "lucide-react";
+import { Database, Link as LinkIcon, Loader2, Layers, Award, Globe2, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { FlippableCard } from "@/components/ui/flippable-card";
@@ -46,6 +46,10 @@ interface JnomicsCardListProps {
 export function JnomicsCardList({ matchedCardIds }: JnomicsCardListProps) {
   const [cards, setCards] = useState<JnomicsCard[]>([]);
   const [isSyncing, setIsSyncing] = useState(true);
+  // "Flip all / Unflip all" — single switch lets users compare every card's
+  // skill-standard mapping side-by-side without clicking each one.
+  const [flipAllVersion, setFlipAllVersion] = useState(0);
+  const [allFlipped, setAllFlipped] = useState(false);
 
   useEffect(() => {
     const fetchCards = async () => {
@@ -67,6 +71,11 @@ export function JnomicsCardList({ matchedCardIds }: JnomicsCardListProps) {
     }
   }, [matchedCardIds]);
 
+  const handleFlipAll = () => {
+    setAllFlipped(prev => !prev);
+    setFlipAllVersion(v => v + 1);
+  };
+
   return (
     <div className="glass-card p-6 rounded-xl border-secondary/20" data-testid="jnomics-card-list">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
@@ -75,22 +84,35 @@ export function JnomicsCardList({ matchedCardIds }: JnomicsCardListProps) {
             <Database className="w-5 h-5" />
             Junglenomics CODEC Primitives
           </h3>
-          <p className="text-xs font-mono text-muted-foreground mt-1">
+          <p className="text-[11px] font-mono text-muted-foreground mt-1">
             Skills mapped to global standards · O*NET · SFIA v8 · WEF Future of Jobs
           </p>
         </div>
 
-        <div className={cn(
-          "flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-mono uppercase tracking-widest",
-          isSyncing
-            ? "border-amber-500/50 bg-amber-500/10 text-amber-500"
-            : "border-secondary/50 bg-secondary/10 text-secondary"
-        )}>
-          {isSyncing ? (
-            <><Loader2 className="w-3 h-3 animate-spin" /> Syncing...</>
-          ) : (
-            <><LinkIcon className="w-3 h-3" /> {cards.length} matched</>
+        <div className="flex items-center gap-2">
+          {!isSyncing && cards.length > 0 && (
+            <button
+              type="button"
+              onClick={handleFlipAll}
+              data-testid="button-flip-all-cards"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-secondary/40 text-secondary hover:bg-secondary/10 text-[11px] font-mono uppercase tracking-widest transition-colors"
+            >
+              {allFlipped ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+              {allFlipped ? "Hide mappings" : "Show mappings"}
+            </button>
           )}
+          <div className={cn(
+            "flex items-center gap-2 px-3 py-1.5 rounded-full border text-[11px] font-mono uppercase tracking-widest",
+            isSyncing
+              ? "border-amber-500/50 bg-amber-500/10 text-amber-500"
+              : "border-secondary/50 bg-secondary/10 text-secondary"
+          )}>
+            {isSyncing ? (
+              <><Loader2 className="w-3 h-3 animate-spin" /> Syncing…</>
+            ) : (
+              <><LinkIcon className="w-3 h-3" /> {cards.length} matched</>
+            )}
+          </div>
         </div>
       </div>
 
@@ -110,8 +132,10 @@ export function JnomicsCardList({ matchedCardIds }: JnomicsCardListProps) {
               transition={{ delay: index * 0.1, duration: 0.4 }}
             >
               <FlippableCard
+                key={`${card.id}-${flipAllVersion}`}
                 testId={`jnomics-${card.id}`}
-                minHeight="220px"
+                minHeight="240px"
+                defaultFlipped={allFlipped}
                 flipLabel={`Reveal skill standard mapping for ${card.name}`}
                 unflipLabel={`Hide skill standard mapping for ${card.name}`}
                 faceClassName="p-4 rounded-lg border border-secondary/30 bg-background/50 hover:bg-white/5 transition-all hover:border-secondary/70 group"
@@ -124,7 +148,7 @@ export function JnomicsCardList({ matchedCardIds }: JnomicsCardListProps) {
                         <span className="text-2xl" role="img" aria-label={card.type}>{card.emoji}</span>
                         <div>
                           <h4 className="font-display font-bold text-white text-sm group-hover:text-secondary transition-colors" data-testid={`text-primitive-name-${card.id}`}>{card.name}</h4>
-                          <span className="text-[10px] font-mono uppercase text-muted-foreground tracking-widest">
+                          <span className="text-[11px] font-mono uppercase text-muted-foreground tracking-widest">
                             {card.tier} · CODEC
                           </span>
                         </div>
@@ -134,15 +158,30 @@ export function JnomicsCardList({ matchedCardIds }: JnomicsCardListProps) {
                         <span className="text-[10px] font-mono text-muted-foreground block -mt-1">BASE PTS</span>
                       </div>
                     </div>
-                    <div className="text-[10px] font-mono uppercase text-secondary/80 tracking-widest">
+                    <div className="text-[11px] font-mono uppercase text-secondary/80 tracking-widest">
                       {card.persona ?? card.type}
                     </div>
-                    <div className="mt-1 text-xs font-sans text-white/80 border-t border-white/10 pt-2 flex-1">
+                    <div className="mt-1 text-xs font-sans text-white/85 border-t border-white/10 pt-2 flex-1">
                       {card.description}
                     </div>
-                    {card.multiplier && (
-                      <div className="text-[10px] font-mono text-secondary/70 pt-1 border-t border-white/5">
-                        Multiplier · {card.multiplier}
+
+                    {/* Skill-standard pills — visible without flipping */}
+                    {card.mappings && (
+                      <div className="flex flex-wrap gap-1.5 pt-2 border-t border-white/5">
+                        {card.mappings.onet.length > 0 && (
+                          <StandardPill label="O*NET" tone="bg-blue-500/15 text-blue-300 border-blue-500/30" count={card.mappings.onet.length} />
+                        )}
+                        {card.mappings.sfia.length > 0 && (
+                          <StandardPill label="SFIA" tone="bg-emerald-500/15 text-emerald-300 border-emerald-500/30" count={card.mappings.sfia.length} />
+                        )}
+                        {card.mappings.wef.length > 0 && (
+                          <StandardPill label="WEF" tone="bg-amber-500/15 text-amber-300 border-amber-500/30" count={card.mappings.wef.length} />
+                        )}
+                        {card.multiplier && (
+                          <span className="ml-auto text-[10px] font-mono text-secondary/70 self-center">
+                            ×{card.multiplier.replace(/^x/i, '')}
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -151,28 +190,28 @@ export function JnomicsCardList({ matchedCardIds }: JnomicsCardListProps) {
                   <div className="flex flex-col gap-2 h-full pr-9 overflow-hidden">
                     <div className="flex items-center gap-2">
                       <Globe2 className="h-3.5 w-3.5 text-secondary" />
-                      <div className="text-[10px] font-mono uppercase tracking-widest text-secondary">
+                      <div className="text-[11px] font-mono uppercase tracking-widest text-secondary">
                         Global Skill Standard Mapping
                       </div>
                     </div>
                     <div className="font-display font-bold text-white text-sm leading-tight">{card.name}</div>
-                    <div className="text-[10px] font-mono uppercase text-muted-foreground tracking-widest">
+                    <div className="text-[11px] font-mono uppercase text-muted-foreground tracking-widest">
                       {card.tier} · {card.persona ?? card.type}
                     </div>
 
                     {card.mappings ? (
-                      <div className="flex flex-col gap-1.5 mt-1 text-[11px] font-sans flex-1 min-h-0 overflow-y-auto">
+                      <div className="flex flex-col gap-1.5 mt-1 text-[12px] font-sans flex-1 min-h-0 overflow-y-auto">
                         <MappingRow label="O*NET" tone="text-blue-300" items={card.mappings.onet} testId={`mapping-onet-${card.id}`} />
                         <MappingRow label="SFIA" tone="text-emerald-300" items={card.mappings.sfia} testId={`mapping-sfia-${card.id}`} />
                         <MappingRow label="WEF" tone="text-amber-300" items={card.mappings.wef} testId={`mapping-wef-${card.id}`} />
                       </div>
                     ) : (
-                      <p className="text-xs font-sans text-white/80 leading-relaxed flex-1">
+                      <p className="text-xs font-sans text-white/85 leading-relaxed flex-1">
                         {CATEGORY_BLURB[card.tier] ?? "CODEC primitive."}
                       </p>
                     )}
 
-                    <div className="flex items-center justify-between text-[10px] font-mono pt-2 border-t border-secondary/20">
+                    <div className="flex items-center justify-between text-[11px] font-mono pt-2 border-t border-secondary/20">
                       <span className="flex items-center gap-1 text-secondary">
                         <Award className="h-3 w-3" /> {card.basePts} pts
                       </span>
@@ -191,12 +230,27 @@ export function JnomicsCardList({ matchedCardIds }: JnomicsCardListProps) {
   );
 }
 
+function StandardPill({ label, tone, count }: { label: string; tone: string; count: number }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider border",
+        tone
+      )}
+      data-testid={`pill-${label.toLowerCase().replace(/\W+/g, '')}`}
+    >
+      {label}
+      <span className="opacity-70">·{count}</span>
+    </span>
+  );
+}
+
 function MappingRow({ label, tone, items, testId }: { label: string; tone: string; items: string[]; testId: string }) {
   if (!items || items.length === 0) return null;
   return (
     <div className="flex items-start gap-2" data-testid={testId}>
-      <span className={cn("font-mono text-[10px] uppercase tracking-widest pt-0.5 shrink-0 w-12", tone)}>{label}</span>
-      <span className="text-white/85 leading-snug">{items.join(" · ")}</span>
+      <span className={cn("font-mono text-[11px] uppercase tracking-widest pt-0.5 shrink-0 w-12", tone)}>{label}</span>
+      <span className="text-white/90 leading-snug">{items.join(" · ")}</span>
     </div>
   );
 }

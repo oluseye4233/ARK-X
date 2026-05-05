@@ -113,14 +113,14 @@ const STEPS: Step[] = [
     id: "ecosystem",
     icon: ShoppingBag,
     eyebrow: "Step 4 — engage the flywheel",
-    title: "Play the Arena · Browse the Market",
-    body: "Earn ARK by playing CCGE Arena scenarios and by buying or selling expert prompts and playbooks in SPHINX Market. Both feed back into your live identity.",
+    title: "Play Skill Games · Browse the Marketplace",
+    body: "Earn ARK by playing Skill Games scenarios (CCGE Arena) and by buying or selling expert prompts and playbooks in the Marketplace (SPHINX). Both feed back into your live identity.",
     bullets: [
-      "CCGE Arena — up to +15 ARK / day from gameplay",
-      "SPHINX Market — up to +20 ARK / 30 days from trades",
+      "Skill Games (CCGE Arena) — up to +15 ARK / day from gameplay",
+      "Marketplace (SPHINX) — up to +20 ARK / 30 days from trades",
       "Track every event in your ARK history feed",
     ],
-    ctaLabel: "Enter the Arena",
+    ctaLabel: "Open Skill Games",
     ctaHref: "/play",
   },
 ];
@@ -181,7 +181,7 @@ export function OnboardingTour({ open, onClose }: OnboardingTourProps) {
           <DialogTitle>ARK Platform onboarding tour</DialogTitle>
           <DialogDescription id="onboarding-description">
             A six-step walkthrough of the ARK identity, resume upload, Context
-            Craft assessment, Career Mobility, and the SPHINX / CCGE flywheel.
+            Craft assessment, Career Mobility, and the Marketplace / Skill Games flywheel.
           </DialogDescription>
         </VisuallyHidden>
 

@@ -28,6 +28,8 @@ export interface FlippableCardProps {
   testId?: string;
   /** Disable the flip toggle entirely (e.g. when there's nothing to reveal). */
   disabled?: boolean;
+  /** Initial flipped state (default false). Useful for "flip all" controls. */
+  defaultFlipped?: boolean;
   /**
    * When provided, both faces are wrapped in a DrmBoundary that blocks
    * copy/cut/paste/contextmenu/clipboard hotkeys, disables text selection,
@@ -68,9 +70,10 @@ export function FlippableCard({
   unflipLabel = "Hide details",
   testId,
   disabled = false,
+  defaultFlipped = false,
   drm,
 }: FlippableCardProps) {
-  const [flipped, setFlipped] = useState(false);
+  const [flipped, setFlipped] = useState(defaultFlipped);
   const toggle = () => setFlipped((f) => !f);
 
   // Wrap each face in a DrmBoundary when drm is requested. Wrapping per-face
