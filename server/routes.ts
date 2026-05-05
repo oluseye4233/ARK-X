@@ -1394,12 +1394,12 @@ export async function registerRoutes(
   });
 
   // Server-side body redaction protects paid prompt content from being scraped
-  // via direct API calls (UI truncation alone is bypassable).
-  const SPC_PREVIEW_LEN = 280;
-  const redactBody = (body: string) =>
-    body.length > SPC_PREVIEW_LEN
-      ? body.slice(0, SPC_PREVIEW_LEN) + "\n\n[ … purchase to unlock full prompt … ]"
-      : body;
+  // via direct API calls. We strip the body entirely on the wire for non-buyers
+  // — the buyer-facing UI shows the SpcTaxonomyPanel (Benefits + Skills mix
+  // derived from non-prompt metadata) instead of a content preview. The
+  // body length is preserved separately as `bodyLength` so the panel can
+  // render a "prompt density" indicator without exposing any actual content.
+  const redactBody = (_body: string) => "";
 
   app.get("/api/sphinx/listings", async (req, res) => {
     try {
@@ -1409,7 +1409,12 @@ export async function registerRoutes(
         status: filters.status ?? "active",
       });
       // List endpoint always returns redacted bodies — no viewer context here.
-      const redacted = all.map((l) => ({ ...l, body: redactBody(l.body), bodyLocked: true }));
+      const redacted = all.map((l) => ({
+        ...l,
+        body: redactBody(l.body),
+        bodyLocked: true,
+        bodyLength: l.body.length,
+      }));
       return res.json(redacted);
     } catch (err: any) {
       return res.status(400).json({ message: err.message });
@@ -1434,8 +1439,8 @@ export async function registerRoutes(
         }
       }
       const safeListing = canViewBody
-        ? { ...listing, bodyLocked: false }
-        : { ...listing, body: redactBody(listing.body), bodyLocked: true };
+        ? { ...listing, bodyLocked: false, bodyLength: listing.body.length }
+        : { ...listing, body: redactBody(listing.body), bodyLocked: true, bodyLength: listing.body.length };
       return res.json({ listing: safeListing, creator: safeCreator });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
@@ -1470,7 +1475,18 @@ export async function registerRoutes(
         asRole: "creator",
         isFirstSaleForCreator: outcome.isFirstSaleForCreator,
       }, outcome.arkScoreDelta.creator);
-      return res.json(outcome);
+      // Enrich the listing with the same DRM envelope as GET /listings/:id so
+      // the client's bodyLocked check immediately swaps the taxonomy panel for
+      // the full prompt without needing a refetch.
+      const enriched = {
+        ...outcome,
+        listing: {
+          ...outcome.listing,
+          bodyLocked: false,
+          bodyLength: outcome.listing.body.length,
+        },
+      };
+      return res.json(enriched);
     } catch (err: any) {
       console.error("Purchase error:", err);
       const status = /not found|insufficient|own SPC|not available|already purchased/.test(err.message) ? 400 : 500;
@@ -1495,8 +1511,8 @@ export async function registerRoutes(
       const listings = await storage.getSpcListingsByCreator(creatorId);
       const result = listings.map((l) =>
         isCreator
-          ? { ...l, bodyLocked: false }
-          : { ...l, body: redactBody(l.body), bodyLocked: true },
+          ? { ...l, bodyLocked: false, bodyLength: l.body.length }
+          : { ...l, body: redactBody(l.body), bodyLocked: true, bodyLength: l.body.length },
       );
       return res.json(result);
     } catch (err: any) {

@@ -33,6 +33,7 @@ import {
   FileText,
 } from "lucide-react";
 import { FlippableCard } from "@/components/ui/flippable-card";
+import { SpcTaxonomyPanel } from "@/components/marketplace/SpcTaxonomyPanel";
 
 const PILLARS_FILTER = ["All", ...ALL_CARD_PILLARS] as const;
 
@@ -205,31 +206,21 @@ function ListingsList() {
                 </Link>
               }
               back={
-                <div className="flex flex-col gap-3 p-5 h-full pr-9" data-testid={`card-listing-${l.id}-back`}>
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-3.5 w-3.5 text-primary" />
-                    <span className="text-[10px] font-mono uppercase tracking-widest text-primary">
-                      Scoring breakdown
-                    </span>
-                  </div>
-                  <h3 className="font-display font-bold text-sm text-white leading-tight">{l.title}</h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="p-2 rounded bg-blue-400/5 border border-blue-400/20">
-                      <div className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground">HIVE</div>
-                      <div className="font-mono text-lg font-bold text-blue-400">{Math.round(l.hiveScore)}</div>
-                      <div className="text-[9px] font-mono text-muted-foreground">Originality + clarity</div>
-                    </div>
-                    <div className="p-2 rounded bg-emerald-400/5 border border-emerald-400/20">
-                      <div className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground">KCSE</div>
-                      <div className="font-mono text-lg font-bold text-emerald-400">
-                        {Math.round(l.kcseScore * 10) / 10}
-                      </div>
-                      <div className="text-[9px] font-mono text-muted-foreground">Context-craft rigor</div>
-                    </div>
-                  </div>
-                  <div className="text-xs font-sans text-white/80 leading-relaxed flex-1 line-clamp-4">
-                    {l.description}
-                  </div>
+                <div
+                  className="flex flex-col gap-3 p-5 h-full pr-9 overflow-y-auto"
+                  data-testid={`card-listing-${l.id}-back`}
+                >
+                  <SpcTaxonomyPanel
+                    data={{
+                      pillar: l.pillar,
+                      hiveScore: l.hiveScore,
+                      kcseScore: l.kcseScore,
+                      priceCredits: l.priceCredits,
+                      salesCount: l.salesCount,
+                      bodyLength: l.bodyLength,
+                    }}
+                    locked
+                  />
                   <div className="flex items-center justify-between text-[10px] font-mono pt-2 border-t border-white/10 mt-auto">
                     <span className="flex items-center gap-1 text-amber-400">
                       <Coins className="h-3 w-3" /> {l.priceCredits} credits
@@ -371,12 +362,32 @@ function ListingDetail({ id }: { id: string }) {
           </div>
         )}
 
-        <div>
-          <h3 className="text-[10px] uppercase font-mono tracking-widest text-muted-foreground mb-3">Prompt Body Preview</h3>
-          <pre className="glass-card p-4 rounded-lg border border-white/5 text-xs text-white/80 font-mono whitespace-pre-wrap max-h-64 overflow-y-auto" data-testid="text-listing-body">
-            {listing.body}
-          </pre>
-        </div>
+        {listing.bodyLocked !== false ? (
+          <SpcTaxonomyPanel
+            data={{
+              pillar: listing.pillar,
+              hiveScore: listing.hiveScore,
+              kcseScore: listing.kcseScore,
+              priceCredits: listing.priceCredits,
+              salesCount: listing.salesCount,
+              bodyLength: listing.bodyLength,
+              creatorCertLevel: creator?.contextCraftCertLevel,
+            }}
+            locked
+          />
+        ) : (
+          <div>
+            <h3 className="text-[10px] uppercase font-mono tracking-widest text-muted-foreground mb-3">
+              Full Prompt — Unlocked
+            </h3>
+            <pre
+              className="glass-card p-4 rounded-lg border border-secondary/30 text-xs text-white/90 font-mono whitespace-pre-wrap max-h-96 overflow-y-auto"
+              data-testid="text-listing-body"
+            >
+              {listing.body}
+            </pre>
+          </div>
+        )}
 
         {error && (
           <div className="p-3 rounded-lg border border-destructive/30 bg-destructive/5 font-mono text-sm text-destructive flex items-center gap-2" data-testid="text-purchase-error">

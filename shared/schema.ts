@@ -494,7 +494,13 @@ export const insertSpcListingSchema = createInsertSchema(spcListings).omit({
   createdAt: true,
 });
 export type InsertSpcListing = z.infer<typeof insertSpcListingSchema>;
-export type SpcListing = typeof spcListings.$inferSelect;
+// `bodyLocked` and `bodyLength` are added by the API layer (not stored in DB)
+// so the client can render the SpcTaxonomyPanel without ever touching prompt
+// content. `body` is empty string when locked.
+export type SpcListing = typeof spcListings.$inferSelect & {
+  bodyLocked?: boolean;
+  bodyLength?: number;
+};
 
 export const spcPurchases = pgTable(
   "spc_purchases",
