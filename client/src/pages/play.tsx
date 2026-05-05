@@ -590,7 +590,6 @@ export default function PlayPage() {
               unflipLabel={`Hide scoring rules for ${s.title}`}
               faceClassName={cn("glass-card rounded-xl border-2 hover:border-primary/40 transition-all", TIER_BORDER[s.tier])}
               backFaceClassName={cn("glass-card rounded-xl border-2", TIER_BORDER[s.tier])}
-              drm={{ contentId: s.id, contentType: "scenario" }}
               front={
                 <div className="p-5 h-full flex flex-col" data-testid={`scenario-card-${s.id}`}>
                   <div className="flex items-center justify-between mb-2 pr-9">
