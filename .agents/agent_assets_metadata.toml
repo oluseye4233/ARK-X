@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "aOXmgQhkJKydupZtXtQB7"
+uri = "file://exports/ATLAS_PDD_ARK_Platform_Investor.pdf"
+type = "pdf"
+title = "ATLAS PDD — ARK Platform (Investor Edition)"

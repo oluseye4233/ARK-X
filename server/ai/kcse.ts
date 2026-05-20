@@ -85,7 +85,7 @@ export async function scoreSessionWithClaude(opts: {
       messages: [{ role: "user", content: userPrompt }],
     });
     const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Claude KCSE timeout 5s")), 5000),
+      setTimeout(() => reject(new Error("Claude KCSE timeout 10s")), 10000),
     );
     const message = (await Promise.race([callPromise, timeoutPromise])) as Awaited<typeof callPromise> & {
       content: Array<{ type: string; text?: string }>;
