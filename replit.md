@@ -60,6 +60,19 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 - `/marketplace/publish` — Publish a new SPC (Gold+ cert gated, runs HIVE pre-check)
 - `/marketplace/:id` — SPC detail page (preview, purchase, ownership view)
 
+## Phase G — Institutional Tier Hardening
+- **Schema** (`shared/schema.ts`): `USER_ROLES = ["student","instructor","admin"]` + `isInstructor(role)` helper; three new tables — `cohorts` (instructorId/institution/name/description), `cohortMemberships` (cohortId/userId/status∈active|invited|removed/invitedEmail) with unique (cohort_id,user_id) index, `cohortAssignments` (cohortId/scenarioId/assignedBy/dueAt/note).
+- **Migration**: `migrations/0002_phase_g_cohorts.sql` (idempotent CREATE TABLE/INDEX IF NOT EXISTS) — applied to live DB via psql since drizzle-kit push needs a TTY.
+- **Authz** (`server/auth.ts`): `requireInstructor` middleware reads `users.role` and 403s anyone not `instructor`/`admin`. **`PUT /api/users/:id/profile` no longer accepts `role`** — role is privilege-bearing and changes only through admin/seed paths. Verified: a logged-in analyst sending `{"role":"instructor"}` is silently dropped and cohort routes still 403.
+- **Routes** (`server/routes.ts`): all under `requireInstructor` + per-cohort `assertCohortOwnership` re-check:
+  - `GET/POST /api/cohorts`, `GET /api/cohorts/:id` (cohort+members+assignments), `POST/DELETE /api/cohorts/:id/members[/userId]`, `GET/POST /api/cohorts/:id/assignments`, `GET /api/cohorts/:id/grades` (JSON) + `/grades.csv` (RFC4180-ish escaping, attachment), `GET /api/cohorts/comparison` (registered BEFORE `:id` to avoid path shadowing).
+  - `POST /api/cohorts/:id/assignments` validates that `scenarioId` exists (404 on unknown) so gradebook joins never orphan.
+  - Bulk-import: `POST /api/cohorts/:id/members` takes `{emails: string[]}` (Zod `.email()`, max 500). Unregistered emails become placeholder memberships keyed on `invite:<email>` so the unique index still works.
+  - Student-facing `GET /api/me/cohorts` (requireAuth).
+- **Invite reconciliation** (`server/storage.ts::reconcileCohortInvitesForUser`): called from both `/api/auth/login` and `/api/auth/register` in a transaction — converts every `invite:<email>` placeholder for the user's email into a real `userId`-keyed active membership, dropping conflicts when the user is already a member. Verified end-to-end (invite → register → `/me/cohorts` shows the cohort).
+- **Frontend** (`client/src/pages/school-dashboard.tsx`): mock data removed. Instructor view renders cohort selector, comparison bar chart (avg JST/CCMI/ARK per cohort), and a tabbed manager (Roster · Assignments · Import · Grades) with inline cohort creation and CSV download link. Student view lists cohorts via `/api/me/cohorts`. `client/src/lib/api.ts` adds the cohort client methods (`getCohorts`, `createCohort`, `getCohort`, `addCohortMembers`, `removeCohortMember`, `createCohortAssignment`, `getCohortGrades`, `getCohortComparison`, `cohortGradesCsvUrl`, `getMyCohorts`).
+- **Seed**: `instructor@academy.edu` / `arkplatform` (role=`instructor`, plan=SCHOOL_STUDENT) + cohort "Fall 2026 — Prompt Architecture 101" + 12 students with realistic JST/CCMI/ARK spread + 2 assignments (one past-due Bronze, one upcoming Silver).
+
 ## Launch Readiness (Phase I of LEAN_ONECRAFT_ROADMAP.md)
 - **Security headers**: `helmet()` in `server/index.ts` — production CSP, HSTS, X-Frame-Options SAMEORIGIN, COOP/CORP, no-referrer. Verified in response headers.
 - **Body limits**: `express.json({ limit: "1mb" })` and urlencoded matching to mitigate payload-bomb DoS.

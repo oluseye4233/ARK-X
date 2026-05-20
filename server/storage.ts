@@ -23,6 +23,9 @@ import {
   ccmiPillarScores, type CcmiPillarScores,
   arkScoreHistory, type ArkScoreHistory,
   lhcsSignals, type LhcsSignals,
+  cohorts, type Cohort, type InsertCohort,
+  cohortMemberships, type CohortMembership,
+  cohortAssignments, type CohortAssignment, type InsertCohortAssignment,
 } from "@shared/schema";
 import { or } from "drizzle-orm";
 
@@ -126,6 +129,44 @@ export interface IStorage {
     externalSessionId: string | null;
     stripeSubscriptionId: string | null;
   }>;
+
+  // Phase G — Cohorts
+  createCohort(c: InsertCohort): Promise<Cohort>;
+  getCohort(id: string): Promise<Cohort | undefined>;
+  getCohortsByInstructor(instructorId: string): Promise<Cohort[]>;
+  getCohortsForStudent(userId: string): Promise<Cohort[]>;
+  addCohortMembers(
+    cohortId: string,
+    rows: Array<{ userId?: string; invitedEmail?: string; status?: string }>,
+  ): Promise<{ added: number; reactivated: number; skipped: number }>;
+  getCohortMembers(cohortId: string): Promise<Array<CohortMembership & {
+    user: { id: string; name: string; username: string; arkScore: number; jstIndex: number; ccmi: number; contextCraftCertLevel: string | null } | null;
+  }>>;
+  removeCohortMember(cohortId: string, userId: string): Promise<boolean>;
+  reconcileCohortInvitesForUser(userId: string, email: string): Promise<number>;
+  createCohortAssignment(a: InsertCohortAssignment): Promise<CohortAssignment>;
+  getCohortAssignments(cohortId: string): Promise<CohortAssignment[]>;
+  getCohortGrades(cohortId: string): Promise<Array<{
+    studentId: string;
+    studentName: string;
+    studentEmail: string;
+    scenarioId: string;
+    scenarioTitle: string;
+    bestJcse: number | null;
+    bestTier: string | null;
+    attempts: number;
+    dueAt: Date | null;
+    lastAttemptAt: Date | null;
+    onTime: boolean | null;
+  }>>;
+  getCohortComparison(instructorId: string): Promise<Array<{
+    cohortId: string;
+    cohortName: string;
+    studentCount: number;
+    avgJst: number;
+    avgCcmi: number;
+    avgArk: number;
+  }>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -760,6 +801,225 @@ export class DatabaseStorage implements IStorage {
         externalSessionId: session.externalSessionId, stripeSubscriptionId,
       };
     });
+  }
+
+  // ===== Phase G — Cohorts =====
+  async createCohort(c: InsertCohort): Promise<Cohort> {
+    const [row] = await db.insert(cohorts).values(c).returning();
+    return row;
+  }
+
+  async getCohort(id: string): Promise<Cohort | undefined> {
+    const [row] = await db.select().from(cohorts).where(eq(cohorts.id, id));
+    return row;
+  }
+
+  async getCohortsByInstructor(instructorId: string): Promise<Cohort[]> {
+    return await db.select().from(cohorts).where(eq(cohorts.instructorId, instructorId)).orderBy(desc(cohorts.createdAt));
+  }
+
+  async getCohortsForStudent(userId: string): Promise<Cohort[]> {
+    const rows = await db
+      .select({ c: cohorts })
+      .from(cohortMemberships)
+      .innerJoin(cohorts, eq(cohorts.id, cohortMemberships.cohortId))
+      .where(and(eq(cohortMemberships.userId, userId), eq(cohortMemberships.status, "active")));
+    return rows.map(r => r.c);
+  }
+
+  async addCohortMembers(
+    cohortId: string,
+    rows: Array<{ userId?: string; invitedEmail?: string; status?: string }>,
+  ): Promise<{ added: number; reactivated: number; skipped: number }> {
+    let added = 0, reactivated = 0, skipped = 0;
+    for (const r of rows) {
+      let userId = r.userId ?? null;
+      const invitedEmail = r.invitedEmail?.toLowerCase().trim() ?? null;
+      // If only email is provided, try to resolve to a registered user.
+      if (!userId && invitedEmail) {
+        const [u] = await db.select({ id: users.id }).from(users).where(eq(users.username, invitedEmail));
+        if (u) userId = u.id;
+      }
+      if (!userId && !invitedEmail) { skipped++; continue; }
+      // Use email as a stable surrogate id when the user hasn't registered yet,
+      // so we can still enforce the (cohort_id, user_id) unique index.
+      const memberKey = userId ?? `invite:${invitedEmail}`;
+      const status = userId ? (r.status ?? "active") : "invited";
+      const [existing] = await db.select().from(cohortMemberships)
+        .where(and(eq(cohortMemberships.cohortId, cohortId), eq(cohortMemberships.userId, memberKey)));
+      if (existing) {
+        if (existing.status === "removed") {
+          await db.update(cohortMemberships).set({ status }).where(eq(cohortMemberships.id, existing.id));
+          reactivated++;
+        } else {
+          skipped++;
+        }
+        continue;
+      }
+      await db.insert(cohortMemberships).values({
+        cohortId,
+        userId: memberKey,
+        status,
+        invitedEmail: userId ? null : invitedEmail,
+      });
+      added++;
+    }
+    return { added, reactivated, skipped };
+  }
+
+  async getCohortMembers(cohortId: string): Promise<Array<CohortMembership & {
+    user: { id: string; name: string; username: string; arkScore: number; jstIndex: number; ccmi: number; contextCraftCertLevel: string | null } | null;
+  }>> {
+    const rows = await db
+      .select({
+        m: cohortMemberships,
+        u: {
+          id: users.id, name: users.name, username: users.username,
+          arkScore: users.arkScore, jstIndex: users.jstIndex, ccmi: users.ccmi,
+          contextCraftCertLevel: users.contextCraftCertLevel,
+        },
+      })
+      .from(cohortMemberships)
+      .leftJoin(users, eq(users.id, cohortMemberships.userId))
+      .where(eq(cohortMemberships.cohortId, cohortId))
+      .orderBy(desc(cohortMemberships.joinedAt));
+    return rows.map(r => ({ ...r.m, user: r.u?.id ? r.u : null }));
+  }
+
+  async reconcileCohortInvitesForUser(userId: string, email: string): Promise<number> {
+    // Convert any `invite:<email>` placeholder rows into real memberships keyed
+    // by this user's id. If an active membership already exists for this user
+    // in the same cohort, just drop the placeholder. Runs in a transaction so
+    // partial updates can't leak.
+    const key = `invite:${email.toLowerCase().trim()}`;
+    return await db.transaction(async (tx) => {
+      const placeholders = await tx.select().from(cohortMemberships).where(eq(cohortMemberships.userId, key));
+      if (placeholders.length === 0) return 0;
+      let converted = 0;
+      for (const p of placeholders) {
+        const [conflict] = await tx.select().from(cohortMemberships)
+          .where(and(eq(cohortMemberships.cohortId, p.cohortId), eq(cohortMemberships.userId, userId)));
+        if (conflict) {
+          await tx.delete(cohortMemberships).where(eq(cohortMemberships.id, p.id));
+          continue;
+        }
+        await tx.update(cohortMemberships)
+          .set({ userId, status: "active", invitedEmail: null })
+          .where(eq(cohortMemberships.id, p.id));
+        converted++;
+      }
+      return converted;
+    });
+  }
+
+  async removeCohortMember(cohortId: string, userId: string): Promise<boolean> {
+    const res = await db.update(cohortMemberships)
+      .set({ status: "removed" })
+      .where(and(eq(cohortMemberships.cohortId, cohortId), eq(cohortMemberships.userId, userId)))
+      .returning({ id: cohortMemberships.id });
+    return res.length > 0;
+  }
+
+  async createCohortAssignment(a: InsertCohortAssignment): Promise<CohortAssignment> {
+    const [row] = await db.insert(cohortAssignments).values(a).returning();
+    return row;
+  }
+
+  async getCohortAssignments(cohortId: string): Promise<CohortAssignment[]> {
+    return await db.select().from(cohortAssignments)
+      .where(eq(cohortAssignments.cohortId, cohortId))
+      .orderBy(desc(cohortAssignments.createdAt));
+  }
+
+  async getCohortGrades(cohortId: string): Promise<Array<{
+    studentId: string; studentName: string; studentEmail: string;
+    scenarioId: string; scenarioTitle: string;
+    bestJcse: number | null; bestTier: string | null; attempts: number;
+    dueAt: Date | null; lastAttemptAt: Date | null; onTime: boolean | null;
+  }>> {
+    const members = await db.select().from(cohortMemberships)
+      .where(and(eq(cohortMemberships.cohortId, cohortId), eq(cohortMemberships.status, "active")));
+    const assignments = await db.select().from(cohortAssignments).where(eq(cohortAssignments.cohortId, cohortId));
+    if (members.length === 0 || assignments.length === 0) return [];
+    const memberIds = members.map(m => m.userId);
+    const scenarioIds = assignments.map(a => a.scenarioId);
+    const scenarios = await db.select().from(ccgeScenarios).where(inArray(ccgeScenarios.id, scenarioIds));
+    const scenarioMap = new Map(scenarios.map(s => [s.id, s] as const));
+    const userRows = await db.select({
+      id: users.id, name: users.name, username: users.username,
+    }).from(users).where(inArray(users.id, memberIds));
+    const userMap = new Map(userRows.map(u => [u.id, u] as const));
+    const sessionRows = await db.select().from(gameSessions)
+      .where(and(
+        inArray(gameSessions.userId, memberIds),
+        inArray(gameSessions.scenarioId, scenarioIds),
+        eq(gameSessions.status, "finished"),
+      ));
+    const out: Array<{
+      studentId: string; studentName: string; studentEmail: string;
+      scenarioId: string; scenarioTitle: string;
+      bestJcse: number | null; bestTier: string | null; attempts: number;
+      dueAt: Date | null; lastAttemptAt: Date | null; onTime: boolean | null;
+    }> = [];
+    for (const m of members) {
+      const u = userMap.get(m.userId);
+      if (!u) continue;
+      for (const a of assignments) {
+        const sc = scenarioMap.get(a.scenarioId);
+        if (!sc) continue;
+        const attempts = sessionRows.filter(s => s.userId === m.userId && s.scenarioId === a.scenarioId);
+        const best = attempts.reduce<typeof attempts[number] | null>((b, x) => {
+          if (!b) return x;
+          return (x.kcseScore ?? -1) > (b.kcseScore ?? -1) ? x : b;
+        }, null);
+        const last = attempts.reduce<typeof attempts[number] | null>((b, x) => {
+          if (!b) return x;
+          const bt = b.finishedAt?.getTime() ?? 0;
+          const xt = x.finishedAt?.getTime() ?? 0;
+          return xt > bt ? x : b;
+        }, null);
+        const onTime = a.dueAt && last?.finishedAt ? last.finishedAt.getTime() <= a.dueAt.getTime() : null;
+        out.push({
+          studentId: u.id, studentName: u.name, studentEmail: u.username,
+          scenarioId: a.scenarioId, scenarioTitle: sc.title,
+          bestJcse: best?.kcseScore ?? null,
+          bestTier: best?.certTierEarned ?? null,
+          attempts: attempts.length,
+          dueAt: a.dueAt,
+          lastAttemptAt: last?.finishedAt ?? null,
+          onTime,
+        });
+      }
+    }
+    return out;
+  }
+
+  async getCohortComparison(instructorId: string): Promise<Array<{
+    cohortId: string; cohortName: string; studentCount: number;
+    avgJst: number; avgCcmi: number; avgArk: number;
+  }>> {
+    const list = await db.select().from(cohorts).where(eq(cohorts.instructorId, instructorId));
+    const out: Array<{ cohortId: string; cohortName: string; studentCount: number; avgJst: number; avgCcmi: number; avgArk: number; }> = [];
+    for (const c of list) {
+      const members = await db.select({
+        jstIndex: users.jstIndex, ccmi: users.ccmi, arkScore: users.arkScore,
+      })
+        .from(cohortMemberships)
+        .innerJoin(users, eq(users.id, cohortMemberships.userId))
+        .where(and(eq(cohortMemberships.cohortId, c.id), eq(cohortMemberships.status, "active")));
+      const n = members.length;
+      const sum = members.reduce((acc, m) => {
+        acc.jst += m.jstIndex ?? 0; acc.ccmi += m.ccmi ?? 0; acc.ark += m.arkScore ?? 0;
+        return acc;
+      }, { jst: 0, ccmi: 0, ark: 0 });
+      out.push({
+        cohortId: c.id, cohortName: c.name, studentCount: n,
+        avgJst: n ? Math.round(sum.jst / n) : 0,
+        avgCcmi: n ? Math.round(sum.ccmi / n) : 0,
+        avgArk: n ? Math.round(sum.ark / n) : 0,
+      });
+    }
+    return out;
   }
 }
 

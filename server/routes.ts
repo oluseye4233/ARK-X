@@ -13,7 +13,7 @@ const _require = createRequire(_filename);
 const pdfParse = _require("pdf-parse");
 import { storage } from "./storage";
 import { analyzeResume } from "./resumeAnalyzer";
-import { requireAuth, requireSelf, currentUserId, loginSession } from "./auth";
+import { requireAuth, requireSelf, requireInstructor, currentUserId, loginSession } from "./auth";
 import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, type SubscriptionPlan, CCGE_TIERS, type CcgeTier, jcseToTier, ALL_CARD_PILLARS, SPC_MIN_CERT_TO_PUBLISH, SPC_PRICE_MIN, SPC_PRICE_MAX, SPC_STATUSES, CERT_LEVEL_RANK, ARK_SCORE_DELTAS, type CardPillar, type SpcStatus } from "@shared/schema";
 import { dealHand, scoreSession } from "./ccge";
 import { orchestrator } from "./orchestrator";
@@ -165,6 +165,9 @@ export async function registerRoutes(
       const { verifyPassword, hashPassword } = await import("./passwords");
       const { ok, needsRehash } = await verifyPassword(password, user.password);
       if (!ok) return res.status(401).json({ message: "Invalid credentials" });
+      // Phase G: convert any pending `invite:<email>` cohort memberships into
+      // real memberships keyed by this user's id, best-effort.
+      try { await storage.reconcileCohortInvitesForUser(user.id, user.username); } catch {}
       // Silently upgrade legacy plaintext rows to bcrypt on first successful
       // login so we drain pre-existing rows without forcing a password reset.
       if (needsRehash) {
@@ -186,12 +189,17 @@ export async function registerRoutes(
 
   app.post("/api/auth/register", async (req, res) => {
     try {
-      const parsed = insertUserSchema.parse(req.body);
+      // Phase G hardening: `role` is privilege-bearing (read by requireInstructor),
+      // so it is stripped from any self-service registration payload and forced to
+      // "student". Elevation to instructor/admin happens only via admin/seed paths.
+      const registerSchema = insertUserSchema.omit({ role: true });
+      const parsed = registerSchema.parse(req.body);
       const existing = await storage.getUserByUsername(parsed.username);
       if (existing) {
         return res.status(409).json({ message: "Username already exists" });
       }
-      const user = await storage.createUser(parsed);
+      const user = await storage.createUser({ ...parsed, role: "student" });
+      try { await storage.reconcileCohortInvitesForUser(user.id, user.username); } catch {}
       await loginSession(req, user.id);
       const { password: _, ...safeUser } = user;
       return res.status(201).json(safeUser);
@@ -286,7 +294,8 @@ export async function registerRoutes(
       const body = req.body ?? {};
       const updateData: Record<string, unknown> = {};
       if (typeof body.name === "string") updateData.name = body.name;
-      if (typeof body.role === "string") updateData.role = body.role;
+      // Phase G hardening: role is privilege-bearing (requireInstructor reads it),
+      // so it is NEVER self-editable. Role changes must go through an admin path.
       if (typeof body.department === "string") updateData.department = body.department;
       if (typeof body.seniority === "string") updateData.seniority = body.seniority;
       if (typeof body.location === "string") updateData.location = body.location;
@@ -1635,6 +1644,139 @@ export async function registerRoutes(
   });
 
   // ── Seed endpoint (for initial data population) ───────
+  // ===== Phase G — Cohorts (Institutional Tier) =====
+  const cohortCreateSchema = z.object({
+    name: z.string().min(2).max(120),
+    institution: z.string().min(1).max(200),
+    description: z.string().max(500).optional(),
+  });
+  const cohortMembersSchema = z.object({
+    emails: z.array(z.string().email()).min(1).max(500),
+  });
+  const cohortAssignmentSchema = z.object({
+    scenarioId: z.string().min(1),
+    dueAt: z.string().datetime().nullable().optional(),
+    note: z.string().max(500).optional(),
+  });
+
+  async function assertCohortOwnership(req: any, res: any): Promise<{ cohort: any } | null> {
+    const sid = currentUserId(req);
+    const c = await storage.getCohort(req.params.id);
+    if (!c) { res.status(404).json({ message: "Cohort not found." }); return null; }
+    if (c.instructorId !== sid) { res.status(403).json({ message: "Not your cohort." }); return null; }
+    return { cohort: c };
+  }
+
+  app.get("/api/cohorts", requireInstructor, async (req, res) => {
+    const sid = currentUserId(req)!;
+    const list = await storage.getCohortsByInstructor(sid);
+    res.json(list);
+  });
+
+  app.post("/api/cohorts", requireInstructor, async (req, res) => {
+    const parsed = cohortCreateSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid input.", issues: parsed.error.issues });
+    const sid = currentUserId(req)!;
+    const cohort = await storage.createCohort({ ...parsed.data, instructorId: sid });
+    res.status(201).json(cohort);
+  });
+
+  app.get("/api/cohorts/comparison", requireInstructor, async (req, res) => {
+    const sid = currentUserId(req)!;
+    const data = await storage.getCohortComparison(sid);
+    res.json(data);
+  });
+
+  app.get("/api/cohorts/:id", requireInstructor, async (req, res) => {
+    const ctx = await assertCohortOwnership(req, res);
+    if (!ctx) return;
+    const [members, assignments] = await Promise.all([
+      storage.getCohortMembers(ctx.cohort.id),
+      storage.getCohortAssignments(ctx.cohort.id),
+    ]);
+    res.json({ cohort: ctx.cohort, members, assignments });
+  });
+
+  app.post("/api/cohorts/:id/members", requireInstructor, async (req, res) => {
+    const ctx = await assertCohortOwnership(req, res);
+    if (!ctx) return;
+    const parsed = cohortMembersSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid input.", issues: parsed.error.issues });
+    const rows = parsed.data.emails.map(e => ({ invitedEmail: e }));
+    const result = await storage.addCohortMembers(ctx.cohort.id, rows);
+    res.status(201).json(result);
+  });
+
+  app.delete("/api/cohorts/:id/members/:userId", requireInstructor, async (req, res) => {
+    const ctx = await assertCohortOwnership(req, res);
+    if (!ctx) return;
+    const ok = await storage.removeCohortMember(ctx.cohort.id, String(req.params.userId));
+    res.json({ removed: ok });
+  });
+
+  app.get("/api/cohorts/:id/assignments", requireInstructor, async (req, res) => {
+    const ctx = await assertCohortOwnership(req, res);
+    if (!ctx) return;
+    const list = await storage.getCohortAssignments(ctx.cohort.id);
+    res.json(list);
+  });
+
+  app.post("/api/cohorts/:id/assignments", requireInstructor, async (req, res) => {
+    const ctx = await assertCohortOwnership(req, res);
+    if (!ctx) return;
+    const parsed = cohortAssignmentSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid input.", issues: parsed.error.issues });
+    const sc = await storage.getCcgeScenario(parsed.data.scenarioId);
+    if (!sc) return res.status(404).json({ message: "Scenario not found." });
+    const sid = currentUserId(req)!;
+    const a = await storage.createCohortAssignment({
+      cohortId: ctx.cohort.id,
+      scenarioId: parsed.data.scenarioId,
+      assignedBy: sid,
+      dueAt: parsed.data.dueAt ? new Date(parsed.data.dueAt) : null,
+      note: parsed.data.note ?? null,
+    });
+    res.status(201).json(a);
+  });
+
+  app.get("/api/cohorts/:id/grades", requireInstructor, async (req, res) => {
+    const ctx = await assertCohortOwnership(req, res);
+    if (!ctx) return;
+    const grades = await storage.getCohortGrades(ctx.cohort.id);
+    res.json(grades);
+  });
+
+  app.get("/api/cohorts/:id/grades.csv", requireInstructor, async (req, res) => {
+    const ctx = await assertCohortOwnership(req, res);
+    if (!ctx) return;
+    const grades = await storage.getCohortGrades(ctx.cohort.id);
+    const esc = (v: any) => {
+      if (v === null || v === undefined) return "";
+      const s = String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = ["student_name", "student_email", "scenario_title", "best_jcse", "best_tier", "attempts", "due_at", "last_attempt_at", "on_time"];
+    const lines = [header.join(",")];
+    for (const g of grades) {
+      lines.push([
+        esc(g.studentName), esc(g.studentEmail), esc(g.scenarioTitle),
+        esc(g.bestJcse), esc(g.bestTier), esc(g.attempts),
+        esc(g.dueAt?.toISOString() ?? ""), esc(g.lastAttemptAt?.toISOString() ?? ""),
+        g.onTime === null ? "" : g.onTime ? "yes" : "no",
+      ].join(","));
+    }
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="cohort-${ctx.cohort.id}-grades.csv"`);
+    res.send(lines.join("\n"));
+  });
+
+  // Student-facing: list cohorts the current user belongs to.
+  app.get("/api/me/cohorts", requireAuth, async (req, res) => {
+    const sid = currentUserId(req)!;
+    const list = await storage.getCohortsForStudent(sid);
+    res.json(list);
+  });
+
   app.post("/api/seed", async (_req, res) => {
     if (process.env.NODE_ENV === "production") {
       return res.status(403).json({ message: "Forbidden" });
@@ -1822,11 +1964,109 @@ export async function registerRoutes(
         if (demo) await getOrCreateCredits(demo.id);
       }
 
+      // ===== Phase G — instructor + demo cohort + students =====
+      let cohortInfo: { instructor?: string; cohort?: string; students?: number; assignments?: number } = {};
+      let instructor = await storage.getUserByUsername("instructor@academy.edu");
+      if (!instructor) {
+        instructor = await storage.createUser({
+          username: "instructor@academy.edu",
+          password: "arkplatform",
+          name: "Dr. Priya Rao",
+          role: "instructor",
+          department: "Faculty of Career Intelligence",
+          seniority: "Senior",
+          location: "Global",
+        });
+        await storage.updateUser(instructor.id, { subscriptionPlan: "SCHOOL_STUDENT", institution: "Atlas Online Academy" });
+      }
+      cohortInfo.instructor = instructor.username;
+
+      const existingCohorts = await storage.getCohortsByInstructor(instructor.id);
+      let demoCohort = existingCohorts[0];
+      if (!demoCohort) {
+        demoCohort = await storage.createCohort({
+          instructorId: instructor.id,
+          institution: "Atlas Online Academy",
+          name: "Fall 2026 — Prompt Architecture 101",
+          description: "Introductory cohort exploring CCGE pillars and Context Craft basics.",
+        });
+      }
+      cohortInfo.cohort = demoCohort.name;
+
+      // Seed 12 students with a JST spread.
+      const studentSeeds = [
+        { username: "lila.okafor@academy.edu", name: "Lila Okafor", jst: 245, ccmi: 180 },
+        { username: "marco.tan@academy.edu", name: "Marco Tan", jst: 198, ccmi: 152 },
+        { username: "ava.bishop@academy.edu", name: "Ava Bishop", jst: 271, ccmi: 210 },
+        { username: "noah.kim@academy.edu", name: "Noah Kim", jst: 162, ccmi: 124 },
+        { username: "isla.park@academy.edu", name: "Isla Park", jst: 220, ccmi: 168 },
+        { username: "diego.santos@academy.edu", name: "Diego Santos", jst: 189, ccmi: 140 },
+        { username: "zara.ahmed@academy.edu", name: "Zara Ahmed", jst: 258, ccmi: 195 },
+        { username: "felix.weber@academy.edu", name: "Felix Weber", jst: 175, ccmi: 132 },
+        { username: "harper.lee@academy.edu", name: "Harper Lee", jst: 233, ccmi: 178 },
+        { username: "kai.nakamura@academy.edu", name: "Kai Nakamura", jst: 210, ccmi: 160 },
+        { username: "sofia.rossi@academy.edu", name: "Sofia Rossi", jst: 145, ccmi: 112 },
+        { username: "elias.haddad@academy.edu", name: "Elias Haddad", jst: 282, ccmi: 222 },
+      ];
+      const studentIds: string[] = [];
+      for (const s of studentSeeds) {
+        let su = await storage.getUserByUsername(s.username);
+        if (!su) {
+          su = await storage.createUser({
+            username: s.username,
+            password: "arkplatform",
+            name: s.name,
+            role: "student",
+            department: "Student",
+            seniority: "Junior",
+            location: "Global",
+          });
+          await storage.updateUser(su.id, {
+            subscriptionPlan: "SCHOOL_STUDENT",
+            institution: "Atlas Online Academy",
+            jstIndex: s.jst,
+            ccmi: s.ccmi,
+            arkScore: Math.min(600, s.jst + s.ccmi),
+          });
+        }
+        studentIds.push(su.id);
+      }
+      await storage.addCohortMembers(
+        demoCohort.id,
+        studentIds.map(id => ({ userId: id, status: "active" })),
+      );
+      cohortInfo.students = studentIds.length;
+
+      // Seed 2 assignments (one past-due, one upcoming).
+      const existingAssns = await storage.getCohortAssignments(demoCohort.id);
+      if (existingAssns.length === 0) {
+        const scenarios = await storage.getAllCcgeScenarios();
+        const bronze = scenarios.find(s => s.tier === "Bronze");
+        const silver = scenarios.find(s => s.tier === "Silver");
+        const now = Date.now();
+        if (bronze) {
+          await storage.createCohortAssignment({
+            cohortId: demoCohort.id, scenarioId: bronze.id, assignedBy: instructor.id,
+            dueAt: new Date(now - 3 * 24 * 60 * 60 * 1000),
+            note: "Week 1 warm-up — score Bronze or higher.",
+          });
+        }
+        if (silver) {
+          await storage.createCohortAssignment({
+            cohortId: demoCohort.id, scenarioId: silver.id, assignedBy: instructor.id,
+            dueAt: new Date(now + 7 * 24 * 60 * 60 * 1000),
+            note: "Week 2 challenge — push toward Silver tier.",
+          });
+        }
+      }
+      cohortInfo.assignments = (await storage.getCohortAssignments(demoCohort.id)).length;
+
       return res.json({
         message: "Seed complete",
         ccgeCards: ccge.cards,
         ccgeScenarios: ccge.scenarios,
         spcListings: spcListingsCount,
+        cohort: cohortInfo,
       });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });

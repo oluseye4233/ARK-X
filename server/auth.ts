@@ -61,6 +61,22 @@ export const requireAuth: RequestHandler = (req, res, next) => {
   next();
 };
 
+export const requireInstructor: RequestHandler = async (req, res, next) => {
+  const sid = req.session?.userId;
+  if (!sid) return res.status(401).json({ message: "Authentication required." });
+  try {
+    const { storage } = await import("./storage");
+    const { isInstructor } = await import("@shared/schema");
+    const u = await storage.getUser(sid);
+    if (!u || !isInstructor(u.role)) {
+      return res.status(403).json({ message: "Instructor role required." });
+    }
+    next();
+  } catch (err) {
+    res.status(500).json({ message: "Role check failed." });
+  }
+};
+
 export function requireSelf(paramName: string): RequestHandler {
   return (req, res, next) => {
     const sid = req.session?.userId;

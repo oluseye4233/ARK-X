@@ -776,3 +776,47 @@ export const lhcsSignals = pgTable("lhcs_signals", {
 export const insertLhcsSignalsSchema = createInsertSchema(lhcsSignals).omit({ id: true, updatedAt: true });
 export type InsertLhcsSignals = z.infer<typeof insertLhcsSignalsSchema>;
 export type LhcsSignals = typeof lhcsSignals.$inferSelect;
+
+
+// ===== Phase G — Institutional Tier (Cohorts) =====
+export const USER_ROLES = ["student", "instructor", "admin"] as const;
+export type UserRole = typeof USER_ROLES[number];
+export const isInstructor = (role: string | null | undefined) =>
+  role === "instructor" || role === "admin";
+
+export const cohorts = pgTable("cohorts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  instructorId: varchar("instructor_id").notNull(),
+  institution: text("institution").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export const insertCohortSchema = createInsertSchema(cohorts).omit({ id: true, createdAt: true });
+export type InsertCohort = z.infer<typeof insertCohortSchema>;
+export type Cohort = typeof cohorts.$inferSelect;
+
+export const cohortMemberships = pgTable("cohort_memberships", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  cohortId: varchar("cohort_id").notNull(),
+  userId: varchar("user_id").notNull(),
+  status: text("status").notNull().default("active"), // active | invited | removed
+  invitedEmail: text("invited_email"), // set when status=invited and user not yet registered
+  joinedAt: timestamp("joined_at").notNull().defaultNow(),
+});
+export const insertCohortMembershipSchema = createInsertSchema(cohortMemberships).omit({ id: true, joinedAt: true });
+export type InsertCohortMembership = z.infer<typeof insertCohortMembershipSchema>;
+export type CohortMembership = typeof cohortMemberships.$inferSelect;
+
+export const cohortAssignments = pgTable("cohort_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  cohortId: varchar("cohort_id").notNull(),
+  scenarioId: varchar("scenario_id").notNull(),
+  assignedBy: varchar("assigned_by").notNull(),
+  dueAt: timestamp("due_at"),
+  note: text("note"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export const insertCohortAssignmentSchema = createInsertSchema(cohortAssignments).omit({ id: true, createdAt: true });
+export type InsertCohortAssignment = z.infer<typeof insertCohortAssignmentSchema>;
+export type CohortAssignment = typeof cohortAssignments.$inferSelect;

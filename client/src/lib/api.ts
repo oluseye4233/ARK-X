@@ -176,6 +176,24 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  // Phase G — Cohorts (Institutional Tier)
+  getMyCohorts: () => apiRequest("/api/me/cohorts"),
+  getCohorts: () => apiRequest("/api/cohorts"),
+  createCohort: (data: { name: string; institution: string; description?: string }) =>
+    apiRequest("/api/cohorts", { method: "POST", body: JSON.stringify(data) }),
+  getCohort: (id: string) => apiRequest(`/api/cohorts/${id}`),
+  addCohortMembers: (id: string, emails: string[]) =>
+    apiRequest(`/api/cohorts/${id}/members`, { method: "POST", body: JSON.stringify({ emails }) }),
+  removeCohortMember: (id: string, userId: string) =>
+    apiRequest(`/api/cohorts/${id}/members/${userId}`, { method: "DELETE" }),
+  createCohortAssignment: (
+    id: string,
+    data: { scenarioId: string; dueAt?: string | null; note?: string },
+  ) => apiRequest(`/api/cohorts/${id}/assignments`, { method: "POST", body: JSON.stringify(data) }),
+  getCohortGrades: (id: string) => apiRequest(`/api/cohorts/${id}/grades`),
+  getCohortComparison: () => apiRequest("/api/cohorts/comparison"),
+  cohortGradesCsvUrl: (id: string) => `/api/cohorts/${id}/grades.csv`,
+
   seed: () => apiRequest("/api/seed", { method: "POST" }),
 
   // ── PDD §3.4 — ARK identity surfaces ──
