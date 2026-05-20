@@ -25,6 +25,7 @@ import GuinPublicPage from "@/pages/guin-public";
 import ArkHistoryPage from "@/pages/ark-history";
 import PrivacyPage from "@/pages/legal/privacy";
 import TermsPage from "@/pages/legal/terms";
+import DemoPage from "@/pages/demo";
 
 function Router() {
   return (
@@ -51,6 +52,7 @@ function Router() {
         <Route path="/u/:username" component={GuinPublicPage} />
         <Route path="/privacy" component={PrivacyPage} />
         <Route path="/terms" component={TermsPage} />
+        <Route path="/demo" component={DemoPage} />
         {/* Fallback to 404 */}
         <Route component={NotFound} />
       </Switch>
