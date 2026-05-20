@@ -3,6 +3,17 @@
 ## Overview
 Full-stack AI-powered career intelligence platform featuring JST Index scoring, AI Vulnerability assessment, 12-Vector Transferability Radar, Dynamic Upskilling Navigator, Junglenomics FORGE card integration, and Enterprise Workforce Intelligence dashboard.
 
+## Canonical Score Glossary
+All quantitative terms align to the Junglenomics FORGE Institute registries (General Technical Terms Registry v1.0 + Master SPC & Platform Registry v1.0, May 2026). Single source of truth: `shared/schema.ts::SCORE_GLOSSARY`. Summary:
+- **ARK** (0-600) = JST + CCMI. Canon: ARK MAXIMUS ULTRA SI.
+- **JST** (0-300) = `(Jobs·.30 + Skills·.40 + Talent·.30)·3`. Canon: ARK SI — Jobs-Skills-Talent Career Assessment Agent.
+- **CCMI** (0-300) = weighted P1-P7 sum · 3. Canon: Context Craft Mastery Index.
+- **JCSE** (0-50) = session/agent quality. Canon Term 3 Composite AI Agent Quality Score. Tier break-points: Bronze 30 / Silver 36 / Gold 43 / Platinum 48. Constant: `JCSE_TIER_THRESHOLDS` (renamed from `KCSE_TIER_THRESHOLDS` to match canon).
+- **KCSE dimensions** (Knowledge·.30 + Clarity·.30 + Specificity·.20 + Efficiency·.20) = ARK-internal CCGE in-game rubric that produces the per-session JCSE. **Distinct from** the canon JCSE rubric (Context Engineering Pillar 40% + Synergy 30% + Compression 20% + Semantic Preservation 10%); we use the K-C-S-E rubric because the CCGE game grades player card hands, not finished prompt artifacts.
+- **HIVE** (0-100) = 14-dimensional cert framework (canon Term 8). Tier break-points: Bronze 60 / Silver 70 / Gold 80 / Platinum 90. Publish gate raised from 60→**80 (Gold)** so the listing HIVE tier matches the publisher's CC-400 Gold user cert floor.
+- **CC_xxx levels** = ARK-internal ladder; CC_200=Bronze, CC_300=Silver, CC_400=Gold, CC_500=Platinum, CC_100=Foundational (assessment-only).
+- **Knight ranks** (Squire/Knight/Paladin/Champion/Legend) = GUIN+ contributor gamification, **not** the canon Six-Stage Agent Lifecycle (Newborn→Enterprise).
+
 ## Phase J — PDD MVP Alignment (current)
 - ARK identity: ARK = JST + CCMI, max 600. JST = (J·.30+S·.40+T·.30)·3, CCMI = weighted P1-P7 sum · 3.
 - Single canonical scorer: `server/scoringEngine.ts` (pure, unit-tested via `npm run test:scoring`).
@@ -165,7 +176,7 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 
 ## SPHINX Marketplace (Phase B of LEAN_ONECRAFT_ROADMAP.md)
 - **Schema** (`shared/schema.ts`): `spcListings` (creator, title/desc/body, pillar, priceCredits, kcseScore, hiveScore, status, salesCount, totalEarned), `spcPurchases` (buyer, listing, creator, priceCredits, creatorShare, platformShare, isFirstSaleForCreator), `userCredits` (userId PK, balance, lifetimeEarned, lifetimeSpent)
-- **Constants**: `SPC_CREATOR_SHARE_PCT=70`, `SPC_PLATFORM_SHARE_PCT=30`, `SPC_STARTING_CREDITS=100`, `SPC_MIN_CERT_TO_PUBLISH=CC_400`, `SPC_PRICE_MIN=5`, `SPC_PRICE_MAX=500`, `SPC_HIVE_MIN_TO_PUBLISH=60`, `SPC_FIRST_SALE_TALENT_BOOST=3`
+- **Constants**: `SPC_CREATOR_SHARE_PCT=70`, `SPC_PLATFORM_SHARE_PCT=30`, `SPC_STARTING_CREDITS=100`, `SPC_MIN_CERT_TO_PUBLISH=CC_400`, `SPC_PRICE_MIN=5`, `SPC_PRICE_MAX=500`, `SPC_HIVE_MIN_TO_PUBLISH=80` (raised from 60 to canon HIVE Gold floor — see "Canonical Score Glossary" above), `SPC_FIRST_SALE_TALENT_BOOST=3`
 - **Engine** (`server/sphinx.ts`):
   - `runHivePrecheck(input)` — deterministic 0-100 HIVE score from title/desc/body length, structural keyword matches, formatting heuristics; rejects red-flag terms (lorem ipsum, todo, placeholder); also computes proxied KCSE 0-50 (Phase F replaces with Claude call)
   - `getOrCreateCredits(userId)` — idempotent starter-credit grant (100 credits)
@@ -177,7 +188,7 @@ Full-stack AI-powered career intelligence platform featuring JST Index scoring, 
 
 ## CCGE — Context Craft Game Engine (Phase A of LEAN_ONECRAFT_ROADMAP.md)
 - **Schema** (`shared/schema.ts`): `ccgeCards` (14 seeded across 7 pillars + SuperPrompt), `ccgeScenarios` (6: 2 Bronze / 2 Silver / 2 Gold), `gameSessions` (hand/played/score/flywheel result)
-- **Constants**: `CC_PILLARS`, `CARD_TYPES`, `KCSE_TIER_THRESHOLDS` (Bronze 30, Silver 36, Gold 43, Platinum 48), `ARK_SCORE_DELTAS`, `CERT_LEVEL_RANK`
+- **Constants**: `CC_PILLARS`, `CARD_TYPES`, `JCSE_TIER_THRESHOLDS` (Bronze 30, Silver 36, Gold 43, Platinum 48 — renamed from `KCSE_TIER_THRESHOLDS` to match canon Term 3), `ARK_SCORE_DELTAS`, `CERT_LEVEL_RANK`
 - **Helpers**: `jcseToContextCraftLevel(jcse)` auto-promotes cert; `jcseToTier(jcse)` returns tier label
 - **Game engine** (`server/ccge.ts`):
   - `dealHand(allCards, scenario, 5)` — biased deal toward target pillars for the scenario

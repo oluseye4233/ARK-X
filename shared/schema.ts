@@ -71,8 +71,15 @@ export type CardType = typeof CARD_TYPES[number];
 export const CCGE_TIERS = ["Bronze", "Silver", "Gold", "Platinum"] as const;
 export type CcgeTier = typeof CCGE_TIERS[number];
 
-// JCSE thresholds (session score, 0-50) → cert tier
-export const KCSE_TIER_THRESHOLDS = {
+// JCSE thresholds (session score, 0-50) → cert tier.
+// Canon alignment: thresholds map to General Technical Terms Registry v1.0
+// Term 8 (HIVE Dimension-1 Quality-and-Fitness break-points): Bronze 30+,
+// Silver 36-42, Gold 43-47, Platinum 48-50. The underlying 0-50 score is
+// the Composite AI Agent Quality Score (Term 3); the Bronze/Silver/Gold/
+// Platinum tier *labels* come from Term 8 (HIVE MATRIX LABS), not from
+// Term 3's Standard/Premium/Ultra-Premium/Perfect-Elite labels — those are
+// equivalent break-points under a different naming convention.
+export const JCSE_TIER_THRESHOLDS = {
   BRONZE: 30,
   SILVER: 36,
   GOLD: 43,
@@ -84,18 +91,18 @@ export const KCSE_TIER_THRESHOLDS = {
 // users from NONE → CC_100 just for engaging — CC_100 (Foundational) is
 // reserved for users who actually completed the foundation assessment.
 export function jcseToContextCraftLevel(jcse: number): ContextCraftLevel {
-  if (jcse >= KCSE_TIER_THRESHOLDS.PLATINUM) return "CC_500";
-  if (jcse >= KCSE_TIER_THRESHOLDS.GOLD) return "CC_400";
-  if (jcse >= KCSE_TIER_THRESHOLDS.SILVER) return "CC_300";
-  if (jcse >= KCSE_TIER_THRESHOLDS.BRONZE) return "CC_200";
+  if (jcse >= JCSE_TIER_THRESHOLDS.PLATINUM) return "CC_500";
+  if (jcse >= JCSE_TIER_THRESHOLDS.GOLD) return "CC_400";
+  if (jcse >= JCSE_TIER_THRESHOLDS.SILVER) return "CC_300";
+  if (jcse >= JCSE_TIER_THRESHOLDS.BRONZE) return "CC_200";
   return "NONE";
 }
 
 export function jcseToTier(jcse: number): CcgeTier | null {
-  if (jcse >= KCSE_TIER_THRESHOLDS.PLATINUM) return "Platinum";
-  if (jcse >= KCSE_TIER_THRESHOLDS.GOLD) return "Gold";
-  if (jcse >= KCSE_TIER_THRESHOLDS.SILVER) return "Silver";
-  if (jcse >= KCSE_TIER_THRESHOLDS.BRONZE) return "Bronze";
+  if (jcse >= JCSE_TIER_THRESHOLDS.PLATINUM) return "Platinum";
+  if (jcse >= JCSE_TIER_THRESHOLDS.GOLD) return "Gold";
+  if (jcse >= JCSE_TIER_THRESHOLDS.SILVER) return "Silver";
+  if (jcse >= JCSE_TIER_THRESHOLDS.BRONZE) return "Bronze";
   return null;
 }
 
@@ -112,6 +119,61 @@ export const ARK_SCORE_DELTAS = {
   SPC_PUBLISHED: 2,
   SPC_PURCHASED_AS_BUYER: 1,
   SPC_FIRST_SALE_AS_CREATOR: 8,
+} as const;
+
+// ─────────────────────────────────────────────────────────────────────
+// SCORE_GLOSSARY — single source of truth for every quantitative term
+// used across the platform. Aligned to the canonical Junglenomics FORGE
+// Institute registries (General Technical Terms Registry v1.0 + Master
+// SPC & Platform Registry v1.0, May 2026). Cite this object — do not
+// re-define these terms elsewhere.
+// ─────────────────────────────────────────────────────────────────────
+export const SCORE_GLOSSARY = {
+  ARK: {
+    range: [0, 600] as const,
+    formula: "JST + CCMI",
+    canon: "ARK MAXIMUS ULTRA SI — Integrated Career Intelligence Engine",
+    note: "Composite career-intelligence score. Max 600.",
+  },
+  JST: {
+    range: [0, 300] as const,
+    formula: "(Jobs·0.30 + Skills·0.40 + Talent·0.30) · 3",
+    canon: "ARK SI — Jobs-Skills-Talent Career Assessment Agent",
+    note: "Three-composite index: Jobs Fitness, Skills Competency, Talent Aptitude.",
+  },
+  CCMI: {
+    range: [0, 300] as const,
+    formula: "weighted P1-P7 sum · 3 (weights total 1.0)",
+    canon: "Context Craft Mastery Index (ARK MAXIMUS)",
+    note: "Per-pillar mastery 0-100 each → composite 0-300.",
+  },
+  JCSE: {
+    range: [0, 50] as const,
+    formula: "Composite AI Agent Quality Score (canon Term 3)",
+    canon: "General Technical Terms Registry v1.0 Term 3",
+    note: "Session/agent quality. Tier break-points: Bronze 30 / Silver 36 / Gold 43 / Platinum 48.",
+  },
+  KCSE_DIMENSIONS: {
+    range: [0, 50] as const,
+    formula: "Knowledge·0.30 + Clarity·0.30 + Specificity·0.20 + Efficiency·0.20",
+    canon: "ARK-internal CCGE in-game rubric (NOT the canon JCSE rubric)",
+    note: "Four-dimension breakdown that produces the per-session JCSE in the CCGE game.",
+  },
+  HIVE: {
+    range: [0, 100] as const,
+    formula: "14-dimensional cert framework, per-dimension percentage",
+    canon: "HIVE MATRIX LABS — General Technical Terms Registry Term 8",
+    note: "Tier break-points: Bronze 60 / Silver 70 / Gold 80 / Platinum 90. Publish gate: Gold (80).",
+  },
+  CC_LEVELS: {
+    range: ["NONE", "CC_100", "CC_200", "CC_300", "CC_400", "CC_500"] as const,
+    canon: "ARK-internal ladder; maps to canon cert tiers via jcseToContextCraftLevel().",
+    note: "CC_200=Bronze, CC_300=Silver, CC_400=Gold, CC_500=Platinum. CC_100=Foundational (assessment-only).",
+  },
+  KNIGHT_RANK: {
+    canon: "ARK-internal GUIN+ contributor rank (NOT the canon Six-Stage Agent Lifecycle).",
+    note: "Peer-endorsement gamification: Squire/Knight/Paladin/Champion/Legend keyed on cumulative JCSE earned.",
+  },
 } as const;
 
 // ── PDD §3.4: ARK Score / JST / CCMI / VMST identity layer ──
@@ -223,7 +285,11 @@ export const SPC_STARTING_CREDITS = 100;
 export const SPC_MIN_CERT_TO_PUBLISH: ContextCraftLevel = "CC_400";
 export const SPC_PRICE_MIN = 5;
 export const SPC_PRICE_MAX = 500;
-export const SPC_HIVE_MIN_TO_PUBLISH = 60;
+// Marketplace publish gate. Canon alignment: General Technical Terms Registry
+// v1.0 Term 8 (14-Dimensional Quality Certification): Bronze 60-69, Silver
+// 70-79, Gold 80-89, Platinum 90-100. We require Gold (80) so the listing's
+// HIVE tier matches the publisher's user cert floor (CC-400 Gold).
+export const SPC_HIVE_MIN_TO_PUBLISH = 80;
 export const SPC_FIRST_SALE_TALENT_BOOST = 3;
 
 export const SPC_STATUSES = ["draft", "active", "delisted"] as const;

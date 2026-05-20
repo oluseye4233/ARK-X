@@ -72,7 +72,7 @@ If/when one of these substitutes becomes a real bottleneck, *that* is the moment
 **Status: COMPLETE**
 
 What shipped:
-- 4 new Drizzle tables (`ccgeCards`, `ccgeScenarios`, `gameSessions`) + constants (`CC_PILLARS`, `CARD_TYPES`, `KCSE_TIER_THRESHOLDS`, `ARK_SCORE_DELTAS`, `CERT_LEVEL_RANK`)
+- 4 new Drizzle tables (`ccgeCards`, `ccgeScenarios`, `gameSessions`) + constants (`CC_PILLARS`, `CARD_TYPES`, `JCSE_TIER_THRESHOLDS` (formerly `KCSE_TIER_THRESHOLDS`), `ARK_SCORE_DELTAS`, `CERT_LEVEL_RANK`)
 - 14 seed cards across 7 pillars + Sphinx Super Prompt; 6 seed scenarios (2 Bronze / 2 Silver / 2 Gold)
 - Deterministic JCSE 0–50 scoring engine (`server/ccge.ts`) with 5 synergy multipliers (Alpha Prime, Solo Legend, Full Context, Precision Engine, Expert Clarity)
 - ONECRAFT flywheel: session finish auto-promotes `contextCraftCertLevel` (only at Bronze threshold or higher) and bumps latest assessment `jstSkills`/`jstTotal`
@@ -90,7 +90,7 @@ Known limitations (deferred by design — see linked phases):
 **Status: COMPLETE**
 
 What shipped:
-- 3 new Drizzle tables (`spcListings`, `spcPurchases`, `userCredits`) + constants (`SPC_CREATOR_SHARE_PCT=70`, `SPC_PLATFORM_SHARE_PCT=30`, `SPC_STARTING_CREDITS=100`, `SPC_MIN_CERT_TO_PUBLISH=CC_400`, `SPC_HIVE_MIN_TO_PUBLISH=60`, `SPC_FIRST_SALE_TALENT_BOOST=3`); ARK_SCORE_DELTAS extended (SPC_PUBLISHED=2, SPC_PURCHASED_AS_BUYER=1, SPC_FIRST_SALE_AS_CREATOR=8)
+- 3 new Drizzle tables (`spcListings`, `spcPurchases`, `userCredits`) + constants (`SPC_CREATOR_SHARE_PCT=70`, `SPC_PLATFORM_SHARE_PCT=30`, `SPC_STARTING_CREDITS=100`, `SPC_MIN_CERT_TO_PUBLISH=CC_400`, `SPC_HIVE_MIN_TO_PUBLISH=80` (originally 60, raised to canon HIVE Gold floor), `SPC_FIRST_SALE_TALENT_BOOST=3`); ARK_SCORE_DELTAS extended (SPC_PUBLISHED=2, SPC_PURCHASED_AS_BUYER=1, SPC_FIRST_SALE_AS_CREATOR=8)
 - 3 seed SPCs (System/Instruction/Format pillars, 15/25/75 credits) authored by a second seeded user `creator@sphinx.io` / `arkplatform` (CC-500)
 - Deterministic `runHivePrecheck` (server/sphinx.ts) — 0-100 HIVE score from length, structural keywords, formatting; rejects red-flag terms; also computes proxied KCSE 0-50 (Phase F replaces with Claude)
 - **Atomic `executePurchase`** via `db.transaction` with `FOR UPDATE` locks on buyer/creator/listing — debit/credit/insert/JST-bump in one txn; rolls back on any failure (closes Phase A architect "atomic finish" issue ahead of schedule for SPHINX)

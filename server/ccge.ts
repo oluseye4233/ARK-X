@@ -5,7 +5,7 @@ import {
   type ContextCraftLevel,
   type Assessment,
   ARK_SCORE_DELTAS,
-  KCSE_TIER_THRESHOLDS,
+  JCSE_TIER_THRESHOLDS,
   jcseToContextCraftLevel,
   jcseToTier,
   CERT_LEVEL_RANK,
@@ -126,10 +126,10 @@ export function scoreSession(played: CcgeCard[], scenario: CcgeScenario): KcseBr
 }
 
 export function arkDeltaForSession(jcse: number): number {
-  if (jcse >= KCSE_TIER_THRESHOLDS.PLATINUM) return ARK_SCORE_DELTAS.SESSION_PLATINUM;
-  if (jcse >= KCSE_TIER_THRESHOLDS.GOLD) return ARK_SCORE_DELTAS.SESSION_GOLD;
-  if (jcse >= KCSE_TIER_THRESHOLDS.SILVER) return ARK_SCORE_DELTAS.SESSION_SILVER;
-  if (jcse >= KCSE_TIER_THRESHOLDS.BRONZE) return ARK_SCORE_DELTAS.SESSION_BRONZE;
+  if (jcse >= JCSE_TIER_THRESHOLDS.PLATINUM) return ARK_SCORE_DELTAS.SESSION_PLATINUM;
+  if (jcse >= JCSE_TIER_THRESHOLDS.GOLD) return ARK_SCORE_DELTAS.SESSION_GOLD;
+  if (jcse >= JCSE_TIER_THRESHOLDS.SILVER) return ARK_SCORE_DELTAS.SESSION_SILVER;
+  if (jcse >= JCSE_TIER_THRESHOLDS.BRONZE) return ARK_SCORE_DELTAS.SESSION_BRONZE;
   return 0;
 }
 
