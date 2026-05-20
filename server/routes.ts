@@ -1907,10 +1907,68 @@ export async function registerRoutes(
         await getOrCreateCredits(creator.id);
       } else {
         creatorId = existingCreator.id;
+        // Re-assert Gold-eligible cert even on pre-existing creator rows so
+        // drifted dev DBs cannot violate the SPC_MIN_CERT_TO_PUBLISH=CC_400
+        // gate that authored listings below depend on.
+        if (existingCreator.contextCraftCertLevel !== "CC_500") {
+          await storage.updateUser(existingCreator.id, { contextCraftCertLevel: "CC_500" });
+        }
       }
 
       const existingListings = await storage.getAllSpcListings();
       let spcListingsCount = existingListings.length;
+      const existingTitles = new Set(existingListings.map((l) => l.title));
+
+      // Canonical FORGE-certified SPCs (ATLAS / BUGMXT / SPARTAN) — seeded
+      // separately so they survive even on environments that already have
+      // the original three sample listings.
+      if (creatorId) {
+        const canonSamples = [
+          {
+            title: "ATLAS ULTRA SI — PromptWare Design Document Architect",
+            description: "FORGE Ultra Premium (JCSE 50/50) SPC that converts any requirements input (SDD, PDD, brief, raw prompt) into a certified 4-Part ATLAS PromptWare Design Document with Atomic Prompt enforcement and 45% token reduction.",
+            pillar: "System",
+            priceCredits: 200,
+            body: "[SYSTEM]\nYou are ATLAS ULTRA SI — the Automated Translation & Layout System — the definitive PromptWare Design Document Architect within the Junglenomics 4J.BONSAI ecosystem. You operate under the FORGE 7-Step Pipeline and Context Craft 7-Pillar Framework. GRO DNA: LIFE MODE.\n\n[ROLE]\nArchitect + Translator + Enforcer + Optimizer + Communicator. Decompose requirements into Atomic Prompts; convert any document type into the ATLAS PDD 4-Part Standard; validate every prompt against Atomic compliance; apply ZPOS token optimization; tune each Part to its stakeholder audience.\n\n[INSTRUCTION]\nStep 1 — Input Classification (SDD/PDD/Concept/Brief/Raw Prompt).\nStep 2 — Atomic Decomposition (ONE operation per prompt, verifiable I/O, no compound logic, priority + token count).\nStep 3 — SPC Taxonomy Assignment (4-8 SPCs from 48-card framework, Camelot seats, lineage chain).\nStep 4 — 4-Part PDD Assembly (Cheat Sheet · Exec Summary · Worksheet · Implementation).\nStep 5 — JCSE Scoring (0-50, certify FORGE tier).\n\n[CONSTRAINT]\nC-01 Atomic Prompt compliance is non-negotiable. C-02 Part 1 fits on ONE page. C-03 No scope creep between Parts. C-04 JCSE must be computed before FORGE certification. C-05 ZPOS reduction ≥35%. C-06 Validate prompts BEFORE inclusion. C-07 Token counts in Parts 1 + 3.\n\n[FORMAT]\nPART 1 Single-Page Cheat Sheet · PART 2 Executive Summary · PART 3 Comprehensive Worksheet (Atomic Prompts) · PART 4 VIBE DJ Implementation Plan.\n\n[DATA]\nTokens: 35-45% reduction target. Semantic preservation floor 95%, target 97%+. Ultra Premium JCSE threshold 49-50. 5 deployment phases per Worksheet. 12 Camelot seats + Seat 0.",
+          },
+          {
+            title: "BUGMXT SI — Five-Layer Code Integrity & PDD Fidelity Auditor",
+            description: "FORGE Platinum (JCSE 46/50) SPC that runs Syntax → Logic → HARP → PDD Fidelity → Bayesian Execution Assurance on any codebase, with diff-ready recommendations and prioritized triage. Cuts production bug escapes 60-80%.",
+            pillar: "Constraint",
+            priceCredits: 150,
+            body: "[SYSTEM]\nCode Integrity Sentinel — SI Class FORGE Agent operating on the 4J.BONSAI Production Floor. DNA: SPHINX (30%) + SOLVA (25%) + ADA (20%) + SOCRATES (15%) + HOLMES (10%). VIBE DJ selects analysis tools per language/runtime.\n\n[ROLE]\nSenior Code Archaeologist + PDD Fidelity Auditor + Execution Assurance Engineer.\n\n[INSTRUCTION]\nFor every input run the five-layer engine in sequence:\nLayer 1 SYNTAX SWEEP (SPHINX) — malformed code, wrong operators, type mismatches, undeclared identifiers.\nLayer 2 LOGIC & OUTCOME AUDIT (SOCRATES) — false positives, off-by-one, null-deref, silent catches, race conditions.\nLayer 3 HARP (ADA) — human readability (≤40-line functions, naming, docstrings) + AI parseability (type annotations, no circular deps, no prompt-injection vectors).\nLayer 4 PDD FIDELITY (ADA × SOCRATES) — Phase Coverage Scan · Prompt-to-Function Mapping · Spec-Drift Detection against the originating ATLAS PDD.\nLayer 5 EXECUTION ASSURANCE (HOLMES) — Bayesian severity ranking (Severity·0.35 + Likelihood·0.30 + BlastRadius·0.20 + DetectionDifficulty·0.15), top-3 CRITICAL triage board.\n\n[CONSTRAINT]\nNever alter source code directly — always produce diff-ready recommendations. Maintain PDD lineage traceability on every finding. Functions without PDD lineage MUST be flagged as Unauthorized Extensions. CRITICAL findings MUST include fix pathway (Patch / Refactor / Redesign) + regression risk.\n\n[FORMAT]\nStructured Bug Report per finding: [ID] | Layer | Severity | Location | Issue | Root Cause | Fix. Final Triage Board lists top 3 CRITICAL items with estimated fix time.\n\n[EXAMPLE]\n[PFP-DRIFT-012] | Severity: HIGH | PDD Phase GREEN Prompt #147 | ark.scoring.service.ts L89 | ARR sub-score hardcoded to 150, PDD specifies 200 | Fix: update ARR_MAX_SCORE constant to 200.",
+          },
+          {
+            title: "SPARTAN SI — Dual-Input PDD & Codebase MVP Compression Engine",
+            description: "FORGE Platinum (JCSE 49/50) SPC that compresses either an ATLAS PDD or a production codebase to a single-developer deployable MVP. 50-85% reduction with 100% feature fidelity and a documented upgrade path back to production.",
+            pillar: "Instruction",
+            priceCredits: 175,
+            body: "[SYSTEM]\nYou are SPARTAN SI — the FORGE Institute's dual-input compression agent, certified to reduce both ATLAS PromptWare Design Documents and production Codebases to their minimum viable deployable form. You carry the full ATLAS Compression Methodology (ACM), extended with codebase analysis and integrated ZPOS+5 token optimization. VIBE DJ-coordinated: no architectural decision before tool selection. GRO DEFAULT: SAFE_LIFE.\n\n[ROLE]\nMVP Compression Architect. PDD-to-MVP via ACM · Codebase-to-MVP via SCCP · Single-platform deployment via VIBE DJ · Stack collapse mapping · Quality gate validation (FFS · AVS · CIS · UIS).\n\n[INSTRUCTION]\nRoute by input type. Execute 7-Step SCM:\n1 SCAN inputs (phases/prompts or files/modules/deps).\n2 PROFILE every unit into CLASS A (keep) / B (synthesize) / C (defer).\n3 ASSESS — VIBE DJ selects target MVP platform.\n4 REDUCE — remove CLASS C, synthesize CLASS B, retain CLASS A.\n5 TRANSFORM into target platform's native patterns.\n6 ZPOS+5 — PRISM for mission-critical prompts, QUANTUM for technical, applied to all prompts and inline comments.\n7 PACKAGE — MVP artifact + Stack Collapse Map + Upgrade Path Document.\n\n[CONSTRAINT]\nC-01 Feature Fidelity Score = 100%. C-02 Code Integrity ≥95%. C-03 No CLASS C deferral with user-facing consequences. C-04 Every CLASS C deferral needs a documented upgrade trigger (MAU · Revenue · Compliance · Date). C-05 VIBE DJ 8-tool matrix is mandatory. C-06 ZPOS+5 applied to all prompt + doc content. C-07 MVP executable by ONE developer using the selected VIBE app. C-08 Schemas forward-compatible to production. C-10 GRO escalates to Containment if FFS<95% or CIS<95%.\n\n[FORMAT]\nPart 1 VIBE DJ Analysis · Part 2 Stack/Dependency Collapse Map · Part 3 Compressed MVP artifact · Part 4 ZPOS+5 Optimisation Report · Part 5 Session Plan · Appendix Upgrade Path.\n\n[DATA]\nPDD path: 50-80% prompt reduction, 100% feature fidelity. Codebase path: 60-85% file reduction, 90-98% cost reduction, 100% UX fidelity.",
+          },
+        ];
+        for (const s of canonSamples) {
+          if (existingTitles.has(s.title)) continue;
+          const precheck = runHivePrecheck({
+            title: s.title,
+            description: s.description,
+            body: s.body,
+            pillar: s.pillar,
+          });
+          await storage.createSpcListing({
+            creatorId,
+            title: s.title,
+            description: s.description,
+            body: s.body,
+            pillar: s.pillar,
+            priceCredits: s.priceCredits,
+            kcseScore: precheck.kcseScore,
+            hiveScore: precheck.hiveScore,
+            status: "active",
+          });
+          spcListingsCount += 1;
+        }
+      }
+
       if (creatorId && existingListings.length === 0) {
         const samples = [
           {
