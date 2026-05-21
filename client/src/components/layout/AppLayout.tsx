@@ -16,11 +16,17 @@ import {
   HelpCircle,
   Menu,
   X,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { OnboardingTour } from "@/components/OnboardingTour";
 import { useOnboarding } from "@/lib/useOnboarding";
+import { useAuth } from "@/lib/useAuth";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+
+const ADMIN_LINKS: NavItem[] = [
+  { name: "CCGE Importer", href: "/admin/ccge-import", icon: Shield, hint: "Bulk-import compendium cards" },
+];
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -80,6 +86,8 @@ function SidebarBody({ location, openTour, onNavigate }: {
   openTour: () => void;
   onNavigate?: () => void;
 }) {
+  const { user } = useAuth();
+  const isAdmin = !!(user as any)?.isAdmin;
   return (
     <div className="flex flex-col h-full">
       <div className="p-6 flex items-center gap-3">
@@ -125,6 +133,41 @@ function SidebarBody({ location, openTour, onNavigate }: {
             </ul>
           </div>
         ))}
+
+        {isAdmin && (
+          <div className="mb-5 border-t border-white/5 pt-4">
+            <p className="px-2 mb-2 text-[10px] font-mono uppercase tracking-[0.2em] text-amber-400/70">
+              Admin
+            </p>
+            <ul className="space-y-1.5">
+              {ADMIN_LINKS.map((item) => {
+                const isActive = isActiveHref(location, item.href);
+                return (
+                  <li key={item.name}>
+                    <Link
+                      href={item.href}
+                      onClick={onNavigate}
+                      data-testid={`link-admin-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
+                      title={item.hint}
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 font-mono text-xs uppercase tracking-wide group border",
+                        isActive
+                          ? "bg-amber-400/10 text-amber-300 border-amber-400/30"
+                          : "text-muted-foreground hover:bg-white/5 hover:text-amber-300 border-transparent"
+                      )}
+                    >
+                      <item.icon className={cn(
+                        "h-4 w-4 flex-shrink-0",
+                        isActive ? "text-amber-300" : "opacity-70 group-hover:opacity-100"
+                      )} />
+                      <span className="truncate">{item.name}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
 
         <div className="mb-5 border-t border-white/5 pt-4">
           <p className="px-2 mb-2 text-[10px] font-mono uppercase tracking-[0.2em] text-muted-foreground/70">
