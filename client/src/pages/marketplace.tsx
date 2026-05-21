@@ -608,17 +608,49 @@ function PublishPage() {
         </div>
 
         <div>
-          <label className="text-[10px] uppercase font-mono text-muted-foreground tracking-widest block mb-2">Prompt Body</label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-[10px] uppercase font-mono text-muted-foreground tracking-widest">Prompt Body</label>
+            <label
+              data-testid="button-import-spc-file"
+              className="text-[10px] uppercase font-mono tracking-widest text-primary/80 hover:text-primary cursor-pointer border border-primary/30 hover:border-primary/60 rounded px-2 py-1 transition-colors"
+            >
+              Import .md / .txt
+              <input
+                type="file"
+                accept=".md,.markdown,.txt,text/markdown,text/plain"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  if (file.size > 200_000) {
+                    setError(`File too large (${Math.round(file.size / 1024)}KB). Max 200KB.`);
+                    e.target.value = "";
+                    return;
+                  }
+                  try {
+                    const text = await file.text();
+                    setForm((f) => ({ ...f, body: text.slice(0, 50000) }));
+                    setPrecheck(null);
+                    setError(null);
+                  } catch (err: any) {
+                    setError(err?.message || "Failed to read file.");
+                  } finally {
+                    e.target.value = "";
+                  }
+                }}
+              />
+            </label>
+          </div>
           <textarea
             data-testid="input-spc-body"
             value={form.body}
             onChange={(e) => { setForm({ ...form, body: e.target.value }); setPrecheck(null); }}
-            placeholder="Full prompt — role, instructions, examples, constraints, format spec…"
+            placeholder="Full prompt — role, instructions, examples, constraints, format spec… or import a .md/.txt file above."
             rows={12}
             className="w-full bg-black/40 border border-white/10 rounded-md px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-primary/50 leading-relaxed"
           />
           <p className="text-[10px] font-mono text-muted-foreground mt-1">
-            {form.body.length} chars • min 80 / max 4000
+            {form.body.length.toLocaleString()} chars • min 80 / max 50,000
           </p>
         </div>
 

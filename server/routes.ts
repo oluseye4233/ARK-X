@@ -1432,7 +1432,7 @@ export async function registerRoutes(
   const publishListingSchema = z.object({
     title: z.string().min(6).max(80),
     description: z.string().min(20).max(500),
-    body: z.string().min(80).max(4000),
+    body: z.string().min(80).max(50000),
     pillar: z.enum(ALL_CARD_PILLARS as unknown as [string, ...string[]]),
     priceCredits: z.number().int().min(SPC_PRICE_MIN).max(SPC_PRICE_MAX),
   });
