@@ -26,6 +26,12 @@ export const api = {
 
   logout: () => apiRequest("/api/auth/logout", { method: "POST" }),
 
+  importCcgeCompendium: (markdown: string, dryRun: boolean) =>
+    apiRequest("/api/admin/ccge/import-compendium", {
+      method: "POST",
+      body: JSON.stringify({ markdown, dryRun }),
+    }),
+
   me: () => apiRequest("/api/auth/me"),
 
   getUser: (id: string) => apiRequest(`/api/users/${id}`),

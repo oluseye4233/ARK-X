@@ -61,6 +61,7 @@ export interface IStorage {
   // CCGE
   getAllCcgeCards(): Promise<CcgeCard[]>;
   upsertCcgeCard(card: InsertCcgeCard): Promise<CcgeCard>;
+  upsertCcgeCards(cards: InsertCcgeCard[]): Promise<number>;
   getAllCcgeScenarios(): Promise<CcgeScenario[]>;
   getCcgeScenario(id: string): Promise<CcgeScenario | undefined>;
   upsertCcgeScenario(scenario: InsertCcgeScenario): Promise<CcgeScenario>;
@@ -312,6 +313,21 @@ export class DatabaseStorage implements IStorage {
       .onConflictDoUpdate({ target: ccgeCards.id, set: card })
       .returning();
     return created;
+  }
+
+  async upsertCcgeCards(cards: InsertCcgeCard[]): Promise<number> {
+    if (cards.length === 0) return 0;
+    return await db.transaction(async (tx) => {
+      let n = 0;
+      for (const card of cards) {
+        await tx
+          .insert(ccgeCards)
+          .values(card)
+          .onConflictDoUpdate({ target: ccgeCards.id, set: card });
+        n++;
+      }
+      return n;
+    });
   }
 
   async getAllCcgeScenarios(): Promise<CcgeScenario[]> {

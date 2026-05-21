@@ -257,7 +257,9 @@ export async function registerRoutes(
       return res.status(401).json({ message: "Session user no longer exists." });
     }
     const { password: _, ...safeUser } = user;
-    return res.json(safeUser);
+    const adminId = process.env.ADMIN_USER_ID;
+    const isAdmin = !!adminId && user.id === adminId;
+    return res.json({ ...safeUser, isAdmin });
   });
 
   // ── Users ─────────────────────────────────────────────
@@ -1179,6 +1181,61 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Backfill error:", err);
       return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Admin-only CCGE compendium import — parse compendium-format Markdown
+  // and upsert into ccge_cards. Mirrors the SPC import flow (paste/upload).
+  const ccgeImportSchema = z.object({
+    markdown: z.string().min(50).max(500000),
+    dryRun: z.boolean().optional().default(false),
+  });
+
+  app.post("/api/admin/ccge/import-compendium", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const adminId = process.env.ADMIN_USER_ID;
+      if (!adminId || userId !== adminId) {
+        return res.status(403).json({ message: "Admin only." });
+      }
+      const { markdown, dryRun } = ccgeImportSchema.parse(req.body);
+      const { parseCompendium } = await import("./ccgeCompendiumParser");
+      const result = parseCompendium(markdown);
+
+      // Detect duplicate IDs in the parsed payload — fail fast so an import
+      // can never silently overwrite one of its own rows.
+      const seen = new Set<string>();
+      const duplicates: string[] = [];
+      for (const c of result.cards) {
+        if (seen.has(c.id)) duplicates.push(c.id);
+        seen.add(c.id);
+      }
+      if (duplicates.length > 0) {
+        return res.status(422).json({
+          message: `Duplicate IDs in payload: ${duplicates.slice(0, 10).join(", ")}`,
+          duplicates,
+        });
+      }
+
+      if (dryRun) {
+        return res.json({
+          dryRun: true,
+          stats: result.stats,
+          skipped: result.skipped,
+          preview: result.cards.slice(0, 5),
+        });
+      }
+
+      const upserted = await storage.upsertCcgeCards(result.cards);
+      return res.json({
+        dryRun: false,
+        upserted,
+        stats: result.stats,
+        skipped: result.skipped,
+      });
+    } catch (err: any) {
+      console.error("CCGE compendium import error:", err);
+      return res.status(400).json({ message: err.message });
     }
   });
 
