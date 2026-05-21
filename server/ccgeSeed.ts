@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import type { InsertCcgeCard, InsertCcgeScenario } from "@shared/schema";
+import { COMPENDIUM_CARD_SEEDS } from "./ccgeCompendiumSeeds";
 
 export const CCGE_CARD_SEEDS: InsertCcgeCard[] = [
   // System pillar (defines AI's role/persona at the framework level)
@@ -94,11 +95,12 @@ export const CCGE_SCENARIO_SEEDS: InsertCcgeScenario[] = [
 ];
 
 export async function seedCcge() {
-  for (const card of CCGE_CARD_SEEDS) {
+  const allCards: InsertCcgeCard[] = [...CCGE_CARD_SEEDS, ...COMPENDIUM_CARD_SEEDS];
+  for (const card of allCards) {
     await storage.upsertCcgeCard(card);
   }
   for (const scenario of CCGE_SCENARIO_SEEDS) {
     await storage.upsertCcgeScenario(scenario);
   }
-  return { cards: CCGE_CARD_SEEDS.length, scenarios: CCGE_SCENARIO_SEEDS.length };
+  return { cards: allCards.length, scenarios: CCGE_SCENARIO_SEEDS.length };
 }
