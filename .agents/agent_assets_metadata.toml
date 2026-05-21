@@ -6,3 +6,9 @@ id = "aOXmgQhkJKydupZtXtQB7"
 uri = "file://exports/ATLAS_PDD_ARK_Platform_Investor.pdf"
 type = "pdf"
 title = "ATLAS PDD — ARK Platform (Investor Edition)"
+
+[[outputs]]
+id = "EJ6Gd3J5t2r8hJ9K8C32S"
+uri = "file://dist/docs/ARK_Promptware_Design_Document.pdf"
+type = "pdf"
+title = "ARK Onecraft — Promptware Design Document (Investor Edition v1.0)"
