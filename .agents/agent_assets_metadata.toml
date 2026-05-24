@@ -12,3 +12,9 @@ id = "EJ6Gd3J5t2r8hJ9K8C32S"
 uri = "file://dist/docs/ARK_Promptware_Design_Document.pdf"
 type = "pdf"
 title = "ARK Onecraft — Promptware Design Document (Investor Edition v1.0)"
+
+[[outputs]]
+id = "YK6yuVGHRhQ9wxOFIAWdM"
+uri = "file://dist/docs/ARK_Subscriber_Plans_For_Dummies.pdf"
+type = "pdf"
+title = "ARK Onecraft — Subscriber Plans Guide (for dummies)"
