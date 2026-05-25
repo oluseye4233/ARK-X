@@ -1,0 +1,138 @@
+import { getAnthropic, MODELS, isClaudeAvailable } from "./client";
+import { cacheGet, cacheSet, cacheKey } from "./cache";
+import { logUsage, enforceBudget } from "./usage";
+import {
+  CC_PILLARS,
+  hiveToLetterGrade,
+  SPC_AI_ANALYSIS_TTL_MS,
+  type CCPillar,
+  type SpcAiAnalysis,
+  type SpcListing,
+  type SubscriptionPlan,
+} from "@shared/schema";
+
+const PROMPT_VERSION = "spc-analysis-v1";
+const PRO_TIERS: SubscriptionPlan[] = ["INDIVIDUAL_PRO", "SCHOOL_STUDENT", "ENTERPRISE"];
+
+export class SpcAnalysisProTierRequiredError extends Error {
+  status = 402;
+  constructor() {
+    super("AI Analysis requires Individual Pro, School/Student, or Enterprise plan.");
+  }
+}
+
+const SYSTEM_PROMPT = `You are SPHINX AI Analyst, grading a Super Prompt Card (SPC) against the 7 Context-Craft pillars (System, Role, Instruction, Example, Constraint, Format, Data). Output strict JSON only:
+
+{"pillarSuggestions": [{"pillar": "<one of System|Role|Instruction|Example|Constraint|Format|Data>", "currentStrength": <0-100 integer>, "suggestion": "<≤22 words, concrete improvement>"}, ...]}
+
+Rules:
+- Return exactly 7 entries — one for each pillar in the order listed above.
+- "currentStrength" reflects how well the prompt addresses that pillar (0=absent, 100=excellent).
+- "suggestion" must be a single concrete edit the author can apply. Reference the prompt's own structure or wording when possible. No platitudes.
+- Voice: cyberpunk-enterprise, terse, technical.`;
+
+function buildUserPrompt(listing: SpcListing): string {
+  return JSON.stringify({
+    title: listing.title,
+    description: listing.description,
+    pillar: listing.pillar,
+    hiveScore: listing.hiveScore,
+    kcseScore: listing.kcseScore,
+    body: listing.body.slice(0, 8000),
+  });
+}
+
+type RawAnalysis = { pillarSuggestions: SpcAiAnalysis["pillarSuggestions"] };
+
+function parseAnalysis(raw: string): RawAnalysis | null {
+  try {
+    const trimmed = raw.trim().replace(/^```json\s*|\s*```$/g, "");
+    const obj = JSON.parse(trimmed);
+    if (!Array.isArray(obj.pillarSuggestions)) return null;
+    const byPillar = new Map<CCPillar, { strength: number; suggestion: string }>();
+    for (const entry of obj.pillarSuggestions) {
+      const pillar = String(entry?.pillar || "") as CCPillar;
+      if (!CC_PILLARS.includes(pillar)) continue;
+      const strength = Math.max(0, Math.min(100, Math.round(Number(entry?.currentStrength ?? 0))));
+      const suggestion = String(entry?.suggestion || "").slice(0, 240);
+      if (!suggestion) continue;
+      byPillar.set(pillar, { strength, suggestion });
+    }
+    // Ensure all 7 pillars are present; fill gaps with a neutral suggestion.
+    const ordered = CC_PILLARS.map((pillar) => {
+      const found = byPillar.get(pillar);
+      return {
+        pillar,
+        currentStrength: found?.strength ?? 50,
+        suggestion: found?.suggestion ?? "Add an explicit section for this pillar to lift coverage.",
+      };
+    });
+    return { pillarSuggestions: ordered };
+  } catch {
+    return null;
+  }
+}
+
+export async function analyzeSpcListing(opts: {
+  userId: string;
+  plan: SubscriptionPlan;
+  listing: SpcListing;
+}): Promise<SpcAiAnalysis> {
+  if (!PRO_TIERS.includes(opts.plan)) throw new SpcAnalysisProTierRequiredError();
+  if (!isClaudeAvailable()) {
+    const err: any = new Error("Claude AI not configured on this server.");
+    err.status = 503;
+    throw err;
+  }
+
+  const key = cacheKey([
+    "spc-analysis",
+    PROMPT_VERSION,
+    MODELS.HAIKU,
+    opts.listing.id,
+    opts.listing.hiveScore,
+    opts.listing.kcseScore,
+    opts.listing.body.length,
+  ]);
+
+  const cached = await cacheGet<Omit<SpcAiAnalysis, "cached">>(key);
+  if (cached) return { ...cached, cached: true };
+
+  await enforceBudget(opts.userId, opts.plan);
+
+  const client = getAnthropic();
+  const message = await client.messages.create({
+    model: MODELS.HAIKU,
+    max_tokens: 1500,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: "user", content: buildUserPrompt(opts.listing) }],
+  });
+
+  await logUsage({
+    userId: opts.userId,
+    kind: "narrative",
+    model: MODELS.HAIKU,
+    tokensIn: message.usage.input_tokens,
+    tokensOut: message.usage.output_tokens,
+  });
+
+  const block = message.content[0];
+  const raw = block.type === "text" ? block.text : "";
+  const parsed = parseAnalysis(raw);
+  if (!parsed) {
+    const err: any = new Error("Failed to parse Claude analysis response.");
+    err.status = 502;
+    throw err;
+  }
+
+  const grade = hiveToLetterGrade(opts.listing.hiveScore);
+  const result: Omit<SpcAiAnalysis, "cached"> = {
+    letterGrade: grade.grade,
+    letterGradeColor: grade.color,
+    hiveScore: opts.listing.hiveScore,
+    pillarSuggestions: parsed.pillarSuggestions,
+    generatedAt: new Date().toISOString(),
+  };
+  await cacheSet(key, "spc-analysis", result, SPC_AI_ANALYSIS_TTL_MS);
+  return { ...result, cached: false };
+}

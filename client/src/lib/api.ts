@@ -155,12 +155,17 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
-  getSpcListings: (filters?: { pillar?: string }) => {
+  getSpcListings: (filters?: { pillar?: string; category?: string; search?: string }) => {
     const params = new URLSearchParams();
     if (filters?.pillar && filters.pillar !== "All") params.set("pillar", filters.pillar);
+    if (filters?.category && filters.category !== "All") params.set("category", filters.category);
+    if (filters?.search && filters.search.trim()) params.set("search", filters.search.trim());
     const qs = params.toString();
     return apiRequest(`/api/sphinx/listings${qs ? `?${qs}` : ""}`);
   },
+
+  runSpcAiAnalysis: (listingId: string) =>
+    apiRequest(`/api/sphinx/listings/${listingId}/ai-analysis`, { method: "POST" }),
 
   getSpcListing: (id: string, _viewerId?: string) =>
     apiRequest(`/api/sphinx/listings/${id}`),

@@ -35,6 +35,8 @@ import {
 } from "./billing";
 import { seedCcge } from "./ccgeSeed";
 import { runHivePrecheck, executePurchase, getOrCreateCredits } from "./sphinx";
+import { analyzeSpcListing, SpcAnalysisProTierRequiredError } from "./ai/spcAnalysis";
+import { categoryToPillars, MARKETPLACE_CATEGORIES, type MarketplaceCategory } from "@shared/schema";
 import { buildGuinProfile, validateEndorsement } from "./guin";
 import { ENDORSEMENT_MAX_LEN } from "@shared/schema";
 import { z } from "zod";
@@ -1607,6 +1609,8 @@ export async function registerRoutes(
   const listingFiltersSchema = z.object({
     pillar: z.string().optional(),
     status: z.string().optional(),
+    search: z.string().max(120).optional(),
+    category: z.string().optional(),
   });
 
   // Server-side body redaction protects paid prompt content from being scraped
@@ -1621,11 +1625,30 @@ export async function registerRoutes(
     try {
       const filters = listingFiltersSchema.parse(req.query);
       const all = await storage.getAllSpcListings({
-        pillar: filters.pillar,
+        pillar: filters.pillar && filters.pillar !== "All" ? filters.pillar : undefined,
         status: filters.status ?? "active",
       });
+      // Category filter (M19): map to pillars and intersect.
+      let scoped = all;
+      if (filters.category && filters.category !== "All") {
+        const cat = filters.category as MarketplaceCategory;
+        if (!MARKETPLACE_CATEGORIES.includes(cat)) {
+          return res.status(400).json({ message: "Invalid category." });
+        }
+        const allowedPillars = new Set<string>(categoryToPillars(cat));
+        scoped = scoped.filter((l) => allowedPillars.has(l.pillar));
+      }
+      // Free-text search (M18): case-insensitive substring on title + description.
+      if (filters.search && filters.search.trim()) {
+        const q = filters.search.trim().toLowerCase();
+        scoped = scoped.filter(
+          (l) =>
+            l.title.toLowerCase().includes(q) ||
+            l.description.toLowerCase().includes(q),
+        );
+      }
       // List endpoint always returns redacted bodies — no viewer context here.
-      const redacted = all.map((l) => ({
+      const redacted = scoped.map((l) => ({
         ...l,
         body: redactBody(l.body),
         bodyLocked: true,
@@ -1660,6 +1683,25 @@ export async function registerRoutes(
       return res.json({ listing: safeListing, creator: safeCreator });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── SPHINX AI Analysis (M3 / M15 / M20) ─────────────────
+  app.post("/api/sphinx/listings/:id/ai-analysis", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const listing = await storage.getSpcListing(String(req.params.id));
+      if (!listing) return res.status(404).json({ message: "Listing not found." });
+      const user = await storage.getUser(userId);
+      const plan = (user?.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
+      const analysis = await analyzeSpcListing({ userId, plan, listing });
+      return res.json(analysis);
+    } catch (err: any) {
+      console.error("SPC AI analysis error:", err);
+      const status =
+        err.status ||
+        (err instanceof SpcAnalysisProTierRequiredError ? 402 : 500);
+      return res.status(status).json({ message: err.message });
     }
   });
 

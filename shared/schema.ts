@@ -1030,6 +1030,104 @@ export const MATRIX_FEATURES = {
   M20: "Inline Pillar Suggestions",
 } as const;
 
+// ── Marketplace categories (M19) ────────────────────────────────────
+// 6-category mapping over the 8 CC pillars + SuperPrompt. Pure display
+// derivation; no DB column. Used by the browse chip filter.
+export const MARKETPLACE_CATEGORIES = [
+  "Engineering",
+  "Productivity",
+  "Creative",
+  "Data",
+  "Personas",
+  "Elite",
+] as const;
+export type MarketplaceCategory = typeof MARKETPLACE_CATEGORIES[number];
+
+const PILLAR_TO_CATEGORY: Record<CardPillar, MarketplaceCategory> = {
+  System: "Engineering",
+  Constraint: "Engineering",
+  Instruction: "Productivity",
+  Format: "Productivity",
+  Example: "Creative",
+  Data: "Data",
+  Role: "Personas",
+  SuperPrompt: "Elite",
+};
+export function pillarToCategory(pillar: string): MarketplaceCategory | null {
+  return (PILLAR_TO_CATEGORY as Record<string, MarketplaceCategory>)[pillar] ?? null;
+}
+export function categoryToPillars(category: MarketplaceCategory): CardPillar[] {
+  return (Object.keys(PILLAR_TO_CATEGORY) as CardPillar[])
+    .filter((p) => PILLAR_TO_CATEGORY[p] === category);
+}
+
+// ── Performance metric bars (M12) ───────────────────────────────────
+// Pure display derivation from HIVE + KCSE + body length. Never stored.
+// Spec mapping (see merge-spec §"Performance metric bars"):
+//   Speed       = body-length compactness
+//   Efficiency  = HIVE / token-count ratio (tokens ≈ body/4)
+//   Innovation  = KCSE Knowledge proxy (we only have aggregate KCSE 0-50)
+//   Reliability = KCSE Clarity + Specificity blend
+export type PerfBars = {
+  speed: number;        // 0-100
+  efficiency: number;   // 0-100
+  innovation: number;   // 0-100
+  reliability: number;  // 0-100
+};
+const clamp100 = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
+export function derivePerfBars(input: {
+  hiveScore: number;
+  kcseScore: number;
+  bodyLength: number;
+}): PerfBars {
+  const { hiveScore, kcseScore, bodyLength } = input;
+  const tokens = Math.max(1, Math.round(bodyLength / 4));
+  // Speed: short = fast. Optimum ≤300 chars (100), 4000+ chars (0).
+  const speed = clamp100(100 - Math.max(0, bodyLength - 300) / 37);
+  // Efficiency: HIVE earned per 100 tokens, scaled.
+  const efficiency = clamp100((hiveScore * 100) / Math.max(tokens, 50));
+  // Innovation: KCSE acts as Knowledge proxy (0-50 → 0-100), small HIVE-bonus.
+  const innovation = clamp100(kcseScore * 1.8 + (hiveScore - 60) * 0.3);
+  // Reliability: KCSE acts as Clarity+Specificity blend, anchored by HIVE.
+  const reliability = clamp100(kcseScore * 1.6 + hiveScore * 0.25);
+  return { speed, efficiency, innovation, reliability };
+}
+
+// ── Grade-based pricing matrix (M11) ────────────────────────────────
+// Static suggestion banner shown on /marketplace/publish. Each band maps
+// a tier badge to a recommended credit-price range. Display-only — the
+// server still enforces SPC_PRICE_MIN / SPC_PRICE_MAX.
+export const GRADE_PRICING_MATRIX = [
+  { tier: "ULTRA",    minHive: 90, suggestedMin: 80, suggestedMax: 100, label: "Top-shelf — price aggressively" },
+  { tier: "PREMIUM",  minHive: 80, suggestedMin: 40, suggestedMax: 79,  label: "Strong — fair-value zone" },
+  { tier: "STANDARD", minHive: 60, suggestedMin: 10, suggestedMax: 39,  label: "Baseline — entry pricing" },
+] as const;
+export type GradePricingBand = typeof GRADE_PRICING_MATRIX[number];
+export function suggestedPriceForHive(hive: number): GradePricingBand | null {
+  for (const band of GRADE_PRICING_MATRIX) {
+    if (hive >= band.minHive) return band;
+  }
+  return null;
+}
+
+// ── AI Analysis (M3 / M15 / M20) ────────────────────────────────────
+// Per-listing Claude-powered letter grade + per-pillar improvement
+// suggestions. Cached 24h via server/ai/cache.ts; Pro+ gated.
+export const SPC_AI_ANALYSIS_TTL_MS = 24 * 60 * 60 * 1000;
+export type SpcPillarSuggestion = {
+  pillar: CCPillar;
+  currentStrength: number; // 0-100
+  suggestion: string;
+};
+export type SpcAiAnalysis = {
+  letterGrade: LetterGrade;
+  letterGradeColor: string;
+  hiveScore: number;
+  pillarSuggestions: SpcPillarSuggestion[];
+  generatedAt: string;
+  cached: boolean;
+};
+
 // ── Card synergies (M1) ─────────────────────────────────────────────
 // Symmetric pairing table — only one row per unordered pair (cardA < cardB).
 // IMPORTANT: writers MUST canonicalize via `canonicalCardPair()` so that
