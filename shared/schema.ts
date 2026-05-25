@@ -445,7 +445,9 @@ export const jnomicsCards = pgTable("jnomics_cards", {
   emoji: text("emoji").notNull(),
   description: text("description").notNull(),
   basePts: integer("base_pts").notNull(),
-  // ── Phase M1 (SPHINX × Matrix) additive columns ──
+  // ── Phase M1 (SPHINX × Matrix) — 5 taxonomy columns ──
+  // `tier` pre-existed (notNull) before M1; the other four are nullable.
+  // All five collectively satisfy the M1 jnomics_cards taxonomy requirement.
   disc: text("disc"),
   rarity: text("rarity"),
   version: text("version"),
@@ -760,10 +762,24 @@ export type InsertBillingEvent = z.infer<typeof insertBillingEventSchema>;
 export type BillingEvent = typeof billingEvents.$inferSelect;
 export type ArkEventType = typeof ARK_EVENT_TYPES[number];
 
+// ARK event source — classifies where an event originated. M1 adds `synergy`
+// for SPHINX × Matrix synergy-bonus events. Nullable for backfill compatibility.
+export const ARK_EVENT_SOURCES = [
+  "system",
+  "flywheel",
+  "ccge",
+  "sphinx",
+  "synergy",
+  "billing",
+  "admin",
+] as const;
+export type ArkEventSource = typeof ARK_EVENT_SOURCES[number];
+
 export const arkEvents = pgTable("ark_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),
   type: text("type").notNull(),
+  source: text("source").$type<ArkEventSource>(),
   payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
   scoreDelta: integer("score_delta").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -946,6 +962,14 @@ export function formatPriceDual(credits: number, mode: "full" | "compact" = "ful
   if (mode === "compact") return `${n} cr`;
   const usd = (n * CREDITS_TO_USD).toFixed(2);
   return `${n} cr ≈ $${usd}`;
+}
+
+/** USD-only side of a dual render. Use when the credit number is shown in
+ *  a styled span and the USD half needs its own element. Always returns the
+ *  prefix `≈ $` so callers never reconstruct the format. */
+export function formatPriceUsd(credits: number): string {
+  const n = Math.max(0, Math.round(credits));
+  return `≈ $${(n * CREDITS_TO_USD).toFixed(2)}`;
 }
 
 /** HIVE-score → tier badge mapping for the Matrix-style listing card.

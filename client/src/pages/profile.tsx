@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/useAuth";
 import { api } from "@/lib/api";
-import { SUBSCRIPTION_PLANS, CONTEXT_CRAFT_LEVELS, CREDITS_TO_USD, type SubscriptionPlan, type ContextCraftLevel, type UserCredits } from "@shared/schema";
+import { SUBSCRIPTION_PLANS, CONTEXT_CRAFT_LEVELS, formatPriceUsd, type SubscriptionPlan, type ContextCraftLevel, type UserCredits } from "@shared/schema";
 import { GuinProfileView } from "./guin-public";
 import {
   User,
@@ -241,7 +241,7 @@ export default function ProfilePage() {
                   </div>
                   {credits && (
                     <div className="text-[9px] font-mono text-muted-foreground mt-0.5" data-testid="text-profile-credits-usd">
-                      ≈ ${(credits.balance * CREDITS_TO_USD).toFixed(2)}
+                      {formatPriceUsd(credits.balance)}
                     </div>
                   )}
                 </div>
@@ -252,7 +252,7 @@ export default function ProfilePage() {
                   </div>
                   {sales && (
                     <div className="text-[9px] font-mono text-muted-foreground mt-0.5" data-testid="text-profile-earned-usd">
-                      ≈ ${(sales.totalEarned * CREDITS_TO_USD).toFixed(2)}
+                      {formatPriceUsd(sales.totalEarned)}
                     </div>
                   )}
                 </div>

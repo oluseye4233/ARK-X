@@ -4,11 +4,17 @@
 -- ═══════════════════════════════════════════════════════════════════
 
 -- ── Additive columns on existing tables ────────────────────────────
+-- jnomics_cards M1 taxonomy: tier (pre-existing notNull), plus 4 new nullable cols.
+-- The `tier` ADD is a documented no-op via IF NOT EXISTS — confirms the column
+-- is part of the M1 taxonomy contract.
+ALTER TABLE "jnomics_cards" ADD COLUMN IF NOT EXISTS "tier" text;--> statement-breakpoint
 ALTER TABLE "jnomics_cards" ADD COLUMN IF NOT EXISTS "disc" text;--> statement-breakpoint
 ALTER TABLE "jnomics_cards" ADD COLUMN IF NOT EXISTS "rarity" text;--> statement-breakpoint
 ALTER TABLE "jnomics_cards" ADD COLUMN IF NOT EXISTS "version" text;--> statement-breakpoint
 ALTER TABLE "jnomics_cards" ADD COLUMN IF NOT EXISTS "category" text;--> statement-breakpoint
 ALTER TABLE "spc_listings" ADD COLUMN IF NOT EXISTS "synergy_tag_ids" text[];--> statement-breakpoint
+-- arkEvents.source: new nullable enum-string column for M1 synergy events.
+ALTER TABLE "ark_events" ADD COLUMN IF NOT EXISTS "source" text;--> statement-breakpoint
 
 -- ── New tables ─────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS "card_synergies" (

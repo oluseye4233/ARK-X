@@ -12,8 +12,8 @@ import {
   SPC_PRICE_MAX,
   SPC_CREATOR_SHARE_PCT,
   SPC_PLATFORM_SHARE_PCT,
-  CREDITS_TO_USD,
   formatPriceDual,
+  formatPriceUsd,
   type ContextCraftLevel,
   type SpcListing,
   type UserCredits,
@@ -72,7 +72,7 @@ function CreditsHeader({ user }: { user: { id: string; name: string } }) {
         </span>
         {credits && (
           <span className="font-mono text-[9px] text-muted-foreground" data-testid="text-credits-balance-usd">
-            ≈ ${(credits.balance * CREDITS_TO_USD).toFixed(2)}
+            {formatPriceUsd(credits.balance)}
           </span>
         )}
       </div>
@@ -194,7 +194,7 @@ function ListingsList() {
                         </span>
                       </div>
                       <span className="font-mono text-[9px] text-muted-foreground" data-testid={`text-price-usd-${l.id}`}>
-                        ≈ ${(l.priceCredits * CREDITS_TO_USD).toFixed(2)}
+                        {formatPriceUsd(l.priceCredits)}
                       </span>
                     </div>
                   </div>
@@ -341,7 +341,7 @@ function ListingDetail({ id }: { id: string }) {
                 </span>
               </div>
               <span className="font-mono text-xs text-muted-foreground" data-testid="text-listing-price-usd">
-                ≈ ${(listing.priceCredits * CREDITS_TO_USD).toFixed(2)} USD
+                {formatPriceUsd(listing.priceCredits)} USD
               </span>
             </div>
           </div>
