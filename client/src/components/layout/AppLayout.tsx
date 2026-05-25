@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useState } from "react";
-import atandaLogo from "@assets/WEB_LEARNING_SYSTEMS_(1920_x_1280_px)_1772920111812.png";
+import atandaLogo from "@assets/WEB_LEARNING_SYSTEMS_(1920_x_1280_px)_(2)_1779729580194.png";
 import {
   BarChart3,
   Upload,
@@ -104,6 +104,19 @@ function SidebarBody({ location, openTour, onNavigate }: {
         <div>
           <h1 className="text-xl font-display font-bold text-primary tracking-widest leading-none">ARK</h1>
           <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-mono">Synthesized Intel</p>
+        </div>
+        <div className="ml-auto flex items-center gap-2 pl-2 border-l border-white/10">
+          <img
+            src={atandaLogo}
+            alt="ATANDA"
+            data-testid="img-atanda-logo"
+            className="h-9 w-9 object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.15)]"
+          />
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-mono leading-none">
+            <span className="text-white font-bold">ATANDA</span>
+            <br />
+            <span className="text-[8px]">Studio</span>
+          </span>
         </div>
       </div>
 
