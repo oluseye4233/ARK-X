@@ -1981,6 +1981,129 @@ export async function registerRoutes(
     }
   });
 
+  // ────────────────────────────────────────────────────────────────────
+  // ── M4 — SPHINX × Matrix Synthesis Engine & ZPOS Compression
+  // ────────────────────────────────────────────────────────────────────
+  // Multi-card synthesis cart. createSession runs ZPOS compression and
+  // computes a preview royalty split. finalize is fully transactional and
+  // emits per-creator + per-buyer ARK deltas through orchestrator → arkRecalc
+  // (already capped at SPHINX +20/30d). Combined output is DRM-redacted for
+  // anyone other than the originating buyer.
+  const {
+    createSynthesisSession,
+    finalizeSynthesisSession,
+    countSynthesesForListing,
+    recentSynthesesForListing,
+    getSessionForBuyer,
+    SynthesisError,
+  } = await import("./synthesis");
+  const { ZPOS_METHODS: ZPOS_METHOD_LIST } = await import("@shared/schema");
+
+  const synthesisCreateSchema = z.object({
+    listingIds: z.array(z.string().min(1)).min(2).max(7),
+    zposMethod: z.enum(ZPOS_METHOD_LIST as readonly [string, ...string[]]).optional(),
+  });
+
+  const redactSynthesisBody = (s: any) => ({ ...s, combinedOutput: "", bodyLocked: true, bodyLength: s.combinedOutput?.length ?? 0 });
+
+  // POST /api/sphinx/synthesis/sessions — create a preview session.
+  // Routes are mounted under /api/sphinx — declared BEFORE /listings/:id
+  // matchers above? They're already declared below, but Express matches
+  // in declaration order, and these slugs don't collide with /listings/:id.
+  app.post("/api/sphinx/synthesis/sessions", requireAuth, async (req, res) => {
+    try {
+      const buyerId = currentUserId(req)!;
+      const parsed = synthesisCreateSchema.parse(req.body ?? {});
+      const session = await createSynthesisSession({
+        buyerId, listingIds: parsed.listingIds, zposMethod: parsed.zposMethod as any,
+      });
+      return res.json(session);
+    } catch (err: any) {
+      const status = err instanceof SynthesisError ? err.status : 400;
+      return res.status(status).json({ message: err.message });
+    }
+  });
+
+  // GET /api/sphinx/synthesis/sessions/:id — only the originating buyer
+  // sees the full combined body; everyone else gets redacted metadata.
+  app.get("/api/sphinx/synthesis/sessions/:id", requireAuth, async (req, res) => {
+    try {
+      const buyerId = currentUserId(req)!;
+      const session = await getSessionForBuyer(String(req.params.id), buyerId);
+      if (!session) return res.status(404).json({ message: "Session not found." });
+      return res.json({ ...session, bodyLocked: false, bodyLength: session.combinedOutput.length });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/sphinx/synthesis/sessions/:id/finalize — debit + royalties + grant.
+  app.post("/api/sphinx/synthesis/sessions/:id/finalize", requireAuth, async (req, res) => {
+    try {
+      const buyerId = currentUserId(req)!;
+      const outcome = await finalizeSynthesisSession({ buyerId, sessionId: String(req.params.id) });
+
+      // ARK deltas — route through orchestrator so arkRecalc.applyCaps enforces
+      // the SPHINX +20/30d ceiling. One buyer event, one event per unique creator.
+      await orchestrator.emit(buyerId, "spc.purchased", {
+        sessionId: outcome.session.id,
+        asRole: "buyer",
+        synthesis: true,
+      }, 1);
+      const creditedCreators = new Map<string, number>();
+      for (const s of outcome.splits) {
+        creditedCreators.set(s.creatorId, (creditedCreators.get(s.creatorId) ?? 0) + s.creditedAmount);
+      }
+      for (const [creatorId, amount] of creditedCreators.entries()) {
+        if (amount <= 0) continue;
+        await orchestrator.emit(creatorId, "spc.purchased", {
+          sessionId: outcome.session.id,
+          asRole: "creator",
+          synthesis: true,
+        }, 2);
+        const { persistAndBroadcastNotification } = await import("./sphinxSynergy");
+        persistAndBroadcastNotification(creatorId, {
+          type: "synthesis.completed",
+          title: `Royalty from synthesis +${amount} cr`,
+          body: `One of your SPCs was used in a multi-card synthesis.`,
+          link: `/marketplace`,
+          payload: { sessionId: outcome.session.id, amount },
+        }).catch(() => null);
+      }
+      // Broadcast the user-scoped synthesis.completed for the buyer's own SSE.
+      orchestrator.broadcastToUser(buyerId, "synthesis.completed", {
+        sessionId: outcome.session.id,
+        buyerBalance: outcome.buyerBalance,
+        reductionPct: outcome.session.reductionPct,
+        zposMethod: outcome.session.zposMethod,
+      });
+
+      return res.json({
+        ...outcome,
+        session: { ...outcome.session, bodyLocked: false, bodyLength: outcome.session.combinedOutput.length },
+      });
+    } catch (err: any) {
+      console.error("Synthesis finalize error:", err);
+      const status = err instanceof SynthesisError ? err.status : 500;
+      return res.status(status).json({ message: err.message });
+    }
+  });
+
+  // GET /api/sphinx/listings/:id/syntheses — "Used in N syntheses" + recent
+  // metadata for the Synthesis tab on the listing detail page.
+  app.get("/api/sphinx/listings/:id/syntheses", async (req, res) => {
+    try {
+      const listingId = String(req.params.id);
+      const [count, recent] = await Promise.all([
+        countSynthesesForListing(listingId),
+        recentSynthesesForListing(listingId, 5),
+      ]);
+      return res.json({ count, recent });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
   const markReadSchema = z.object({ ids: z.array(z.string()).optional() });
   app.post("/api/notifications/read", requireAuth, async (req, res) => {
     try {

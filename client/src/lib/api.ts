@@ -179,6 +179,19 @@ export const api = {
     apiRequest(`/api/sphinx/listings/${listingId}/complementary`),
   getRoundtable: () => apiRequest("/api/sphinx/roundtable"),
   getNotifications: () => apiRequest("/api/notifications"),
+  // M4 — Synthesis & ZPOS
+  createSynthesisSession: (listingIds: string[], zposMethod?: string) =>
+    apiRequest("/api/sphinx/synthesis/sessions", {
+      method: "POST",
+      body: JSON.stringify({ listingIds, zposMethod }),
+    }),
+  getSynthesisSession: (id: string) =>
+    apiRequest(`/api/sphinx/synthesis/sessions/${id}`),
+  finalizeSynthesisSession: (id: string) =>
+    apiRequest(`/api/sphinx/synthesis/sessions/${id}/finalize`, { method: "POST" }),
+  getListingSyntheses: (listingId: string) =>
+    apiRequest(`/api/sphinx/listings/${listingId}/syntheses`),
+
   markNotificationsRead: (ids?: string[]) =>
     apiRequest("/api/notifications/read", {
       method: "POST",

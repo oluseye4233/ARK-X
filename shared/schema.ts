@@ -1186,46 +1186,6 @@ export const insertComplementaryPairSchema = createInsertSchema(complementaryPai
 export type InsertComplementaryPair = z.infer<typeof insertComplementaryPairSchema>;
 export type ComplementaryPair = typeof complementaryPairs.$inferSelect;
 
-// ── Synthesis sessions (M4) ─────────────────────────────────────────
-// One row per buyer-initiated synthesis. `status`: draft|finalized|failed.
-export const synthesisSessions = pgTable("synthesis_sessions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  buyerId: varchar("buyer_id").notNull(),
-  sourceListingIds: text("source_listing_ids").array().notNull(),
-  combinedBody: text("combined_body"),        // null until finalized
-  totalPriceCredits: integer("total_price_credits").notNull().default(0),
-  platformShare: integer("platform_share").notNull().default(0),
-  creatorShareTotal: integer("creator_share_total").notNull().default(0),
-  zposTokensIn: integer("zpos_tokens_in").notNull().default(0),
-  zposTokensOut: integer("zpos_tokens_out").notNull().default(0),
-  zposCompressionPct: real("zpos_compression_pct").notNull().default(0),
-  status: text("status").notNull().default("draft"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  finalizedAt: timestamp("finalized_at"),
-});
-export const insertSynthesisSessionSchema = createInsertSchema(synthesisSessions).omit({
-  id: true, createdAt: true, finalizedAt: true,
-});
-export type InsertSynthesisSession = z.infer<typeof insertSynthesisSessionSchema>;
-export type SynthesisSession = typeof synthesisSessions.$inferSelect;
-
-// ── Synthesis royalty splits (M4) ───────────────────────────────────
-// Per-creator ledger row for each finalized synthesis session.
-export const synthesisCreatorsSplit = pgTable("synthesis_creators_split", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  sessionId: varchar("session_id").notNull(),
-  creatorId: varchar("creator_id").notNull(),
-  sourceListingId: varchar("source_listing_id").notNull(),
-  weight: real("weight").notNull(),                 // 0..1, source-price-weighted
-  creditsAwarded: integer("credits_awarded").notNull().default(0),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-export const insertSynthesisCreatorSplitSchema = createInsertSchema(synthesisCreatorsSplit).omit({
-  id: true, createdAt: true,
-});
-export type InsertSynthesisCreatorSplit = z.infer<typeof insertSynthesisCreatorSplitSchema>;
-export type SynthesisCreatorSplit = typeof synthesisCreatorsSplit.$inferSelect;
-
 // ── Forge Lab test results (M10) ────────────────────────────────────
 // Pre-publish HIVE precheck history; streamed to the Forge Lab terminal UI.
 export const testResults = pgTable("test_results", {
@@ -1294,6 +1254,75 @@ export const insertRoundtableStateSchema = createInsertSchema(roundtableState).o
 });
 export type InsertRoundtableState = z.infer<typeof insertRoundtableStateSchema>;
 export type RoundtableState = typeof roundtableState.$inferSelect;
+
+// ═══════════════════════════════════════════════════════════════════
+// Phase M4 — SPHINX × Matrix Synthesis Engine & ZPOS Compression
+// ═══════════════════════════════════════════════════════════════════
+// Multi-card synthesis cart: combines 2+ SPC listings into a single
+// compressed prompt, distributes royalties pro-rata to source creators
+// by locked source-price weight (70% creator pool / 30% platform).
+// Finalize is fully transactional — debit, royalty inserts, access grant.
+
+export const ZPOS_METHODS = [
+  "PRISM",     // deduplication: identical/near-identical lines
+  "SYNTHESIS", // merge overlapping section bodies
+  "AEOS",      // abbreviation: collapse repeated multi-word phrases
+  "NEXUS",     // reference linking: replace repeated identifiers
+  "QUANTUM",   // aggressive template compression: terse rewrite
+] as const;
+export type ZposMethod = typeof ZPOS_METHODS[number];
+
+export const SYNTHESIS_STATUSES = ["preview", "finalized", "failed"] as const;
+export type SynthesisStatus = typeof SYNTHESIS_STATUSES[number];
+
+export type SynthesisSplitPreview = {
+  creatorId: string;
+  sourceListingId: string;
+  sourcePriceCredits: number;
+  weight: number;        // 0..1, sums to 1 (within rounding)
+  creditedAmount: number; // integer credits (floor-rounded)
+};
+
+export const synthesisSessions = pgTable("synthesis_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  buyerId: varchar("buyer_id").notNull(),
+  sourceListingIds: text("source_listing_ids").array().notNull(),
+  lockedPrices: jsonb("locked_prices").$type<{ listingId: string; creatorId: string; priceCredits: number }[]>().notNull(),
+  splitPreview: jsonb("split_preview").$type<SynthesisSplitPreview[]>().notNull(),
+  totalCreditPrice: integer("total_credit_price").notNull(),
+  zposMethod: text("zpos_method").notNull(),
+  preTokens: integer("pre_tokens").notNull(),
+  postTokens: integer("post_tokens").notNull(),
+  reductionPct: real("reduction_pct").notNull(),
+  semanticPreservation: real("semantic_preservation").notNull(),
+  combinedOutput: text("combined_output").notNull(),
+  status: text("status").notNull().default("preview"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  finalizedAt: timestamp("finalized_at"),
+});
+export const insertSynthesisSessionSchema = createInsertSchema(synthesisSessions).omit({
+  id: true, createdAt: true, finalizedAt: true,
+});
+export type InsertSynthesisSession = z.infer<typeof insertSynthesisSessionSchema>;
+export type SynthesisSession = typeof synthesisSessions.$inferSelect;
+
+export const synthesisCreatorsSplit = pgTable(
+  "synthesis_creators_split",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    sessionId: varchar("session_id").notNull(),
+    creatorId: varchar("creator_id").notNull(),
+    sourceListingId: varchar("source_listing_id").notNull(),
+    sourcePriceCredits: integer("source_price_credits").notNull(),
+    weightBp: integer("weight_bp").notNull(), // basis points (0..10000)
+    creditedAmount: integer("credited_amount").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    sessionListingUniq: uniqueIndex("synthesis_split_session_listing_uniq").on(t.sessionId, t.sourceListingId),
+  }),
+);
+export type SynthesisCreatorSplit = typeof synthesisCreatorsSplit.$inferSelect;
 
 // ── Bonsai onboarding progress (M9 / M14) ───────────────────────────
 // One row per user; tracks 18-stage seller-onboarding walkthrough.
