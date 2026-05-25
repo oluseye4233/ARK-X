@@ -1906,31 +1906,34 @@ export async function registerRoutes(
   });
 
   // GET /api/sphinx/roundtable — current Top-12 snapshot.
+  // Re-compute on every fetch so rankDelta + seatSinceAt are always fresh
+  // relative to the previous snapshot stored in roundtable_state. This is
+  // a 12-row leaderboard — write cost is negligible.
   app.get("/api/sphinx/roundtable", async (_req, res) => {
     try {
-      let snap = await getRoundtableSnapshot();
-      if (snap.length === 0) {
-        await recomputeRoundtable();
-        snap = await getRoundtableSnapshot();
-      }
-      // Enrich with listing + creator metadata.
-      const listingIds = Array.from(new Set(snap.map((s) => s.listingId)));
-      const creatorIds = Array.from(new Set(snap.map((s) => s.creatorId)));
+      const { seats } = await recomputeRoundtable();
+      const listingIds = Array.from(new Set(seats.map((s) => s.listingId)));
+      const creatorIds = Array.from(new Set(seats.map((s) => s.creatorId)));
       const [listings, creators] = await Promise.all([
         Promise.all(listingIds.map((id) => storage.getSpcListing(id))),
         Promise.all(creatorIds.map((id) => storage.getUser(id))),
       ]);
       const lById = new Map(listings.filter(Boolean).map((l) => [l!.id, l!]));
       const cById = new Map(creators.filter(Boolean).map((c) => [c!.id, c!]));
-      const enriched = snap.map((s) => {
+      const nowMs = Date.now();
+      const enriched = seats.map((s) => {
         const l = lById.get(s.listingId);
         const cr = cById.get(s.creatorId);
+        const sinceMs = s.seatSinceAt ? new Date(s.seatSinceAt).getTime() : nowMs;
         return {
           seatNumber: s.seatNumber,
           score: Math.round(s.score),
           hiveScore: Math.round(s.hiveScore),
           salesCount: s.salesCount,
           snapshotAt: s.snapshotAt,
+          rankDelta: s.rankDelta ?? 0,
+          seatSinceAt: s.seatSinceAt ?? s.snapshotAt,
+          timeHeldMs: Math.max(0, nowMs - sinceMs),
           listing: l ? { id: l.id, title: l.title, pillar: l.pillar, priceCredits: l.priceCredits, hiveScore: l.hiveScore } : null,
           creator: cr ? { id: cr.id, name: cr.name } : null,
         };

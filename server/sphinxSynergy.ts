@@ -162,6 +162,7 @@ export interface RoundtableSeat {
   salesCount: number;
   snapshotAt: Date;
   rankDelta?: number; // +N means moved up N seats since last snapshot
+  seatSinceAt?: Date; // when current holder first arrived at this seat
 }
 
 export async function getRoundtableSnapshot(): Promise<RoundtableState[]> {
@@ -182,13 +183,18 @@ export async function recomputeRoundtable(): Promise<{ seats: RoundtableSeat[]; 
   const prevBySeat = new Map(prevRows.map((r) => [r.seatNumber, r]));
   const prevByListing = new Map(prevRows.map((r) => [r.listingId, r]));
 
-  // Persist new snapshot.
+  // Persist new snapshot. We carry forward the previous snapshotAt for any
+  // (seat, listing) pair that hasn't changed so the client can render an
+  // accurate "time held" duration without an extra schema column.
   await db.delete(roundtableState);
   const now = new Date();
-  const seats: RoundtableSeat[] = [];
+  const seats: (RoundtableSeat & { seatSinceAt: Date })[] = [];
   for (let i = 0; i < ranked.length; i++) {
     const seatNumber = i + 1;
     const { listing, score } = ranked[i];
+    const prevAtSeat = prevBySeat.get(seatNumber);
+    const stillHere = prevAtSeat && prevAtSeat.listingId === listing.id;
+    const seatSinceAt = stillHere ? prevAtSeat!.snapshotAt : now;
     await db.insert(roundtableState).values({
       listingId: listing.id,
       creatorId: listing.creatorId,
@@ -196,13 +202,15 @@ export async function recomputeRoundtable(): Promise<{ seats: RoundtableSeat[]; 
       score,
       hiveScore: listing.hiveScore,
       salesCount: listing.salesCount,
-    });
+      // Preserve original arrival timestamp so time-held survives recompute.
+      snapshotAt: seatSinceAt as any,
+    } as any);
     const prev = prevByListing.get(listing.id);
     const rankDelta = prev ? prev.seatNumber - seatNumber : undefined;
     seats.push({
       seatNumber, listingId: listing.id, creatorId: listing.creatorId,
       score, hiveScore: listing.hiveScore, salesCount: listing.salesCount,
-      snapshotAt: now, rankDelta,
+      snapshotAt: now, rankDelta, seatSinceAt,
     });
   }
 

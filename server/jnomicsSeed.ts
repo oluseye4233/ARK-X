@@ -4,10 +4,11 @@ import { canonicalCardPair } from "@shared/schema";
 import { db } from "./db";
 import { cardSynergies } from "@shared/schema";
 
-// ── Junglenomics M3 expansion — 159 generated cards (`jng-` prefix) ──
-// Combined with the 22 CODEC primitives + 10 legacy card-001..010 that have
-// already been wiped/replaced, the marketplace now exposes a full 169-card
-// taxonomy across 6 disciplines × 5 rarities × 3 versions × 6 categories.
+// ── Junglenomics M3 expansion — 146 generated cards (`jng-` prefix) ──
+// Combined with the 23 CODEC primitives (the 10 legacy `card-001..010` rows
+// are dropped by the seed before this runs), the marketplace exposes a full
+// **169-card** taxonomy across 6 disciplines × 5 rarities × 3 versions × 6
+// categories. The 146 count is intentional: 23 + 146 = 169.
 
 export const JNG_DISCIPLINES = [
   "Discovery", "Build", "Optimize", "Scale", "Defend", "Govern",
@@ -54,10 +55,12 @@ function hashStr(s: string): number {
   return h >>> 0;
 }
 
-/** Generate 159 deterministic cards covering the full 6-dim taxonomy. */
+/** Generate 146 deterministic cards covering the full 6-dim taxonomy.
+ *  23 CODEC + 146 JNG = 169 cards total (locked marketplace taxonomy size). */
+export const JNG_EXPANSION_COUNT = 146;
 export function generateJngCards(): InsertJnomicsCard[] {
   const cards: InsertJnomicsCard[] = [];
-  for (let i = 1; i <= 159; i++) {
+  for (let i = 1; i <= JNG_EXPANSION_COUNT; i++) {
     const id = `jng-${i.toString().padStart(3, "0")}`;
     const disc = JNG_DISCIPLINES[i % JNG_DISCIPLINES.length];
     const rarity = JNG_RARITIES[Math.floor(i / 6) % JNG_RARITIES.length];

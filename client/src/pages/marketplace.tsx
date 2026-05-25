@@ -1479,9 +1479,22 @@ type RoundtableSeat = {
   hiveScore: number;
   salesCount: number;
   snapshotAt: string;
+  rankDelta: number;
+  seatSinceAt: string;
+  timeHeldMs: number;
   listing: { id: string; title: string; pillar: string; priceCredits: number; hiveScore: number } | null;
   creator: { id: string; name: string } | null;
 };
+
+function formatHeldDuration(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
+}
 function RoundtablePage() {
   const [seats, setSeats] = useState<RoundtableSeat[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1552,6 +1565,21 @@ function RoundtablePage() {
                   <p className="font-mono text-[10px] text-muted-foreground truncate">
                     by {s.creator?.name ?? "—"} • {s.listing?.pillar ?? ""}
                   </p>
+                </div>
+                <div className="hidden md:flex flex-col items-end gap-0.5 mr-3">
+                  <span className="font-mono text-[9px] uppercase text-muted-foreground tracking-widest">Held</span>
+                  <span className="font-mono text-sm text-white font-bold" data-testid={`text-seat-held-${s.seatNumber}`}>{formatHeldDuration(s.timeHeldMs)}</span>
+                </div>
+                <div className="hidden md:flex flex-col items-end gap-0.5 mr-3">
+                  <span className="font-mono text-[9px] uppercase text-muted-foreground tracking-widest">Δ Rank</span>
+                  <span
+                    data-testid={`text-seat-rankdelta-${s.seatNumber}`}
+                    className={`font-mono text-sm font-bold ${
+                      s.rankDelta > 0 ? "text-emerald-400" : s.rankDelta < 0 ? "text-destructive" : "text-muted-foreground"
+                    }`}
+                  >
+                    {s.rankDelta > 0 ? `▲${s.rankDelta}` : s.rankDelta < 0 ? `▼${Math.abs(s.rankDelta)}` : "—"}
+                  </span>
                 </div>
                 <div className="hidden sm:flex flex-col items-end gap-0.5 mr-3">
                   <span className="font-mono text-[9px] uppercase text-muted-foreground tracking-widest">HIVE</span>

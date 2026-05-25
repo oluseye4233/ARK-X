@@ -24,6 +24,9 @@ import { useOnboarding } from "@/lib/useOnboarding";
 import { useAuth } from "@/lib/useAuth";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { NotificationBell } from "@/components/layout/NotificationBell";
+import { useNotificationStream, type ArkRoundtableEvent } from "@/lib/useArkStream";
+import { useToast } from "@/hooks/use-toast";
+import { useCallback } from "react";
 
 const ADMIN_LINKS: NavItem[] = [
   { name: "CCGE Importer", href: "/admin/ccge-import", icon: Shield, hint: "Bulk-import compendium cards" },
@@ -236,6 +239,28 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [location] = useLocation();
   const { isOpen, open, close } = useOnboarding();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const { user } = useAuth();
+  const { toast } = useToast();
+
+  // Ambient seat-rotation toast: any Roundtable seat that changes hands
+  // anywhere on the platform surfaces a transient 8s toast. The handler
+  // multiplexes the existing SSE hub — no new EventSource. Per-user
+  // persistent rows (gainer/displaced) are still delivered via
+  // `notification.new` and the bell's inbox.
+  const onSeat = useCallback((e: ArkRoundtableEvent) => {
+    const isMine = user?.id && (user.id === e.creatorId || user.id === e.previousCreatorId);
+    const t = toast({
+      title: isMine ? `Roundtable seat #${e.seatNumber} changed hands` : `Roundtable shake-up • seat #${e.seatNumber}`,
+      description: isMine
+        ? (user!.id === e.creatorId
+            ? `You just captured seat #${e.seatNumber}.`
+            : `Another creator has taken your seat #${e.seatNumber}.`)
+        : `A new SPC is now ranked #${e.seatNumber}.`,
+    });
+    // Auto-dismiss after 8s regardless of the global TOAST_REMOVE_DELAY.
+    setTimeout(() => { try { t.dismiss(); } catch {} }, 8000);
+  }, [toast, user?.id]);
+  useNotificationStream(!!user?.id, undefined, onSeat);
 
   if (location === '/login') {
     return <main className="min-h-screen bg-background text-foreground font-sans">{children}</main>;

@@ -127,12 +127,23 @@ export function NotificationBell() {
             <ul className="divide-y divide-white/5">
               {items.map((n) => {
                 const badge = TYPE_BADGE[n.type] ?? { label: n.type, color: "text-muted-foreground" };
-                const unread = !n.readAt;
+                const isUnread = !n.readAt;
+                // Mark this single item read on click; close the dropdown only
+                // when the notification carries a link (navigation handles the
+                // close transition naturally otherwise).
+                const handleClick = () => {
+                  if (isUnread) {
+                    api.markNotificationsRead([n.id]).catch(() => null);
+                    setItems((prev) => prev.map((it) => it.id === n.id ? { ...it, readAt: new Date().toISOString() } : it));
+                    setUnread((u) => Math.max(0, u - 1));
+                  }
+                  if (n.link) setOpen(false);
+                };
                 const body = (
                   <div
                     className={cn(
-                      "px-3 py-2.5 hover:bg-white/5 transition-colors block",
-                      unread && "bg-primary/5",
+                      "px-3 py-2.5 hover:bg-white/5 transition-colors block cursor-pointer",
+                      isUnread && "bg-primary/5",
                     )}
                     data-testid={`row-notification-${n.id}`}
                   >
@@ -151,8 +162,10 @@ export function NotificationBell() {
                 return (
                   <li key={n.id}>
                     {n.link ? (
-                      <Link href={n.link} onClick={() => setOpen(false)}>{body}</Link>
-                    ) : body}
+                      <Link href={n.link} onClick={handleClick}>{body}</Link>
+                    ) : (
+                      <button type="button" onClick={handleClick} className="w-full text-left">{body}</button>
+                    )}
                   </li>
                 );
               })}
