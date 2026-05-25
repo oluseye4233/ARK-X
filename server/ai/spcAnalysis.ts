@@ -1,6 +1,6 @@
 import { getAnthropic, MODELS, isClaudeAvailable } from "./client";
 import { cacheGet, cacheSet, cacheKey } from "./cache";
-import { logUsage, enforceBudget } from "./usage";
+import { logUsage, enforceBudget, enforceDailyQuota } from "./usage";
 import {
   CC_PILLARS,
   hiveToLetterGrade,
@@ -98,6 +98,9 @@ export async function analyzeSpcListing(opts: {
   const cached = await cacheGet<Omit<SpcAiAnalysis, "cached">>(key);
   if (cached) return { ...cached, cached: true };
 
+  // Daily per-user quota check — only fresh Claude calls count; cache
+  // hits above already short-circuited.
+  await enforceDailyQuota(opts.userId, opts.plan, "narrative");
   await enforceBudget(opts.userId, opts.plan);
 
   const client = getAnthropic();

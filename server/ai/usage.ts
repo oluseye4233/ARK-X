@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { aiUsage, AI_PRICING_PER_MTOK, AI_TIER_MONTHLY_TOKENS, type AiKind, type SubscriptionPlan } from "@shared/schema";
+import { aiUsage, AI_PRICING_PER_MTOK, AI_TIER_MONTHLY_TOKENS, AI_TIER_DAILY_QUOTA, type AiKind, type SubscriptionPlan } from "@shared/schema";
 import { eq, and, gte, sql } from "drizzle-orm";
 
 export function computeCostCents(model: keyof typeof AI_PRICING_PER_MTOK, tokensIn: number, tokensOut: number): number {
@@ -61,4 +61,32 @@ export async function enforceBudget(userId: string, plan: SubscriptionPlan): Pro
   const budget = AI_TIER_MONTHLY_TOKENS[plan as keyof typeof AI_TIER_MONTHLY_TOKENS] ?? AI_TIER_MONTHLY_TOKENS.INDIVIDUAL_FREE;
   const { total } = await getMonthlyTokens(userId);
   if (total >= budget) throw new AiBudgetExceededError(total, budget);
+}
+
+/** Count of fresh AI calls of a given kind in the trailing UTC day. */
+export async function getDailyUsageCount(userId: string, kind: AiKind): Promise<number> {
+  const dayStart = new Date();
+  dayStart.setUTCHours(0, 0, 0, 0);
+  const [row] = await db
+    .select({ n: sql<number>`COUNT(*)::int` })
+    .from(aiUsage)
+    .where(and(eq(aiUsage.userId, userId), eq(aiUsage.kind, kind), gte(aiUsage.createdAt, dayStart)));
+  return row?.n ?? 0;
+}
+
+export class AiDailyQuotaExceededError extends Error {
+  status = 429;
+  constructor(public kind: AiKind, public used: number, public quota: number) {
+    super(`AI daily quota exceeded for ${kind} (${used}/${quota}). Try again tomorrow or upgrade your plan.`);
+  }
+}
+
+/** Per-user daily quota check. Only fresh (uncached) calls should invoke this. */
+export async function enforceDailyQuota(userId: string, plan: SubscriptionPlan, kind: AiKind): Promise<void> {
+  const planQuotas =
+    AI_TIER_DAILY_QUOTA[plan as keyof typeof AI_TIER_DAILY_QUOTA] ?? AI_TIER_DAILY_QUOTA.INDIVIDUAL_FREE;
+  const quota = (planQuotas as Record<string, number>)[kind] ?? 0;
+  if (quota <= 0) throw new AiDailyQuotaExceededError(kind, 0, 0);
+  const used = await getDailyUsageCount(userId, kind);
+  if (used >= quota) throw new AiDailyQuotaExceededError(kind, used, quota);
 }

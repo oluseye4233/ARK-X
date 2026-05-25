@@ -812,6 +812,16 @@ export const AI_TIER_MONTHLY_TOKENS = {
   ENTERPRISE: 2000000,
 } as const;
 
+// Per-user daily AI call quota by kind. Cached hits never count toward
+// the quota — only fresh Claude invocations do. Counts the number of
+// `ai_usage` rows for that kind in the trailing UTC day.
+export const AI_TIER_DAILY_QUOTA = {
+  INDIVIDUAL_FREE: { kcse: 5,  narrative: 0,  scenario_gen: 0   },
+  INDIVIDUAL_PRO:  { kcse: 50, narrative: 30, scenario_gen: 10  },
+  SCHOOL_STUDENT:  { kcse: 20, narrative: 10, scenario_gen: 5   },
+  ENTERPRISE:      { kcse: 200, narrative: 100, scenario_gen: 50 },
+} as const;
+
 export const aiUsage = pgTable("ai_usage", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),
