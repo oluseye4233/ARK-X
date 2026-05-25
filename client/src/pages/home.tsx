@@ -2,10 +2,32 @@ import { Link } from "wouter";
 import { ArrowRight, ShieldAlert, Target, Zap, Crown, GraduationCap, User, Building2, Check, Upload, BarChart3, Compass } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SUBSCRIPTION_PLANS } from "@shared/schema";
+import heroBgVideo from "@assets/WEB_LEARNING_SYSTEMS_(1920_x_1280_px)_(2)_1779676596124.mp4";
 
 export default function Home() {
   return (
-    <div className="max-w-5xl mx-auto flex flex-col justify-center min-h-[80vh] space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <>
+      {/* Hero background video — fixed full-bleed, muted/looping, with a dark
+          tint overlay so foreground text stays legible against any frame. */}
+      <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none" data-testid="hero-bg-video-wrap" aria-hidden="true">
+        <video
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+          className="absolute inset-0 w-full h-full object-cover"
+          data-testid="hero-bg-video"
+        >
+          <source src={heroBgVideo} type="video/mp4" />
+        </video>
+        {/* Tint for legibility — light enough that motion stays visible,
+            heavier toward the bottom where the pricing grid lives. */}
+        <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/55 to-background/85" />
+        <div className="absolute inset-0 bg-gradient-to-r from-background/30 via-transparent to-background/30" />
+      </div>
+
+      <div className="relative max-w-5xl mx-auto flex flex-col justify-center min-h-[80vh] space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="space-y-6">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-primary/30 bg-primary/5 text-primary text-xs font-mono uppercase tracking-widest">
           <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
@@ -152,6 +174,7 @@ export default function Home() {
           </Link>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
