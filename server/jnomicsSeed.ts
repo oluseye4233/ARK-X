@@ -4,11 +4,12 @@ import { canonicalCardPair } from "@shared/schema";
 import { db } from "./db";
 import { cardSynergies } from "@shared/schema";
 
-// ── Junglenomics M3 expansion — 146 generated cards (`jng-` prefix) ──
-// Combined with the 23 CODEC primitives (the 10 legacy `card-001..010` rows
-// are dropped by the seed before this runs), the marketplace exposes a full
-// **169-card** taxonomy across 6 disciplines × 5 rarities × 3 versions × 6
-// categories. The 146 count is intentional: 23 + 146 = 169.
+// ── Junglenomics M3 expansion — 147 generated cards (`jng-` prefix) ──
+// Combined with the 22 CODEC primitives from `shared/codec-primitives.ts`
+// (the 10 legacy `card-001..010` rows are dropped by the seed before this
+// runs), the marketplace exposes a full **169-card** taxonomy across
+// 6 disciplines × 5 rarities × 3 versions × 6 categories.
+// The 147 count is intentional and locked: 22 + 147 = 169.
 
 export const JNG_DISCIPLINES = [
   "Discovery", "Build", "Optimize", "Scale", "Defend", "Govern",
@@ -55,9 +56,11 @@ function hashStr(s: string): number {
   return h >>> 0;
 }
 
-/** Generate 146 deterministic cards covering the full 6-dim taxonomy.
- *  23 CODEC + 146 JNG = 169 cards total (locked marketplace taxonomy size). */
-export const JNG_EXPANSION_COUNT = 146;
+/** Generate 147 deterministic cards covering the full 6-dim taxonomy.
+ *  22 CODEC + 147 JNG = 169 cards total (locked marketplace taxonomy size). */
+export const JNG_EXPANSION_COUNT = 147;
+/** Locked total card count served by the marketplace (CODEC + JNG). */
+export const TOTAL_TAXONOMY_CARDS = 169;
 export function generateJngCards(): InsertJnomicsCard[] {
   const cards: InsertJnomicsCard[] = [];
   for (let i = 1; i <= JNG_EXPANSION_COUNT; i++) {
@@ -156,7 +159,16 @@ export async function seedJnomicsExpansion(): Promise<{ cards: number; synergies
   for (const c of cards) {
     await storage.upsertJnomicsCard(c);
   }
-  const allCardIds = (await storage.getAllJnomicsCards()).map((c) => c.id);
-  const synergies = await seedCuratedSynergies(allCardIds);
+  const allCards = await storage.getAllJnomicsCards();
+  // Hard invariant: total taxonomy MUST equal TOTAL_TAXONOMY_CARDS (169)
+  // after seed runs. CODEC primitives are inserted upstream by the seed
+  // route; this guard catches count drift in either source.
+  if (allCards.length !== TOTAL_TAXONOMY_CARDS) {
+    throw new Error(
+      `Taxonomy count drift: expected ${TOTAL_TAXONOMY_CARDS}, got ${allCards.length}. ` +
+      `Check CODEC_PRIMITIVES (shared/codec-primitives.ts) and JNG_EXPANSION_COUNT.`,
+    );
+  }
+  const synergies = await seedCuratedSynergies(allCards.map((c) => c.id));
   return { cards: cards.length, synergies };
 }
