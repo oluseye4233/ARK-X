@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useRoute, Link } from "wouter";
 import { motion } from "framer-motion";
+import { CREDITS_TO_USD } from "@shared/schema";
 import {
   Radar,
   RadarChart,
@@ -270,8 +271,10 @@ export function GuinProfileView({ profile, viewerCanEndorse, onEndorse }: {
                     </div>
                   </div>
                   <div className="text-right ml-3">
-                    <div className="font-display font-bold text-base text-amber-400">{s.priceCredits}</div>
-                    <div className="text-[9px] uppercase font-mono tracking-widest text-muted-foreground">credits</div>
+                    <div className="font-display font-bold text-base text-amber-400">{s.priceCredits} cr</div>
+                    <div className="text-[9px] uppercase font-mono tracking-widest text-muted-foreground">
+                      ≈ ${(s.priceCredits * CREDITS_TO_USD).toFixed(2)}
+                    </div>
                   </div>
                 </div>
                 <div className="mt-2 flex items-center gap-3 text-[10px] font-mono text-muted-foreground">

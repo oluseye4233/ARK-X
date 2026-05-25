@@ -12,6 +12,8 @@ import {
   SPC_PRICE_MAX,
   SPC_CREATOR_SHARE_PCT,
   SPC_PLATFORM_SHARE_PCT,
+  CREDITS_TO_USD,
+  formatPriceDual,
   type ContextCraftLevel,
   type SpcListing,
   type UserCredits,
@@ -68,6 +70,11 @@ function CreditsHeader({ user }: { user: { id: string; name: string } }) {
         <span className="font-mono text-lg font-bold text-amber-400" data-testid="text-credits-balance">
           {credits ? credits.balance : "—"}
         </span>
+        {credits && (
+          <span className="font-mono text-[9px] text-muted-foreground" data-testid="text-credits-balance-usd">
+            ≈ ${(credits.balance * CREDITS_TO_USD).toFixed(2)}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -179,10 +186,15 @@ function ListingsList() {
                 >
                   <div className="flex items-start justify-between gap-2 pr-9">
                     <PillarBadge pillar={l.pillar} />
-                    <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-amber-400/10 border border-amber-400/30">
-                      <Coins className="h-3.5 w-3.5 text-amber-400" />
-                      <span className="font-mono text-sm font-bold text-amber-400" data-testid={`text-price-${l.id}`}>
-                        {l.priceCredits}
+                    <div className="flex flex-col items-end gap-0.5 px-2 py-1 rounded bg-amber-400/10 border border-amber-400/30">
+                      <div className="flex items-center gap-1.5">
+                        <Coins className="h-3.5 w-3.5 text-amber-400" />
+                        <span className="font-mono text-sm font-bold text-amber-400" data-testid={`text-price-${l.id}`}>
+                          {l.priceCredits} cr
+                        </span>
+                      </div>
+                      <span className="font-mono text-[9px] text-muted-foreground" data-testid={`text-price-usd-${l.id}`}>
+                        ≈ ${(l.priceCredits * CREDITS_TO_USD).toFixed(2)}
                       </span>
                     </div>
                   </div>
@@ -222,7 +234,7 @@ function ListingsList() {
                   />
                   <div className="flex items-center justify-between text-[10px] font-mono pt-2 border-t border-white/10 mt-auto">
                     <span className="flex items-center gap-1 text-amber-400">
-                      <Coins className="h-3 w-3" /> {l.priceCredits} credits
+                      <Coins className="h-3 w-3" /> {formatPriceDual(l.priceCredits)}
                     </span>
                     <Link
                       href={`/marketplace/${l.id}`}
@@ -321,15 +333,17 @@ function ListingDetail({ id }: { id: string }) {
             </p>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-amber-400/10 border border-amber-400/30">
-              <Coins className="h-5 w-5 text-amber-400" />
-              <span className="font-mono text-2xl font-bold text-amber-400" data-testid="text-listing-price">
-                {listing.priceCredits}
+            <div className="flex flex-col items-end gap-1 px-4 py-3 rounded-lg bg-amber-400/10 border border-amber-400/30">
+              <div className="flex items-center gap-2">
+                <Coins className="h-5 w-5 text-amber-400" />
+                <span className="font-mono text-2xl font-bold text-amber-400" data-testid="text-listing-price">
+                  {listing.priceCredits} cr
+                </span>
+              </div>
+              <span className="font-mono text-xs text-muted-foreground" data-testid="text-listing-price-usd">
+                ≈ ${(listing.priceCredits * CREDITS_TO_USD).toFixed(2)} USD
               </span>
             </div>
-            <span className="text-[9px] uppercase font-mono tracking-widest text-muted-foreground">
-              CREDITS
-            </span>
           </div>
         </div>
 
@@ -405,7 +419,7 @@ function ListingDetail({ id }: { id: string }) {
               <CheckCircle2 className="h-4 w-4" /> Purchase complete — full prompt unlocked.
             </div>
             <div className="text-xs text-muted-foreground font-mono">
-              Balance: <span className="text-white">{outcome.buyerBalance}</span> credits remaining.
+              Balance: <span className="text-white">{formatPriceDual(outcome.buyerBalance)}</span> remaining.
               {outcome.isFirstSaleForCreator && (
                 <span className="text-secondary ml-2">
                   <Sparkles className="h-3 w-3 inline mr-1" />
@@ -433,14 +447,14 @@ function ListingDetail({ id }: { id: string }) {
             {purchasing
               ? "Processing…"
               : credits && credits.balance < listing.priceCredits
-              ? `Need ${listing.priceCredits - credits.balance} more credits`
-              : `Purchase for ${listing.priceCredits} credits`}
+              ? `Need ${formatPriceDual(listing.priceCredits - credits.balance)} more`
+              : `Purchase for ${formatPriceDual(listing.priceCredits)}`}
           </button>
         )}
 
         {user && isOwnListing && (
           <div className="p-4 rounded-lg border border-amber-400/20 bg-amber-400/5 font-mono text-xs text-amber-400 text-center" data-testid="text-own-listing">
-            This is your listing — you can't buy it. Total earned: <span className="font-bold">{listing.totalEarned}</span> credits.
+            This is your listing — you can't buy it. Total earned: <span className="font-bold">{formatPriceDual(listing.totalEarned)}</span>.
           </div>
         )}
       </div>
@@ -604,6 +618,9 @@ function PublishPage() {
               onChange={(e) => setForm({ ...form, priceCredits: Math.max(SPC_PRICE_MIN, Math.min(SPC_PRICE_MAX, parseInt(e.target.value) || SPC_PRICE_MIN)) })}
               className="w-full bg-black/40 border border-white/10 rounded-md px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-primary/50"
             />
+            <p className="text-[10px] font-mono text-muted-foreground mt-1" data-testid="text-publish-price-usd">
+              {formatPriceDual(form.priceCredits)}
+            </p>
           </div>
         </div>
 

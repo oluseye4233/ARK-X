@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/useAuth";
 import { api } from "@/lib/api";
-import { SUBSCRIPTION_PLANS, CONTEXT_CRAFT_LEVELS, type SubscriptionPlan, type ContextCraftLevel, type UserCredits } from "@shared/schema";
+import { SUBSCRIPTION_PLANS, CONTEXT_CRAFT_LEVELS, CREDITS_TO_USD, type SubscriptionPlan, type ContextCraftLevel, type UserCredits } from "@shared/schema";
 import { GuinProfileView } from "./guin-public";
 import {
   User,
@@ -239,12 +239,22 @@ export default function ProfilePage() {
                       {credits ? credits.balance : "—"}
                     </span>
                   </div>
+                  {credits && (
+                    <div className="text-[9px] font-mono text-muted-foreground mt-0.5" data-testid="text-profile-credits-usd">
+                      ≈ ${(credits.balance * CREDITS_TO_USD).toFixed(2)}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <div className="text-[9px] uppercase font-mono tracking-widest text-muted-foreground">Earned</div>
                   <div className="font-display font-bold text-xl text-secondary" data-testid="text-profile-earned">
                     {sales ? sales.totalEarned : "—"}
                   </div>
+                  {sales && (
+                    <div className="text-[9px] font-mono text-muted-foreground mt-0.5" data-testid="text-profile-earned-usd">
+                      ≈ ${(sales.totalEarned * CREDITS_TO_USD).toFixed(2)}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <div className="text-[9px] uppercase font-mono tracking-widest text-muted-foreground">Sales</div>

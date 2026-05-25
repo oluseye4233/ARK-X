@@ -445,6 +445,11 @@ export const jnomicsCards = pgTable("jnomics_cards", {
   emoji: text("emoji").notNull(),
   description: text("description").notNull(),
   basePts: integer("base_pts").notNull(),
+  // ── Phase M1 (SPHINX × Matrix) additive columns ──
+  disc: text("disc"),
+  rarity: text("rarity"),
+  version: text("version"),
+  category: text("category"),
 });
 
 export const insertJnomicsCardSchema = createInsertSchema(jnomicsCards);
@@ -574,6 +579,11 @@ export const spcListings = pgTable("spc_listings", {
   status: text("status").notNull().default("active"),
   salesCount: integer("sales_count").notNull().default(0),
   totalEarned: integer("total_earned").notNull().default(0),
+  // ── Phase M1 (SPHINX × Matrix) additive column ──
+  // Optional Junglenomics card IDs this listing is synergy-tagged with;
+  // populated in M3 by the synergy engine. Nullable + empty default so
+  // existing inserts continue to work unchanged.
+  synergyTagIds: text("synergy_tag_ids").array(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -690,6 +700,9 @@ export const ARK_EVENT_TYPES = [
   "billing.checkout.completed",
   "billing.subscription.canceled",
   "billing.payment.failed",
+  // Phase M1 (SPHINX × Matrix) — synergy bonuses are SPHINX-class events,
+  // capped under the existing SPHINX +20/30d ceiling via arkRecalc.applyCaps.
+  "synergy.awarded",
 ] as const;
 
 export const CHECKOUT_STATUSES = ["pending", "completed", "failed", "canceled"] as const;
@@ -913,3 +926,254 @@ export const cohortAssignments = pgTable("cohort_assignments", {
 export const insertCohortAssignmentSchema = createInsertSchema(cohortAssignments).omit({ id: true, createdAt: true });
 export type InsertCohortAssignment = z.infer<typeof insertCohortAssignmentSchema>;
 export type CohortAssignment = typeof cohortAssignments.$inferSelect;
+
+// ═══════════════════════════════════════════════════════════════════
+// Phase M1 — SPHINX × Matrix Foundation
+// ═══════════════════════════════════════════════════════════════════
+// All Matrix-side feature tables, currency-display helpers, and derived
+// display bands. No behavior change yet — M2-M5 wire these into UI.
+// Credits remain canonical; USD is a display-only conversion at a
+// fixed rate. There is no USD write path anywhere in this codebase.
+
+/** 1 credit ≡ this many USD. Display-only; never a write. */
+export const CREDITS_TO_USD = 0.10;
+
+/** Render a credit value as the canonical dual format used everywhere
+ *  on `/marketplace*`. Example: `formatPriceDual(120)` → `"120 cr ≈ $12.00"`.
+ *  Pass `mode: 'compact'` for short renders like `"120 cr"` when space is tight. */
+export function formatPriceDual(credits: number, mode: "full" | "compact" = "full"): string {
+  const n = Math.max(0, Math.round(credits));
+  if (mode === "compact") return `${n} cr`;
+  const usd = (n * CREDITS_TO_USD).toFixed(2);
+  return `${n} cr ≈ $${usd}`;
+}
+
+/** HIVE-score → tier badge mapping for the Matrix-style listing card.
+ *  See merge-spec §"Tier badge mapping (M13)". Publish gate (HIVE 80)
+ *  means anything below STANDARD won't appear publicly. */
+export const TIER_BADGE_THRESHOLDS = {
+  ULTRA: 90,
+  PREMIUM: 80,
+  STANDARD: 60,
+} as const;
+export type TierBadgeKey = keyof typeof TIER_BADGE_THRESHOLDS;
+export function hiveToTierBadge(hive: number): TierBadgeKey | null {
+  if (hive >= TIER_BADGE_THRESHOLDS.ULTRA) return "ULTRA";
+  if (hive >= TIER_BADGE_THRESHOLDS.PREMIUM) return "PREMIUM";
+  if (hive >= TIER_BADGE_THRESHOLDS.STANDARD) return "STANDARD";
+  return null;
+}
+
+/** HIVE-score → letter-grade display band. Pure display derivation;
+ *  no new storage. See merge-spec §"Quality letter grade (M3)". */
+export const LETTER_GRADE_BANDS = [
+  { grade: "S", min: 95, color: "#AA44FF" },
+  { grade: "A", min: 85, color: "#44AA44" },
+  { grade: "B", min: 75, color: "#4488FF" },
+  { grade: "C", min: 60, color: "#FFA500" },
+  { grade: "D", min: 0,  color: "#FF4444" },
+] as const;
+export type LetterGrade = typeof LETTER_GRADE_BANDS[number]["grade"];
+export function hiveToLetterGrade(hive: number): { grade: LetterGrade; color: string } {
+  for (const band of LETTER_GRADE_BANDS) {
+    if (hive >= band.min) return { grade: band.grade, color: band.color };
+  }
+  return { grade: "D", color: "#FF4444" };
+}
+
+/** Static registry of the 20 absorbed Matrix features (M1-M20).
+ *  Reference only; consumed by docs/admin surfaces. Not a runtime gate. */
+export const MATRIX_FEATURES = {
+  M1:  "Synergy Engine",
+  M2:  "Complementary Pairs",
+  M3:  "AI Letter-Grade Analysis",
+  M4:  "Synthesis Engine",
+  M5:  "ZPOS Compression",
+  M6:  "ARK Roundtable (Top-12)",
+  M7:  "Notification Bell + SSE",
+  M8:  "169-Card Junglenomics Taxonomy",
+  M9:  "Bonsai Seller Onboarding (18 stages)",
+  M10: ".docx Forge Lab",
+  M11: "Grade-Based Pricing Matrix",
+  M12: "Performance Metric Bars",
+  M13: "Tier Badges (ULTRA/PREMIUM/STANDARD)",
+  M14: "Bonsai DAG Visualization",
+  M15: "Per-Listing AI Suggestions Panel",
+  M16: "5-Tab Detail Layout",
+  M17: "6-Dimension Filter Sidebar",
+  M18: "Free-Text Search",
+  M19: "Category Chips",
+  M20: "Inline Pillar Suggestions",
+} as const;
+
+// ── Card synergies (M1) ─────────────────────────────────────────────
+// Symmetric pairing table — only one row per unordered pair (cardA < cardB).
+// IMPORTANT: writers MUST canonicalize via `canonicalCardPair()` so that
+// `cardAId < cardBId` always holds. The DB also enforces this via a CHECK
+// constraint (`card_synergies_ordered_chk`) — see migration 0004.
+export const cardSynergies = pgTable(
+  "card_synergies",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    cardAId: varchar("card_a_id").notNull(),
+    cardBId: varchar("card_b_id").notNull(),
+    synergyScore: integer("synergy_score").notNull().default(0), // 0-100
+    rationale: text("rationale"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    pairUnique: uniqueIndex("card_synergies_pair_uniq").on(t.cardAId, t.cardBId),
+  }),
+);
+/** Canonicalize an unordered card pair so that `a < b` (lexicographic).
+ *  All `cardSynergies` writes MUST go through this helper. */
+export function canonicalCardPair(x: string, y: string): { cardAId: string; cardBId: string } {
+  return x < y ? { cardAId: x, cardBId: y } : { cardAId: y, cardBId: x };
+}
+export const insertCardSynergySchema = createInsertSchema(cardSynergies).omit({ id: true, updatedAt: true });
+export type InsertCardSynergy = z.infer<typeof insertCardSynergySchema>;
+export type CardSynergy = typeof cardSynergies.$inferSelect;
+
+// ── Complementary pairs (M2) ────────────────────────────────────────
+// Precomputed top-N partners for each SPC listing, refreshed by a job.
+export const complementaryPairs = pgTable(
+  "complementary_pairs",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    listingId: varchar("listing_id").notNull(),
+    partnerListingId: varchar("partner_listing_id").notNull(),
+    score: integer("score").notNull().default(0), // 0-100
+    rank: integer("rank").notNull().default(0),   // 1..N within listing
+    computedAt: timestamp("computed_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    pairUnique: uniqueIndex("complementary_pairs_listing_partner_uniq").on(t.listingId, t.partnerListingId),
+  }),
+);
+export const insertComplementaryPairSchema = createInsertSchema(complementaryPairs).omit({ id: true, computedAt: true });
+export type InsertComplementaryPair = z.infer<typeof insertComplementaryPairSchema>;
+export type ComplementaryPair = typeof complementaryPairs.$inferSelect;
+
+// ── Synthesis sessions (M4) ─────────────────────────────────────────
+// One row per buyer-initiated synthesis. `status`: draft|finalized|failed.
+export const synthesisSessions = pgTable("synthesis_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  buyerId: varchar("buyer_id").notNull(),
+  sourceListingIds: text("source_listing_ids").array().notNull(),
+  combinedBody: text("combined_body"),        // null until finalized
+  totalPriceCredits: integer("total_price_credits").notNull().default(0),
+  platformShare: integer("platform_share").notNull().default(0),
+  creatorShareTotal: integer("creator_share_total").notNull().default(0),
+  zposTokensIn: integer("zpos_tokens_in").notNull().default(0),
+  zposTokensOut: integer("zpos_tokens_out").notNull().default(0),
+  zposCompressionPct: real("zpos_compression_pct").notNull().default(0),
+  status: text("status").notNull().default("draft"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  finalizedAt: timestamp("finalized_at"),
+});
+export const insertSynthesisSessionSchema = createInsertSchema(synthesisSessions).omit({
+  id: true, createdAt: true, finalizedAt: true,
+});
+export type InsertSynthesisSession = z.infer<typeof insertSynthesisSessionSchema>;
+export type SynthesisSession = typeof synthesisSessions.$inferSelect;
+
+// ── Synthesis royalty splits (M4) ───────────────────────────────────
+// Per-creator ledger row for each finalized synthesis session.
+export const synthesisCreatorsSplit = pgTable("synthesis_creators_split", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull(),
+  creatorId: varchar("creator_id").notNull(),
+  sourceListingId: varchar("source_listing_id").notNull(),
+  weight: real("weight").notNull(),                 // 0..1, source-price-weighted
+  creditsAwarded: integer("credits_awarded").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export const insertSynthesisCreatorSplitSchema = createInsertSchema(synthesisCreatorsSplit).omit({
+  id: true, createdAt: true,
+});
+export type InsertSynthesisCreatorSplit = z.infer<typeof insertSynthesisCreatorSplitSchema>;
+export type SynthesisCreatorSplit = typeof synthesisCreatorsSplit.$inferSelect;
+
+// ── Forge Lab test results (M10) ────────────────────────────────────
+// Pre-publish HIVE precheck history; streamed to the Forge Lab terminal UI.
+export const testResults = pgTable("test_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  source: text("source").notNull(),         // 'docx' | 'paste' | 'import'
+  filename: text("filename"),
+  hiveScore: real("hive_score").notNull().default(0),
+  kcseScore: real("kcse_score").notNull().default(0),
+  passes: boolean("passes").notNull().default(false),
+  log: jsonb("log").$type<{ step: string; ok: boolean; msg: string }[]>().notNull().default([]),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export const insertTestResultSchema = createInsertSchema(testResults).omit({ id: true, createdAt: true });
+export type InsertTestResult = z.infer<typeof insertTestResultSchema>;
+export type TestResult = typeof testResults.$inferSelect;
+
+// ── Notifications (M7) ──────────────────────────────────────────────
+// Per-user inbox for SSE-driven events (seat rotation, synergy discovered, etc).
+export const NOTIFICATION_TYPES = [
+  "roundtable.seat_rotation",
+  "synergy.discovered",
+  "synthesis.completed",
+  "spc.purchased",
+  "spc.first_sale",
+] as const;
+export type NotificationType = typeof NOTIFICATION_TYPES[number];
+
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  body: text("body"),
+  link: text("link"),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true, createdAt: true, readAt: true,
+});
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Notification = typeof notifications.$inferSelect;
+
+// ── ARK Roundtable (M6) ─────────────────────────────────────────────
+// Top-N leaderboard snapshot; refreshed by a periodic ranker.
+export const roundtableState = pgTable(
+  "roundtable_state",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    listingId: varchar("listing_id").notNull(),
+    creatorId: varchar("creator_id").notNull(),
+    seatNumber: integer("seat_number").notNull(), // 1..12
+    score: real("score").notNull(),               // 0.6·HIVE + 0.4·sales_norm
+    hiveScore: real("hive_score").notNull(),
+    salesCount: integer("sales_count").notNull(),
+    snapshotAt: timestamp("snapshot_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    seatUnique: uniqueIndex("roundtable_state_seat_uniq").on(t.seatNumber),
+  }),
+);
+export const insertRoundtableStateSchema = createInsertSchema(roundtableState).omit({
+  id: true, snapshotAt: true,
+});
+export type InsertRoundtableState = z.infer<typeof insertRoundtableStateSchema>;
+export type RoundtableState = typeof roundtableState.$inferSelect;
+
+// ── Bonsai onboarding progress (M9 / M14) ───────────────────────────
+// One row per user; tracks 18-stage seller-onboarding walkthrough.
+export const bonsaiProgress = pgTable("bonsai_progress", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique(),
+  currentStage: integer("current_stage").notNull().default(1), // 1..18
+  completedStages: integer("completed_stages").array().notNull().default(sql`'{}'::int[]`),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+export const insertBonsaiProgressSchema = createInsertSchema(bonsaiProgress).omit({
+  id: true, updatedAt: true,
+});
+export type InsertBonsaiProgress = z.infer<typeof insertBonsaiProgressSchema>;
+export type BonsaiProgress = typeof bonsaiProgress.$inferSelect;
