@@ -13,6 +13,9 @@ export async function generateScenario(opts: {
   userId: string;
   plan: SubscriptionPlan;
   brief: string;
+  industry?: string;
+  role?: string;
+  tierHint?: string;
 }): Promise<InsertCcgeScenario> {
   if (!isClaudeAvailable()) {
     const err: any = new Error("Claude AI not configured.");
@@ -22,12 +25,23 @@ export async function generateScenario(opts: {
 
   await enforceBudget(opts.userId, opts.plan);
 
+  const contextLines: string[] = [];
+  if (opts.industry) contextLines.push(`Industry / Sector: ${opts.industry}`);
+  if (opts.role) contextLines.push(`Practitioner Role: ${opts.role}`);
+  if (opts.tierHint) contextLines.push(`Target Tier: ${opts.tierHint}`);
+  contextLines.push(`Brief: ${opts.brief.slice(0, 800)}`);
+  if (opts.industry || opts.role) {
+    contextLines.push(
+      `Ground the scenario in a realistic problem this practitioner faces day-to-day. The title and prompt MUST reference the industry context explicitly.`,
+    );
+  }
+
   const client = getAnthropic();
   const message = await client.messages.create({
     model: MODELS.SONNET,
     max_tokens: 8192,
     system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: `Brief: ${opts.brief.slice(0, 800)}` }],
+    messages: [{ role: "user", content: contextLines.join("\n") }],
   });
 
   await logUsage({

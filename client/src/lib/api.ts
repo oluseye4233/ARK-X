@@ -109,6 +109,17 @@ export const api = {
   getCcgeScenarios: (tier?: string) =>
     apiRequest(`/api/ccge/scenarios${tier ? `?tier=${encodeURIComponent(tier)}` : ""}`),
 
+  createCustomCcgeScenario: (data: {
+    industry: string;
+    role: string;
+    problem: string;
+    tier?: "Bronze" | "Silver" | "Gold" | "Platinum";
+  }) =>
+    apiRequest("/api/ccge/scenarios/custom", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
   startCcgeSession: (_userId: string, scenarioId: string) =>
     apiRequest("/api/ccge/sessions", {
       method: "POST",

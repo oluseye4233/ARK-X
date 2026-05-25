@@ -334,6 +334,14 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(ccgeScenarios);
   }
 
+  // Phase J.1: scenarios visible to a given user — all canon scenarios
+  // (isCustom = false) plus the user's own custom scenarios. Other users'
+  // custom scenarios remain private.
+  async getCcgeScenariosForUser(userId: string | null): Promise<CcgeScenario[]> {
+    const all = await db.select().from(ccgeScenarios);
+    return all.filter((s) => !s.isCustom || (userId !== null && s.creatorUserId === userId));
+  }
+
   async getCcgeScenario(id: string): Promise<CcgeScenario | undefined> {
     const [s] = await db.select().from(ccgeScenarios).where(eq(ccgeScenarios.id, id));
     return s;

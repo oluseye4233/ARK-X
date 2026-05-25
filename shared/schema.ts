@@ -489,7 +489,34 @@ export const ccgeScenarios = pgTable("ccge_scenarios", {
   targetPillars: text("target_pillars").array().notNull(),
   tokenBudget: integer("token_budget").notNull(),
   difficulty: integer("difficulty").notNull(),
+  // Phase J.1 — Custom industry scenarios. NULL creatorUserId = canon scenario
+  // visible to everyone; non-null = private to that user. industry is a freeform
+  // sector label set by the creator (e.g. "Healthcare", "FinTech").
+  creatorUserId: varchar("creator_user_id"),
+  industry: text("industry"),
+  isCustom: boolean("is_custom").default(false).notNull(),
 });
+
+// Industry presets shown in the "Create Your Own Scenario" picker. Users can
+// also free-type, but the dropdown anchors the most common sectors.
+export const CCGE_INDUSTRY_PRESETS = [
+  "Finance & Banking",
+  "Healthcare & Life Sciences",
+  "Technology & Software",
+  "Manufacturing & Industrial",
+  "Retail & E-commerce",
+  "Education & EdTech",
+  "Legal & Compliance",
+  "Marketing & Advertising",
+  "Energy & Utilities",
+  "Real Estate & Construction",
+  "Media & Entertainment",
+  "Government & Public Sector",
+  "Non-profit & NGO",
+  "Consulting & Professional Services",
+  "Other",
+] as const;
+export type CcgeIndustryPreset = typeof CCGE_INDUSTRY_PRESETS[number];
 
 export const insertCcgeScenarioSchema = createInsertSchema(ccgeScenarios);
 export type InsertCcgeScenario = z.infer<typeof insertCcgeScenarioSchema>;

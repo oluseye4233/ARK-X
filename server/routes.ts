@@ -1300,12 +1300,65 @@ export async function registerRoutes(
 
   app.get("/api/ccge/scenarios", async (req, res) => {
     try {
-      const all = await storage.getAllCcgeScenarios();
+      // Phase J.1: privacy-scope custom scenarios to their creator. Unauth'd
+      // visitors only see canon scenarios.
+      const userId = currentUserId(req);
+      const all = await storage.getCcgeScenariosForUser(userId ?? null);
       const tier = typeof req.query.tier === "string" ? req.query.tier : null;
       const filtered = tier ? all.filter((s) => s.tier === tier) : all;
       return res.json(filtered);
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Phase J.1: a logged-in player generates their own industry-specific scenario
+  // via Claude. Persisted as a private custom scenario owned by the requester.
+  app.post("/api/ccge/scenarios/custom", requireAuth, async (req, res) => {
+    try {
+      const schema = z.object({
+        industry: z.string().min(2).max(80),
+        role: z.string().min(2).max(80),
+        problem: z.string().min(10).max(600),
+        tier: z.enum(["Bronze", "Silver", "Gold", "Platinum"]).optional(),
+      });
+      const p = schema.safeParse(req.body);
+      if (!p.success) {
+        return res.status(400).json({ message: "industry, role, problem required" });
+      }
+      const userId = currentUserId(req)!;
+      const user = await storage.getUser(userId);
+      const plan = (user?.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
+      const brief = `A ${p.data.role} working in ${p.data.industry} needs an AI prompt to address: ${p.data.problem}`;
+      const generated = await generateScenario({
+        userId,
+        plan,
+        brief,
+        industry: p.data.industry,
+        role: p.data.role,
+        tierHint: p.data.tier,
+      });
+      // Force creator ownership + unique id; never trust Claude's id verbatim
+      // for collision safety against canon ids. Random suffix avoids the rare
+      // same-millisecond collision overwriting a prior scenario via upsert.
+      const rand = Math.random().toString(36).slice(2, 8);
+      const id = `custom-${userId.slice(0, 8)}-${Date.now().toString(36)}-${rand}`;
+      // Tier-contract enforcement: if the player asked for a specific tier we
+      // hold Claude to it (force the persisted tier to the requested value)
+      // rather than silently accepting whatever the model returned.
+      const enforcedTier = p.data.tier ?? generated.tier;
+      const saved = await storage.upsertCcgeScenario({
+        ...generated,
+        id,
+        tier: enforcedTier,
+        creatorUserId: userId,
+        industry: p.data.industry,
+        isCustom: true,
+      });
+      return res.status(201).json({ scenario: saved });
+    } catch (err: any) {
+      console.error("Custom scenario gen error:", err);
+      return res.status(err.status || 500).json({ message: err.message });
     }
   });
 
@@ -1321,6 +1374,12 @@ export async function registerRoutes(
 
       const scenario = await storage.getCcgeScenario(scenarioId);
       if (!scenario) return res.status(404).json({ message: "Scenario not found" });
+      // Phase J.1: custom scenarios are private to their creator. Fail closed
+      // for malformed rows (isCustom=true but no creator) — never assume a
+      // missing creator field grants public access.
+      if (scenario.isCustom && scenario.creatorUserId !== userId) {
+        return res.status(403).json({ message: "This custom scenario belongs to another player." });
+      }
 
       const allCards = await storage.getAllCcgeCards();
       if (allCards.length === 0) {

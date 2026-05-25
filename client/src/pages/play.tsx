@@ -17,7 +17,11 @@ import {
   Loader2,
   Crown,
   Target,
+  Wand2,
+  Briefcase,
+  X,
 } from "lucide-react";
+import { CCGE_INDUSTRY_PRESETS } from "@shared/schema";
 import { CcgeCard } from "@/components/play/CcgeCard";
 import { FlippableCard } from "@/components/ui/flippable-card";
 
@@ -62,6 +66,9 @@ type Scenario = {
   targetPillars: string[];
   tokenBudget: number;
   difficulty: number;
+  creatorUserId?: string | null;
+  industry?: string | null;
+  isCustom?: boolean;
 };
 
 type Session = {
@@ -149,6 +156,16 @@ export default function PlayPage() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<FinishResult | null>(null);
   const [tierFilter, setTierFilter] = useState<string>("All");
+
+  // Phase J.1 — Custom scenario builder state
+  const [showBuilder, setShowBuilder] = useState(false);
+  const [builderIndustry, setBuilderIndustry] = useState<string>(CCGE_INDUSTRY_PRESETS[0]);
+  const [builderIndustryOther, setBuilderIndustryOther] = useState<string>("");
+  const [builderRole, setBuilderRole] = useState<string>("");
+  const [builderProblem, setBuilderProblem] = useState<string>("");
+  const [builderTier, setBuilderTier] = useState<"Bronze" | "Silver" | "Gold" | "Platinum">("Silver");
+  const [builderBusy, setBuilderBusy] = useState(false);
+  const [builderError, setBuilderError] = useState<string | null>(null);
 
   const cardMap = useMemo(() => new Map(cards.map((c) => [c.id, c])), [cards]);
 
@@ -240,6 +257,46 @@ export default function PlayPage() {
 
   const tokensUsed = played.reduce((sum, id) => sum + (cardMap.get(id)?.tokenCost ?? 0), 0);
   const filteredScenarios = tierFilter === "All" ? scenarios : scenarios.filter((s) => s.tier === tierFilter);
+
+  const submitBuilder = async () => {
+    setBuilderError(null);
+    const industry = builderIndustry === "Other" ? builderIndustryOther.trim() : builderIndustry;
+    if (!industry || industry.length < 2) {
+      setBuilderError("Please choose or enter your industry.");
+      return;
+    }
+    if (builderRole.trim().length < 2) {
+      setBuilderError("Tell us your role (e.g. 'Compliance Analyst').");
+      return;
+    }
+    if (builderProblem.trim().length < 10) {
+      setBuilderError("Describe the problem in at least 10 characters.");
+      return;
+    }
+    setBuilderBusy(true);
+    try {
+      const { scenario } = await api.createCustomCcgeScenario({
+        industry,
+        role: builderRole.trim(),
+        problem: builderProblem.trim(),
+        tier: builderTier,
+      });
+      // Prepend so the player sees their new scenario at the top
+      setScenarios((prev) => [scenario, ...prev]);
+      setShowBuilder(false);
+      setBuilderRole("");
+      setBuilderProblem("");
+      setBuilderIndustryOther("");
+      // Immediately start the session for a frictionless flow
+      if (user?.id) {
+        await startSession(scenario.id);
+      }
+    } catch (err: any) {
+      setBuilderError(err.message || "Could not generate scenario.");
+    } finally {
+      setBuilderBusy(false);
+    }
+  };
 
   // ─── RESULT VIEW ─────────────────────────────────────
   if (result) {
@@ -550,6 +607,157 @@ export default function PlayPage() {
         </div>
       </div>
 
+      {/* Phase J.1 — Create Your Own Scenario */}
+      <div className="glass-card rounded-xl border-2 border-fuchsia-500/40 p-5" data-testid="custom-scenario-panel">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex-1 min-w-[260px]">
+            <div className="flex items-center gap-2 mb-1">
+              <Wand2 className="h-5 w-5 text-fuchsia-400" />
+              <h2 className="text-base font-display font-bold text-fuchsia-300 tracking-wide">Forge Your Own Scenario</h2>
+              <Badge variant="outline" className="font-mono text-[10px] border-fuchsia-400/50 text-fuchsia-300 bg-fuchsia-500/10">NEW</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Skip the canon — generate a scenario rooted in <span className="text-fuchsia-300">your industry</span>, <span className="text-fuchsia-300">your role</span>, and a real problem you face. Powered by Claude, scored by the same KCSE rubric.
+            </p>
+          </div>
+          {!showBuilder && (
+            <Button
+              onClick={() => { setShowBuilder(true); setBuilderError(null); }}
+              disabled={!user}
+              className="bg-gradient-to-r from-fuchsia-600 to-cyan-500 hover:from-fuchsia-500 hover:to-cyan-400 text-white"
+              data-testid="button-open-builder"
+            >
+              <Wand2 className="h-4 w-4 mr-2" />
+              Create Custom Scenario
+            </Button>
+          )}
+        </div>
+
+        {showBuilder && (
+          <div className="mt-5 space-y-4 border-t border-fuchsia-500/20 pt-5" data-testid="custom-scenario-builder">
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground block mb-1.5">
+                  <Briefcase className="inline h-3 w-3 mr-1" /> Industry / Sector
+                </label>
+                <select
+                  value={builderIndustry}
+                  onChange={(e) => setBuilderIndustry(e.target.value)}
+                  className="w-full px-3 py-2 rounded-md bg-background border border-border text-sm font-mono focus:border-fuchsia-500/60 focus:outline-none"
+                  data-testid="select-builder-industry"
+                >
+                  {CCGE_INDUSTRY_PRESETS.map((i) => (
+                    <option key={i} value={i}>{i}</option>
+                  ))}
+                </select>
+                {builderIndustry === "Other" && (
+                  <input
+                    type="text"
+                    value={builderIndustryOther}
+                    onChange={(e) => setBuilderIndustryOther(e.target.value)}
+                    placeholder="Type your industry..."
+                    maxLength={80}
+                    className="w-full mt-2 px-3 py-2 rounded-md bg-background border border-border text-sm focus:border-fuchsia-500/60 focus:outline-none"
+                    data-testid="input-builder-industry-other"
+                  />
+                )}
+              </div>
+              <div>
+                <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground block mb-1.5">
+                  Your Role
+                </label>
+                <input
+                  type="text"
+                  value={builderRole}
+                  onChange={(e) => setBuilderRole(e.target.value)}
+                  placeholder="e.g. Compliance Analyst, Cardiology Nurse, DevOps Lead"
+                  maxLength={80}
+                  className="w-full px-3 py-2 rounded-md bg-background border border-border text-sm focus:border-fuchsia-500/60 focus:outline-none"
+                  data-testid="input-builder-role"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground block mb-1.5">
+                Problem to Solve with AI
+              </label>
+              <textarea
+                value={builderProblem}
+                onChange={(e) => setBuilderProblem(e.target.value)}
+                placeholder="Describe a concrete task an AI should help with — e.g. 'Draft a SOC-2 audit response for a tenant requesting our data retention policy.'"
+                rows={3}
+                maxLength={600}
+                className="w-full px-3 py-2 rounded-md bg-background border border-border text-sm focus:border-fuchsia-500/60 focus:outline-none resize-none"
+                data-testid="textarea-builder-problem"
+              />
+              <div className="text-right text-[10px] font-mono text-muted-foreground mt-1">
+                {builderProblem.length}/600
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground block mb-1.5">
+                Target Difficulty Tier
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {(["Bronze", "Silver", "Gold", "Platinum"] as const).map((t) => (
+                  <Button
+                    key={t}
+                    type="button"
+                    variant={builderTier === t ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setBuilderTier(t)}
+                    className={cn(
+                      builderTier === t && `bg-gradient-to-br ${TIER_COLORS[t]} text-background`,
+                    )}
+                    data-testid={`button-builder-tier-${t.toLowerCase()}`}
+                  >
+                    {t}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {builderError && (
+              <div className="text-sm text-destructive flex items-center gap-2" data-testid="text-builder-error">
+                <AlertCircle className="h-4 w-4" /> {builderError}
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <Button
+                onClick={submitBuilder}
+                disabled={builderBusy || !user}
+                className="bg-gradient-to-r from-fuchsia-600 to-cyan-500 hover:from-fuchsia-500 hover:to-cyan-400 text-white flex-1 sm:flex-none"
+                data-testid="button-submit-builder"
+              >
+                {builderBusy ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Forging…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4 mr-2" /> Generate & Play
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => { setShowBuilder(false); setBuilderError(null); }}
+                disabled={builderBusy}
+                data-testid="button-cancel-builder"
+              >
+                <X className="h-4 w-4 mr-1" /> Cancel
+              </Button>
+            </div>
+            <p className="text-[10px] font-mono text-muted-foreground/70 leading-relaxed pt-1 border-t border-fuchsia-500/10">
+              Your custom scenarios are private to your account. Each generation calls Claude — budget-metered by your subscription plan.
+            </p>
+          </div>
+        )}
+      </div>
+
       <div className="flex flex-wrap gap-2 items-center">
         <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground mr-2">Filter Tier:</span>
         {["All", "Bronze", "Silver", "Gold", "Platinum"].map((t) => (
@@ -593,14 +801,26 @@ export default function PlayPage() {
               front={
                 <div className="p-5 h-full flex flex-col" data-testid={`scenario-card-${s.id}`}>
                   <div className="flex items-center justify-between mb-2 pr-9">
-                    <Badge className={cn("font-display", `bg-gradient-to-br ${TIER_COLORS[s.tier]} text-background`)}>
-                      {s.tier}
-                    </Badge>
+                    <div className="flex items-center gap-1.5">
+                      <Badge className={cn("font-display", `bg-gradient-to-br ${TIER_COLORS[s.tier]} text-background`)}>
+                        {s.tier}
+                      </Badge>
+                      {s.isCustom && (
+                        <Badge variant="outline" className="font-mono text-[9px] border-fuchsia-400/50 text-fuchsia-300 bg-fuchsia-500/10" data-testid={`badge-custom-${s.id}`}>
+                          <Wand2 className="h-2.5 w-2.5 mr-0.5" /> CUSTOM
+                        </Badge>
+                      )}
+                    </div>
                     <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
                       Diff {s.difficulty}/5 · {s.tokenBudget}t budget
                     </span>
                   </div>
                   <h3 className="font-display font-bold text-lg text-foreground" data-testid={`scenario-title-${s.id}`}>{s.title}</h3>
+                  {s.industry && (
+                    <div className="text-[10px] font-mono uppercase tracking-widest text-fuchsia-300/80 mt-0.5 flex items-center gap-1">
+                      <Briefcase className="h-3 w-3" /> {s.industry}
+                    </div>
+                  )}
                   <p className="text-sm text-muted-foreground my-3 flex-1 leading-relaxed">{s.prompt}</p>
                   <div className="flex flex-wrap gap-1.5 mb-4">
                     {s.targetPillars.map((p) => (
