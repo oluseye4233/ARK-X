@@ -34,10 +34,14 @@ export default function Home() {
           System Initialization Complete
         </div>
         
-        <h1 className="text-5xl md:text-7xl font-display font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-white/50 tracking-tight">
-          KNOW YOUR <span className="text-primary neon-text">WORTH.</span><br />
-          KNOW YOUR <span className="text-destructive">RISK.</span><br />
-          KNOW YOUR <span className="text-secondary">NEXT MOVE.</span>
+        <h1 className="font-display font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-white/50 tracking-tight leading-[1.05] space-y-1">
+          <span className="block text-xl sm:text-2xl md:text-3xl lg:text-4xl whitespace-nowrap">
+            KNOW YOUR <span className="text-primary neon-text">WORTH.</span>{" "}
+            KNOW YOUR <span className="text-destructive">RISK.</span>
+          </span>
+          <span className="block text-2xl sm:text-3xl md:text-4xl lg:text-5xl whitespace-nowrap">
+            KNOW YOUR <span className="text-secondary">NEXT MOVE.</span>
+          </span>
         </h1>
         
         <p className="text-xl text-muted-foreground font-sans max-w-2xl leading-relaxed">
