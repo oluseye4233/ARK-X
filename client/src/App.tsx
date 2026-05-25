@@ -26,6 +26,7 @@ import ArkHistoryPage from "@/pages/ark-history";
 import PrivacyPage from "@/pages/legal/privacy";
 import TermsPage from "@/pages/legal/terms";
 import DemoPage from "@/pages/demo";
+import DemoTourPage from "@/pages/demo-tour";
 import AdminCcgeImportPage from "@/pages/admin-ccge-import";
 
 function Router() {
@@ -54,6 +55,7 @@ function Router() {
         <Route path="/privacy" component={PrivacyPage} />
         <Route path="/terms" component={TermsPage} />
         <Route path="/demo" component={DemoPage} />
+        <Route path="/demo-tour" component={DemoTourPage} />
         <Route path="/admin/ccge-import" component={AdminCcgeImportPage} />
         {/* Fallback to 404 */}
         <Route component={NotFound} />
