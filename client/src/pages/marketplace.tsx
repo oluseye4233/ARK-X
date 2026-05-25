@@ -58,9 +58,13 @@ import { SpcTaxonomyPanel } from "@/components/marketplace/SpcTaxonomyPanel";
 
 const CATEGORY_FILTER = ["All", ...MARKETPLACE_CATEGORIES] as const;
 // M3 — 6-dim taxonomy filters (matches `server/jnomicsSeed.ts`).
+// The full 6-D set: tier · disc · rarity · pillar · category · version.
+// Category lives in its own chip row above; the remaining 5 are below.
 const DISC_FILTER    = ["All", "Discovery", "Build", "Optimize", "Scale", "Defend", "Govern"] as const;
 const RARITY_FILTER  = ["All", "Common", "Uncommon", "Rare", "Epic", "Legendary"] as const;
 const VERSION_FILTER = ["All", "v1", "v2", "v3"] as const;
+const TIER_FILTER    = ["All", "ULTRA", "PREMIUM", "STANDARD"] as const;
+const PILLAR_FILTER  = ["All", ...ALL_CARD_PILLARS] as const;
 const DETAIL_TABS = ["overview", "pillars", "tests", "pairs", "synthesis"] as const;
 type DetailTab = typeof DETAIL_TABS[number];
 
@@ -203,6 +207,8 @@ function ListingsList() {
   const [disc, setDisc] = useState<string>("All");
   const [rarity, setRarity] = useState<string>("All");
   const [version, setVersion] = useState<string>("All");
+  const [tier, setTier] = useState<string>("All");
+  const [pillar, setPillar] = useState<string>("All");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [listings, setListings] = useState<SpcListing[] | null>(null);
@@ -218,10 +224,10 @@ function ListingsList() {
     setListings(null);
     setError(null);
     api
-      .getSpcListings({ category, search: debouncedSearch, disc, rarity, version })
+      .getSpcListings({ category, search: debouncedSearch, disc, rarity, version, tier, pillar })
       .then(setListings)
       .catch((e) => setError(e?.message || "Failed to load listings."));
-  }, [category, debouncedSearch, disc, rarity, version]);
+  }, [category, debouncedSearch, disc, rarity, version, tier, pillar]);
 
   const canPublish = useMemo(() => {
     const level = (user?.contextCraftCertLevel as ContextCraftLevel) || "NONE";
@@ -289,10 +295,12 @@ function ListingsList() {
         })}
       </div>
 
-      {/* M3 — 6-dim taxonomy filters (disc / rarity / version). Pillar + category live in their own rows above. */}
+      {/* M3 — full 6-dim taxonomy filter rail (tier · disc · rarity · pillar · version). Category sits in its own chip row above. */}
       <div className="space-y-2" data-testid="filter-six-dim-row">
-        <FilterChipRow label="Discipline" testGroup="disc" options={DISC_FILTER as readonly string[]} value={disc} onChange={setDisc} />
-        <FilterChipRow label="Rarity"     testGroup="rarity" options={RARITY_FILTER as readonly string[]} value={rarity} onChange={setRarity} />
+        <FilterChipRow label="Tier"       testGroup="tier"    options={TIER_FILTER as readonly string[]}    value={tier}    onChange={setTier} />
+        <FilterChipRow label="Discipline" testGroup="disc"    options={DISC_FILTER as readonly string[]}    value={disc}    onChange={setDisc} />
+        <FilterChipRow label="Rarity"     testGroup="rarity"  options={RARITY_FILTER as readonly string[]}  value={rarity}  onChange={setRarity} />
+        <FilterChipRow label="Pillar"     testGroup="pillar"  options={PILLAR_FILTER as readonly string[]}  value={pillar}  onChange={setPillar} />
         <FilterChipRow label="Version"    testGroup="version" options={VERSION_FILTER as readonly string[]} value={version} onChange={setVersion} />
       </div>
 

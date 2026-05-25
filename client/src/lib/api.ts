@@ -155,7 +155,7 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
-  getSpcListings: (filters?: { pillar?: string; category?: string; search?: string; disc?: string; rarity?: string; version?: string }) => {
+  getSpcListings: (filters?: { pillar?: string; category?: string; search?: string; disc?: string; rarity?: string; version?: string; tier?: string }) => {
     const params = new URLSearchParams();
     if (filters?.pillar && filters.pillar !== "All") params.set("pillar", filters.pillar);
     if (filters?.category && filters.category !== "All") params.set("category", filters.category);
@@ -163,6 +163,7 @@ export const api = {
     if (filters?.disc && filters.disc !== "All") params.set("disc", filters.disc);
     if (filters?.rarity && filters.rarity !== "All") params.set("rarity", filters.rarity);
     if (filters?.version && filters.version !== "All") params.set("version", filters.version);
+    if (filters?.tier && filters.tier !== "All") params.set("tier", filters.tier);
     const qs = params.toString();
     return apiRequest(`/api/sphinx/listings${qs ? `?${qs}` : ""}`);
   },

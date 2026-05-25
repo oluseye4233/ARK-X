@@ -27,6 +27,7 @@ import { NotificationBell } from "@/components/layout/NotificationBell";
 import { useNotificationStream, type ArkRoundtableEvent } from "@/lib/useArkStream";
 import { useToast } from "@/hooks/use-toast";
 import { useCallback } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const ADMIN_LINKS: NavItem[] = [
   { name: "CCGE Importer", href: "/admin/ccge-import", icon: Shield, hint: "Bulk-import compendium cards" },
@@ -241,6 +242,10 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
+  // Pick a single bell mount per viewport — render only one component so we
+  // never double-subscribe to the notification stream or display divergent
+  // unread counters on the desktop layout.
+  const isMobile = useIsMobile();
 
   // Ambient seat-rotation toast: any Roundtable seat that changes hands
   // anywhere on the platform surfaces a transient 8s toast. The handler
@@ -275,7 +280,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           <span className="font-display font-bold text-primary tracking-widest text-sm">ARK</span>
         </div>
         <div className="flex items-center gap-2">
-          <NotificationBell />
+          {isMobile && <NotificationBell />}
         <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
           <SheetTrigger asChild>
             <button
@@ -302,9 +307,11 @@ export function AppLayout({ children }: AppLayoutProps) {
       {/* Main Content */}
       <main className="flex-1 relative overflow-x-hidden">
         {/* Desktop floating bell (>= sm) — sits in the top-right of the main column. */}
-        <div className="hidden sm:flex absolute top-4 right-4 z-30">
-          <NotificationBell />
-        </div>
+        {!isMobile && (
+          <div className="hidden sm:flex absolute top-4 right-4 z-30">
+            <NotificationBell />
+          </div>
+        )}
         {/* Subtle decorative elements */}
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/3 pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-destructive/5 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/3 pointer-events-none" />

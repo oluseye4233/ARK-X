@@ -48,7 +48,7 @@ import {
 } from "./sphinxSynergy";
 import { seedJnomicsExpansion } from "./jnomicsSeed";
 import { analyzeSpcListing, SpcAnalysisProTierRequiredError } from "./ai/spcAnalysis";
-import { categoryToPillars, MARKETPLACE_CATEGORIES, type MarketplaceCategory } from "@shared/schema";
+import { categoryToPillars, MARKETPLACE_CATEGORIES, type MarketplaceCategory, hiveToTierBadge } from "@shared/schema";
 import { buildGuinProfile, validateEndorsement } from "./guin";
 import { ENDORSEMENT_MAX_LEN } from "@shared/schema";
 import { z } from "zod";
@@ -1633,6 +1633,8 @@ export async function registerRoutes(
     disc: z.string().optional(),
     rarity: z.string().optional(),
     version: z.string().optional(),
+    // M3 — HIVE tier filter (ULTRA/PREMIUM/STANDARD), derived from listing.hiveScore.
+    tier: z.enum(["All", "ULTRA", "PREMIUM", "STANDARD"]).optional(),
   });
 
   // Server-side body redaction protects paid prompt content from being scraped
@@ -1662,6 +1664,10 @@ export async function registerRoutes(
         }
         const allowedPillars = new Set<string>(categoryToPillars(cat));
         scoped = scoped.filter((l) => allowedPillars.has(l.pillar));
+      }
+      // Tier filter (M3): HIVE band, computed from listing.hiveScore.
+      if (filters.tier && filters.tier !== "All") {
+        scoped = scoped.filter((l) => hiveToTierBadge(l.hiveScore) === filters.tier);
       }
       // Free-text search (M18): case-insensitive substring on title + description.
       if (filters.search && filters.search.trim()) {
@@ -1864,7 +1870,7 @@ export async function registerRoutes(
   // Synergy is NOT an ARK score writer in MVP. If/when we activate it, the
   // emission MUST route through orchestrator → arkRecalc.applyCaps under the
   // existing SPHINX +20/30d cap (see threat_model.md §Elevation of Privilege).
-  app.post("/api/sphinx/synergies/calculate", async (req, res) => {
+  app.post("/api/sphinx/synergies/calculate", requireAuth, async (req, res) => {
     try {
       const parsed = synergyCalcSchema.parse(req.body);
       const result = await calculateSynergy(parsed.cardIds);
@@ -1875,7 +1881,7 @@ export async function registerRoutes(
   });
 
   // GET /api/sphinx/pairs/top — top-15 strongest synergy pairs platform-wide.
-  app.get("/api/sphinx/pairs/top", async (_req, res) => {
+  app.get("/api/sphinx/pairs/top", requireAuth, async (_req, res) => {
     try {
       const rows = await getTopPairsPlatform(15);
       return res.json(rows);
@@ -1885,7 +1891,7 @@ export async function registerRoutes(
   });
 
   // GET /api/sphinx/listings/:id/complementary — top-5 listing partners.
-  app.get("/api/sphinx/listings/:id/complementary", async (req, res) => {
+  app.get("/api/sphinx/listings/:id/complementary", requireAuth, async (req, res) => {
     try {
       const id = String(req.params.id);
       let pairs = await getComplementaryForListing(id);
@@ -1909,7 +1915,7 @@ export async function registerRoutes(
   // Re-compute on every fetch so rankDelta + seatSinceAt are always fresh
   // relative to the previous snapshot stored in roundtable_state. This is
   // a 12-row leaderboard — write cost is negligible.
-  app.get("/api/sphinx/roundtable", async (_req, res) => {
+  app.get("/api/sphinx/roundtable", requireAuth, async (_req, res) => {
     try {
       const { seats } = await recomputeRoundtable();
       const listingIds = Array.from(new Set(seats.map((s) => s.listingId)));
