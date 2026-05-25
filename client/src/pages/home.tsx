@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { ArrowRight, ShieldAlert, Target, Zap, Crown, GraduationCap, User, Building2, Check, Upload, BarChart3, Compass } from "lucide-react";
+import { ArrowRight, ShieldAlert, Target, Zap, Crown, GraduationCap, User, Building2, Check, Upload, BarChart3, Compass, PlayCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SUBSCRIPTION_PLANS } from "@shared/schema";
 import heroBgVideo from "@assets/WEB_LEARNING_SYSTEMS_(1920_x_1280_px)_(2)_1779676596124.mp4";
@@ -91,6 +91,23 @@ export default function Home() {
               Initialize Analysis <ArrowRight className="ml-3 h-6 w-6" />
             </Link>
           </div>
+
+          {/* Secondary CTA — guided demo tour. Magenta/fuchsia glow so it
+              reads as a distinct "preview first" option vs the cyan primary. */}
+          <div className="relative group">
+            <span
+              aria-hidden="true"
+              className="absolute -inset-2 rounded-full bg-fuchsia-500/25 blur-xl animate-ping-slow pointer-events-none"
+            />
+            <Link
+              href="/demo-tour"
+              data-testid="button-view-demo-tour"
+              className="relative inline-flex items-center justify-center bg-background/60 hover:bg-fuchsia-500/10 text-fuchsia-300 hover:text-fuchsia-200 font-mono uppercase tracking-wider rounded-none h-12 px-8 transition-all hover:scale-[1.03] text-sm font-semibold border-2 border-fuchsia-400/60 animate-throb-glow-magenta"
+            >
+              <PlayCircle className="mr-2 h-5 w-5" /> See the Demo Tour
+            </Link>
+          </div>
+
           <Link
             href="/login"
             data-testid="button-view-demo"

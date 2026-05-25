@@ -150,6 +150,28 @@
     animation: throb-glow 2.2s ease-in-out infinite;
   }
 
+  /* Magenta variant for the secondary demo-tour CTA — same rhythm, different
+     hue so the two glowing buttons feel like a coordinated pair, not a clash. */
+  @keyframes throb-glow-magenta {
+    0%, 100% {
+      transform: scale(1);
+      box-shadow:
+        0 0 16px rgba(217, 70, 239, 0.45),
+        0 0 32px rgba(217, 70, 239, 0.20),
+        inset 0 0 8px rgba(217, 70, 239, 0.25);
+    }
+    50% {
+      transform: scale(1.03);
+      box-shadow:
+        0 0 28px rgba(217, 70, 239, 0.80),
+        0 0 56px rgba(217, 70, 239, 0.40),
+        inset 0 0 14px rgba(217, 70, 239, 0.40);
+    }
+  }
+  .animate-throb-glow-magenta {
+    animation: throb-glow-magenta 2.6s ease-in-out infinite;
+  }
+
   /* Slower, softer outer ping for the surrounding aura halo. */
   @keyframes ping-slow {
     0% { transform: scale(1); opacity: 0.55; }
