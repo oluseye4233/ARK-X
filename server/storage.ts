@@ -89,7 +89,7 @@ export interface IStorage {
   // SPHINX Marketplace
   createSpcListing(listing: InsertSpcListing & { kcseScore: number; hiveScore: number; status?: string }): Promise<SpcListing>;
   getSpcListing(id: string): Promise<SpcListing | undefined>;
-  getAllSpcListings(filters?: { pillar?: string; status?: string }): Promise<SpcListing[]>;
+  getAllSpcListings(filters?: { pillar?: string; status?: string; disc?: string; rarity?: string; version?: string }): Promise<SpcListing[]>;
   getSpcListingsByCreator(creatorId: string): Promise<SpcListing[]>;
   updateSpcListing(id: string, data: Partial<SpcListing>): Promise<SpcListing | undefined>;
   getSpcPurchasesByBuyer(buyerId: string): Promise<SpcPurchase[]>;
@@ -485,11 +485,25 @@ export class DatabaseStorage implements IStorage {
     return s;
   }
 
-  async getAllSpcListings(filters?: { pillar?: string; status?: string }): Promise<SpcListing[]> {
+  async getAllSpcListings(filters?: { pillar?: string; status?: string; disc?: string; rarity?: string; version?: string }): Promise<SpcListing[]> {
     const rows = await db.select().from(spcListings).orderBy(desc(spcListings.createdAt));
+    // M3 — disc/rarity/version live on jnomics_cards. When any of those filters
+    // are set, intersect with cards referenced via synergy_tag_ids.
+    let cardIndex: Map<string, { disc: string | null; rarity: string | null; version: string | null }> | null = null;
+    if (filters?.disc || filters?.rarity || filters?.version) {
+      const allCards = await db.select().from(jnomicsCards);
+      cardIndex = new Map(allCards.map((c) => [c.id, { disc: c.disc, rarity: c.rarity, version: c.version }]));
+    }
     return rows.filter((r) => {
       if (filters?.pillar && r.pillar !== filters.pillar) return false;
       if (filters?.status && r.status !== filters.status) return false;
+      if (cardIndex) {
+        const tags = r.synergyTagIds ?? [];
+        const tagged = tags.map((id) => cardIndex!.get(id)).filter(Boolean) as Array<{ disc: string | null; rarity: string | null; version: string | null }>;
+        if (filters?.disc && !tagged.some((t) => t.disc === filters.disc)) return false;
+        if (filters?.rarity && !tagged.some((t) => t.rarity === filters.rarity)) return false;
+        if (filters?.version && !tagged.some((t) => t.version === filters.version)) return false;
+      }
       return true;
     });
   }

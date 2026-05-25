@@ -204,6 +204,34 @@ class Orchestrator {
     return () => this.subs.delete(sub);
   }
 
+  /** M3 — emit a custom SSE event to a single user across all of their
+   *  open EventSource connections. Used by the notification bell. */
+  broadcastToUser(userId: string, event: string, payload: unknown): void {
+    const json = JSON.stringify(payload);
+    for (const s of Array.from(this.subs)) {
+      if (s.userId !== userId) continue;
+      try { s.res.write(`event: ${event}\ndata: ${json}\n\n`); }
+      catch (err) {
+        this.subs.delete(s);
+        try { s.res.end(); } catch {}
+      }
+    }
+  }
+
+  /** M3 — broadcast a custom SSE event to every connected subscriber. Used
+   *  by the ARK Roundtable seat rotation surface so all online clients can
+   *  surface the toast without per-user fan-out logic. */
+  broadcastAll(event: string, payload: unknown): void {
+    const json = JSON.stringify(payload);
+    for (const s of Array.from(this.subs)) {
+      try { s.res.write(`event: ${event}\ndata: ${json}\n\n`); }
+      catch (err) {
+        this.subs.delete(s);
+        try { s.res.end(); } catch {}
+      }
+    }
+  }
+
   async getRecentEvents(userId: string, limit = 10): Promise<ArkEvent[]> {
     return db
       .select()

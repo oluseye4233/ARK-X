@@ -155,14 +155,34 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
-  getSpcListings: (filters?: { pillar?: string; category?: string; search?: string }) => {
+  getSpcListings: (filters?: { pillar?: string; category?: string; search?: string; disc?: string; rarity?: string; version?: string }) => {
     const params = new URLSearchParams();
     if (filters?.pillar && filters.pillar !== "All") params.set("pillar", filters.pillar);
     if (filters?.category && filters.category !== "All") params.set("category", filters.category);
     if (filters?.search && filters.search.trim()) params.set("search", filters.search.trim());
+    if (filters?.disc && filters.disc !== "All") params.set("disc", filters.disc);
+    if (filters?.rarity && filters.rarity !== "All") params.set("rarity", filters.rarity);
+    if (filters?.version && filters.version !== "All") params.set("version", filters.version);
     const qs = params.toString();
     return apiRequest(`/api/sphinx/listings${qs ? `?${qs}` : ""}`);
   },
+
+  // M3 — synergy / pairs / roundtable / notifications
+  calculateSynergy: (cardIds: string[]) =>
+    apiRequest("/api/sphinx/synergies/calculate", {
+      method: "POST",
+      body: JSON.stringify({ cardIds }),
+    }),
+  getTopPairs: () => apiRequest("/api/sphinx/pairs/top"),
+  getComplementaryFor: (listingId: string) =>
+    apiRequest(`/api/sphinx/listings/${listingId}/complementary`),
+  getRoundtable: () => apiRequest("/api/sphinx/roundtable"),
+  getNotifications: () => apiRequest("/api/notifications"),
+  markNotificationsRead: (ids?: string[]) =>
+    apiRequest("/api/notifications/read", {
+      method: "POST",
+      body: JSON.stringify({ ids: ids ?? undefined }),
+    }),
 
   runSpcAiAnalysis: (listingId: string) =>
     apiRequest(`/api/sphinx/listings/${listingId}/ai-analysis`, { method: "POST" }),

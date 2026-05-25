@@ -3,6 +3,7 @@ import { Link, useLocation, useRoute } from "wouter";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/useAuth";
 import { api } from "@/lib/api";
+import { useNotificationStream } from "@/lib/useArkStream";
 import {
   ALL_CARD_PILLARS,
   CC_PILLARS,
@@ -17,6 +18,7 @@ import {
   MARKETPLACE_CATEGORIES,
   GRADE_PRICING_MATRIX,
   formatPriceDual,
+  formatPriceUsd,
   hiveToTierBadge,
   hiveToLetterGrade,
   pillarToCategory,
@@ -55,6 +57,10 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { SpcTaxonomyPanel } from "@/components/marketplace/SpcTaxonomyPanel";
 
 const CATEGORY_FILTER = ["All", ...MARKETPLACE_CATEGORIES] as const;
+// M3 — 6-dim taxonomy filters (matches `server/jnomicsSeed.ts`).
+const DISC_FILTER    = ["All", "Discovery", "Build", "Optimize", "Scale", "Defend", "Govern"] as const;
+const RARITY_FILTER  = ["All", "Common", "Uncommon", "Rare", "Epic", "Legendary"] as const;
+const VERSION_FILTER = ["All", "v1", "v2", "v3"] as const;
 const DETAIL_TABS = ["overview", "pillars", "tests", "pairs", "synthesis"] as const;
 type DetailTab = typeof DETAIL_TABS[number];
 
@@ -194,6 +200,9 @@ function MatrixListingCard({ listing }: { listing: SpcListing }) {
 function ListingsList() {
   const { user } = useAuth();
   const [category, setCategory] = useState<string>("All");
+  const [disc, setDisc] = useState<string>("All");
+  const [rarity, setRarity] = useState<string>("All");
+  const [version, setVersion] = useState<string>("All");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [listings, setListings] = useState<SpcListing[] | null>(null);
@@ -209,10 +218,10 @@ function ListingsList() {
     setListings(null);
     setError(null);
     api
-      .getSpcListings({ category, search: debouncedSearch })
+      .getSpcListings({ category, search: debouncedSearch, disc, rarity, version })
       .then(setListings)
       .catch((e) => setError(e?.message || "Failed to load listings."));
-  }, [category, debouncedSearch]);
+  }, [category, debouncedSearch, disc, rarity, version]);
 
   const canPublish = useMemo(() => {
     const level = (user?.contextCraftCertLevel as ContextCraftLevel) || "NONE";
@@ -278,6 +287,13 @@ function ListingsList() {
             </button>
           );
         })}
+      </div>
+
+      {/* M3 — 6-dim taxonomy filters (disc / rarity / version). Pillar + category live in their own rows above. */}
+      <div className="space-y-2" data-testid="filter-six-dim-row">
+        <FilterChipRow label="Discipline" testGroup="disc" options={DISC_FILTER as readonly string[]} value={disc} onChange={setDisc} />
+        <FilterChipRow label="Rarity"     testGroup="rarity" options={RARITY_FILTER as readonly string[]} value={rarity} onChange={setRarity} />
+        <FilterChipRow label="Version"    testGroup="version" options={VERSION_FILTER as readonly string[]} value={version} onChange={setVersion} />
       </div>
 
       {error && (
@@ -807,7 +823,7 @@ function ListingDetail({ id }: { id: string }) {
         </TabsContent>
 
         <TabsContent value="tests"><TabStub id="tests" label="Tests" /></TabsContent>
-        <TabsContent value="pairs"><TabStub id="pairs" label="Complementary Pairs" /></TabsContent>
+        <TabsContent value="pairs"><ComplementaryPairsTab listingId={listing.id} /></TabsContent>
         <TabsContent value="synthesis"><TabStub id="synthesis" label="Synthesis" /></TabsContent>
       </Tabs>
     </div>
@@ -840,7 +856,7 @@ function PricingMatrixBanner() {
               {band.suggestedMin}–{band.suggestedMax} <span className="text-muted-foreground font-normal">cr</span>
             </div>
             <div className="font-mono text-[10px] text-muted-foreground">
-              ${(band.suggestedMin * CREDITS_TO_USD).toFixed(2)} – ${(band.suggestedMax * CREDITS_TO_USD).toFixed(2)}
+              {formatPriceUsd(band.suggestedMin)} – {formatPriceUsd(band.suggestedMax)}
             </div>
             <p className="font-mono text-[10px] text-muted-foreground/80">{band.label}</p>
           </div>
@@ -1140,12 +1156,420 @@ function PublishPage() {
 
 export default function MarketplacePage() {
   const [matchDetail, paramsDetail] = useRoute<{ id: string }>("/marketplace/:id");
-  const [matchPublish] = useRoute("/marketplace/publish");
+  const [matchPublish]    = useRoute("/marketplace/publish");
+  const [matchSynergy]    = useRoute("/marketplace/synergy");
+  const [matchRoundtable] = useRoute("/marketplace/roundtable");
 
-  if (matchPublish) return <PublishPage />;
+  if (matchPublish)    return <PublishPage />;
+  if (matchSynergy)    return <SynergyLabPage />;
+  if (matchRoundtable) return <RoundtablePage />;
   if (matchDetail && paramsDetail) {
-    if (paramsDetail.id === "publish") return <PublishPage />;
+    // Defensive guard for static slugs still hitting the :id route.
+    if (paramsDetail.id === "publish")    return <PublishPage />;
+    if (paramsDetail.id === "synergy")    return <SynergyLabPage />;
+    if (paramsDetail.id === "roundtable") return <RoundtablePage />;
     return <ListingDetail id={paramsDetail.id} />;
   }
   return <ListingsList />;
+}
+
+// ── M3 — Filter chip row (used by 6-dim filter UI) ────────────────────
+function FilterChipRow({
+  label, testGroup, options, value, onChange,
+}: {
+  label: string;
+  testGroup: string;
+  options: readonly string[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex items-center flex-wrap gap-2" data-testid={`filter-row-${testGroup}`}>
+      <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/70 w-20">{label}</span>
+      {options.map((opt) => {
+        const active = value === opt;
+        return (
+          <button
+            key={opt}
+            onClick={() => onChange(opt)}
+            data-testid={`filter-${testGroup}-${opt.toLowerCase()}`}
+            className={`px-2.5 py-1 rounded font-mono text-[10px] uppercase tracking-wider transition-all border ${
+              active
+                ? "bg-primary/15 text-primary border-primary/40"
+                : "bg-white/5 text-muted-foreground border-white/10 hover:text-foreground"
+            }`}
+          >
+            {opt}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── M3 — Complementary Pairs tab content ──────────────────────────────
+type ComplementaryRow = {
+  rank: number;
+  score: number;
+  partner: SpcListing & { bodyLocked?: boolean; bodyLength?: number };
+};
+function ComplementaryPairsTab({ listingId }: { listingId: string }) {
+  const [rows, setRows] = useState<ComplementaryRow[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    setRows(null); setError(null);
+    api.getComplementaryFor(listingId)
+      .then((r: ComplementaryRow[]) => setRows(r || []))
+      .catch((e) => setError(e?.message || "Failed to load complementary pairs."));
+  }, [listingId]);
+  if (error) {
+    return (
+      <div className="glass-card p-4 rounded-xl border border-destructive/30 bg-destructive/5 font-mono text-sm text-destructive" data-testid="text-pairs-error">
+        {error}
+      </div>
+    );
+  }
+  if (rows === null) {
+    return <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 text-primary animate-spin" /></div>;
+  }
+  if (rows.length === 0) {
+    return (
+      <div className="glass-card p-6 rounded-xl text-center" data-testid="text-empty-pairs">
+        <p className="font-mono text-sm text-muted-foreground uppercase">No complementary partners yet — check back after the marketplace grows.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-3" data-testid="list-complementary-pairs">
+      <p className="font-mono text-[11px] text-muted-foreground">
+        Top-{rows.length} partner cards by cross-tag synergy (0-100). Buy both to unlock multiplicative effects.
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {rows.map((p) => (
+          <Link
+            key={p.partner.id}
+            href={`/marketplace/${p.partner.id}`}
+            data-testid={`row-pair-${p.partner.id}`}
+            className="block p-3 rounded-lg border border-white/10 bg-white/5 hover:border-primary/40 hover:bg-primary/5 transition-all"
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                #{p.rank} • {p.partner.pillar}
+              </span>
+              <span className="font-mono text-xs font-bold text-primary" data-testid={`text-pair-score-${p.partner.id}`}>
+                {p.score}% synergy
+              </span>
+            </div>
+            <p className="font-mono text-sm text-white font-bold truncate">{p.partner.title}</p>
+            <div className="flex items-center justify-between mt-2">
+              <TierBadge hive={p.partner.hiveScore} />
+              <span className="flex items-center gap-1 text-amber-400 font-mono text-xs font-bold">
+                <Coins className="h-3 w-3" /> {formatPriceDual(p.partner.priceCredits)}
+              </span>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── M3 — Synergy Lab (2-5 card combiner) ──────────────────────────────
+type JngCardLite = { id: string; name: string; emoji?: string | null; disc?: string | null; rarity?: string | null; version?: string | null; category?: string | null };
+type SynergyResult = {
+  synergyScore: number;
+  pairCount: number;
+  breakdown: { a: string; b: string; score: number; rationale: string; source: "table" | "computed" }[];
+};
+function SynergyLabPage() {
+  const [cards, setCards] = useState<JngCardLite[] | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [result, setResult] = useState<SynergyResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
+
+  useEffect(() => {
+    api.getJnomicsCards()
+      .then((r: JngCardLite[]) => setCards(r || []))
+      .catch((e) => setError(e?.message || "Failed to load cards."));
+  }, []);
+
+  const toggle = (id: string) => {
+    setSelected((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= 5) return prev;
+      return [...prev, id];
+    });
+    setResult(null);
+  };
+
+  const calculate = async () => {
+    if (selected.length < 2) return;
+    setBusy(true); setError(null);
+    try {
+      const r = await api.calculateSynergy(selected);
+      setResult(r);
+    } catch (e: any) {
+      setError(e?.message || "Synergy calculation failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const filteredCards = useMemo(() => {
+    if (!cards) return [];
+    const q = filter.trim().toLowerCase();
+    if (!q) return cards;
+    return cards.filter((c) =>
+      c.name.toLowerCase().includes(q)
+      || (c.disc ?? "").toLowerCase().includes(q)
+      || (c.rarity ?? "").toLowerCase().includes(q)
+      || (c.category ?? "").toLowerCase().includes(q));
+  }, [cards, filter]);
+
+  return (
+    <div className="max-w-6xl mx-auto space-y-6">
+      <div className="flex items-center gap-3">
+        <Sparkles className="h-7 w-7 text-primary" />
+        <div>
+          <h1 className="text-2xl font-display font-bold text-primary tracking-widest uppercase" data-testid="text-synergy-lab-title">
+            Synergy Lab
+          </h1>
+          <p className="text-muted-foreground font-mono text-xs">
+            Pick 2-5 Junglenomics cards to preview the composite synergy score. Informational only — no ARK impact.
+          </p>
+        </div>
+      </div>
+
+      <div className="glass-card p-4 rounded-xl border border-primary/20 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+            Selected ({selected.length}/5)
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => { setSelected([]); setResult(null); }}
+              disabled={selected.length === 0}
+              data-testid="button-clear-selection"
+              className="px-3 py-1.5 rounded font-mono text-[10px] uppercase tracking-wider bg-white/5 text-muted-foreground border border-white/10 hover:text-foreground disabled:opacity-40"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={calculate}
+              disabled={selected.length < 2 || busy}
+              data-testid="button-calculate-synergy"
+              className="px-4 py-1.5 rounded font-mono text-[10px] uppercase tracking-wider bg-primary/10 text-primary border border-primary/30 hover:bg-primary/15 disabled:opacity-40 flex items-center gap-2"
+            >
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+              Calculate
+            </button>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2 min-h-[36px]">
+          {selected.map((id) => {
+            const c = cards?.find((x) => x.id === id);
+            if (!c) return null;
+            return (
+              <button
+                key={id}
+                onClick={() => toggle(id)}
+                data-testid={`chip-selected-${id}`}
+                className="px-2.5 py-1 rounded bg-primary/15 text-primary border border-primary/40 font-mono text-[11px] flex items-center gap-1.5"
+              >
+                <span>{c.emoji ?? "•"}</span>{c.name}
+                <span className="opacity-60">×</span>
+              </button>
+            );
+          })}
+          {selected.length === 0 && (
+            <span className="font-mono text-[11px] text-muted-foreground/60 italic">Select cards from the list below.</span>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div className="glass-card p-3 rounded-lg border border-destructive/30 bg-destructive/5 font-mono text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {result && (
+        <div className="glass-card p-5 rounded-xl border border-primary/30 space-y-3" data-testid="panel-synergy-result">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Composite Synergy</div>
+              <div className="font-display text-4xl font-bold text-primary" data-testid="text-synergy-score">
+                {result.synergyScore}<span className="text-lg text-muted-foreground">/100</span>
+              </div>
+            </div>
+            <span className="font-mono text-[10px] uppercase text-muted-foreground">{result.pairCount} pair{result.pairCount === 1 ? "" : "s"} analyzed</span>
+          </div>
+          <ul className="space-y-1.5">
+            {result.breakdown.map((b, i) => {
+              const ca = cards?.find((c) => c.id === b.a);
+              const cb = cards?.find((c) => c.id === b.b);
+              return (
+                <li key={i} className="flex items-center gap-2 text-[11px] font-mono" data-testid={`row-pair-${b.a}-${b.b}`}>
+                  <span className="text-white">{ca?.name ?? b.a}</span>
+                  <span className="text-muted-foreground">×</span>
+                  <span className="text-white">{cb?.name ?? b.b}</span>
+                  <span className="ml-auto text-primary font-bold">{b.score}</span>
+                  <span className="text-muted-foreground/60 text-[10px] italic">{b.rationale}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <input
+          data-testid="input-synergy-card-filter"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="Filter by name, discipline, rarity, category…"
+          className="w-full bg-black/40 border border-white/10 rounded-lg pl-10 pr-3 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-primary/50"
+        />
+      </div>
+
+      {cards === null ? (
+        <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 text-primary animate-spin" /></div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5" data-testid="grid-synergy-cards">
+          {filteredCards.map((c) => {
+            const active = selected.includes(c.id);
+            const disabled = !active && selected.length >= 5;
+            return (
+              <button
+                key={c.id}
+                onClick={() => !disabled && toggle(c.id)}
+                disabled={disabled}
+                data-testid={`card-pick-${c.id}`}
+                className={`p-2.5 rounded-lg border text-left transition-all ${
+                  active
+                    ? "bg-primary/15 border-primary/50 text-primary"
+                    : disabled
+                      ? "bg-white/5 border-white/5 text-muted-foreground/40 cursor-not-allowed"
+                      : "bg-white/5 border-white/10 text-foreground hover:border-primary/30 hover:bg-primary/5"
+                }`}
+              >
+                <div className="text-lg mb-1">{c.emoji ?? "•"}</div>
+                <div className="font-mono text-[11px] font-bold truncate">{c.name}</div>
+                <div className="font-mono text-[9px] uppercase text-muted-foreground/70 mt-0.5 truncate">
+                  {[c.disc, c.rarity, c.version].filter(Boolean).join(" · ")}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── M3 — ARK Roundtable Top-12 leaderboard ─────────────────────────────
+type RoundtableSeat = {
+  seatNumber: number;
+  score: number;
+  hiveScore: number;
+  salesCount: number;
+  snapshotAt: string;
+  listing: { id: string; title: string; pillar: string; priceCredits: number; hiveScore: number } | null;
+  creator: { id: string; name: string } | null;
+};
+function RoundtablePage() {
+  const [seats, setSeats] = useState<RoundtableSeat[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    api.getRoundtable()
+      .then((r: RoundtableSeat[]) => setSeats(r || []))
+      .catch((e) => setError(e?.message || "Failed to load roundtable."));
+  }, []);
+
+  // Live rotation refresh — when any seat changes hands, re-fetch via the
+  // shared SSE hub. The hook multiplexes the same EventSource the bell uses.
+  useNotificationStream(true, undefined, () => {
+    api.getRoundtable().then((r: RoundtableSeat[]) => setSeats(r)).catch(() => null);
+  });
+
+  if (error) {
+    return (
+      <div className="max-w-4xl mx-auto py-12">
+        <div className="glass-card p-4 rounded-xl border border-destructive/30 bg-destructive/5 font-mono text-sm text-destructive">{error}</div>
+      </div>
+    );
+  }
+  if (seats === null) {
+    return <div className="flex items-center justify-center py-16"><Loader2 className="h-6 w-6 text-primary animate-spin" /></div>;
+  }
+
+  return (
+    <div className="max-w-5xl mx-auto space-y-6">
+      <div className="flex items-center gap-3">
+        <Crown className="h-7 w-7 text-amber-400" />
+        <div>
+          <h1 className="text-2xl font-display font-bold text-primary tracking-widest uppercase" data-testid="text-roundtable-title">
+            ARK Roundtable — Top 12
+          </h1>
+          <p className="text-muted-foreground font-mono text-xs">
+            Ranked by 60% HIVE score + 40% normalized sales. Live updates on every publish/purchase.
+          </p>
+        </div>
+      </div>
+
+      {seats.length === 0 ? (
+        <div className="glass-card p-8 rounded-xl text-center" data-testid="text-empty-roundtable">
+          <p className="font-mono text-sm text-muted-foreground uppercase">No active SPCs yet — be the first to claim a seat.</p>
+        </div>
+      ) : (
+        <div className="space-y-2" data-testid="list-roundtable-seats">
+          {seats.map((s) => (
+            <Link
+              key={s.seatNumber}
+              href={s.listing ? `/marketplace/${s.listing.id}` : "/marketplace"}
+              data-testid={`row-seat-${s.seatNumber}`}
+              className="block p-3 rounded-lg border border-white/10 bg-white/5 hover:border-amber-400/40 hover:bg-amber-400/5 transition-all"
+            >
+              <div className="flex items-center gap-3">
+                <div className={`flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center font-display font-bold text-lg border ${
+                  s.seatNumber <= 3
+                    ? "bg-amber-400/15 text-amber-400 border-amber-400/40"
+                    : s.seatNumber <= 6
+                      ? "bg-slate-300/10 text-slate-300 border-slate-300/30"
+                      : "bg-white/5 text-muted-foreground border-white/10"
+                }`}>
+                  {s.seatNumber}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-mono text-sm text-white font-bold truncate" data-testid={`text-seat-title-${s.seatNumber}`}>
+                    {s.listing?.title ?? "(deleted)"}
+                  </p>
+                  <p className="font-mono text-[10px] text-muted-foreground truncate">
+                    by {s.creator?.name ?? "—"} • {s.listing?.pillar ?? ""}
+                  </p>
+                </div>
+                <div className="hidden sm:flex flex-col items-end gap-0.5 mr-3">
+                  <span className="font-mono text-[9px] uppercase text-muted-foreground tracking-widest">HIVE</span>
+                  <span className="font-mono text-sm text-white font-bold">{s.hiveScore}</span>
+                </div>
+                <div className="hidden sm:flex flex-col items-end gap-0.5 mr-3">
+                  <span className="font-mono text-[9px] uppercase text-muted-foreground tracking-widest">Sales</span>
+                  <span className="font-mono text-sm text-white font-bold">{s.salesCount}</span>
+                </div>
+                <div className="flex flex-col items-end gap-0.5">
+                  <span className="font-mono text-[9px] uppercase text-amber-400 tracking-widest">Score</span>
+                  <span className="font-mono text-base text-amber-400 font-bold" data-testid={`text-seat-score-${s.seatNumber}`}>{s.score}</span>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }

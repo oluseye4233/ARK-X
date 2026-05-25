@@ -48,6 +48,8 @@ function Router() {
         <Route path="/school" component={SchoolDashboard} />
         <Route path="/play" component={PlayPage} />
         <Route path="/marketplace/publish" component={MarketplacePage} />
+        <Route path="/marketplace/synergy" component={MarketplacePage} />
+        <Route path="/marketplace/roundtable" component={MarketplacePage} />
         <Route path="/marketplace/:id" component={MarketplacePage} />
         <Route path="/marketplace" component={MarketplacePage} />
         <Route path="/ark/history" component={ArkHistoryPage} />

@@ -35,6 +35,18 @@ import {
 } from "./billing";
 import { seedCcge } from "./ccgeSeed";
 import { runHivePrecheck, executePurchase, getOrCreateCredits } from "./sphinx";
+import {
+  calculateSynergy,
+  recomputeComplementaryFor,
+  getComplementaryForListing,
+  getTopPairsPlatform,
+  recomputeRoundtable,
+  getRoundtableSnapshot,
+  listNotifications,
+  countUnread,
+  markNotificationsRead,
+} from "./sphinxSynergy";
+import { seedJnomicsExpansion } from "./jnomicsSeed";
 import { analyzeSpcListing, SpcAnalysisProTierRequiredError } from "./ai/spcAnalysis";
 import { categoryToPillars, MARKETPLACE_CATEGORIES, type MarketplaceCategory } from "@shared/schema";
 import { buildGuinProfile, validateEndorsement } from "./guin";
@@ -1599,6 +1611,11 @@ export async function registerRoutes(
         title: listing.title,
       }, ARK_SCORE_DELTAS.SPC_PUBLISHED);
 
+      // M3 — refresh complementary cache + roundtable rankings. Fire-and-forget
+      // so the publish path isn't blocked on derivative work.
+      recomputeComplementaryFor(listing.id, 5).catch(() => null);
+      recomputeRoundtable().catch(() => null);
+
       return res.status(201).json({ listing, precheck });
     } catch (err: any) {
       console.error("Publish SPC error:", err);
@@ -1611,6 +1628,11 @@ export async function registerRoutes(
     status: z.string().optional(),
     search: z.string().max(120).optional(),
     category: z.string().optional(),
+    // M3 — three additional taxonomy dimensions sourced from jnomics_cards
+    // (via listing.synergyTagIds intersection).
+    disc: z.string().optional(),
+    rarity: z.string().optional(),
+    version: z.string().optional(),
   });
 
   // Server-side body redaction protects paid prompt content from being scraped
@@ -1627,6 +1649,9 @@ export async function registerRoutes(
       const all = await storage.getAllSpcListings({
         pillar: filters.pillar && filters.pillar !== "All" ? filters.pillar : undefined,
         status: filters.status ?? "active",
+        disc: filters.disc && filters.disc !== "All" ? filters.disc : undefined,
+        rarity: filters.rarity && filters.rarity !== "All" ? filters.rarity : undefined,
+        version: filters.version && filters.version !== "All" ? filters.version : undefined,
       });
       // Category filter (M19): map to pillars and intersect.
       let scoped = all;
@@ -1745,6 +1770,20 @@ export async function registerRoutes(
         asRole: "creator",
         isFirstSaleForCreator: outcome.isFirstSaleForCreator,
       }, outcome.arkScoreDelta.creator);
+
+      // M3 — purchases shift sales-count, which feeds the roundtable composite.
+      recomputeRoundtable().catch(() => null);
+      // First sale gets a persistent notification badge for the creator.
+      if (outcome.isFirstSaleForCreator) {
+        const { persistAndBroadcastNotification } = await import("./sphinxSynergy");
+        persistAndBroadcastNotification(outcome.listing.creatorId, {
+          type: "spc.first_sale",
+          title: `First sale — ${outcome.listing.title}`,
+          body: `Your SPC just made its first sale.`,
+          link: `/marketplace/${outcome.listing.id}`,
+          payload: { listingId: outcome.listing.id },
+        }).catch(() => null);
+      }
       // Enrich the listing with the same DRM envelope as GET /listings/:id so
       // the client's bodyLocked check immediately swaps the taxonomy panel for
       // the full prompt without needing a refetch.
@@ -1810,6 +1849,138 @@ export async function registerRoutes(
       return res.json(enriched);
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // ── M3 — Synergy engine, complementary pairs, ARK Roundtable, notifications
+  // ────────────────────────────────────────────────────────────────────
+
+  const synergyCalcSchema = z.object({
+    cardIds: z.array(z.string().min(1).max(64)).min(2).max(5),
+  });
+
+  // POST /api/sphinx/synergies/calculate — informational synergy preview.
+  // Synergy is NOT an ARK score writer in MVP. If/when we activate it, the
+  // emission MUST route through orchestrator → arkRecalc.applyCaps under the
+  // existing SPHINX +20/30d cap (see threat_model.md §Elevation of Privilege).
+  app.post("/api/sphinx/synergies/calculate", async (req, res) => {
+    try {
+      const parsed = synergyCalcSchema.parse(req.body);
+      const result = await calculateSynergy(parsed.cardIds);
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(400).json({ message: err.message });
+    }
+  });
+
+  // GET /api/sphinx/pairs/top — top-15 strongest synergy pairs platform-wide.
+  app.get("/api/sphinx/pairs/top", async (_req, res) => {
+    try {
+      const rows = await getTopPairsPlatform(15);
+      return res.json(rows);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // GET /api/sphinx/listings/:id/complementary — top-5 listing partners.
+  app.get("/api/sphinx/listings/:id/complementary", async (req, res) => {
+    try {
+      const id = String(req.params.id);
+      let pairs = await getComplementaryForListing(id);
+      // Lazy compute on first access if cache is cold.
+      if (pairs.length === 0) {
+        await recomputeComplementaryFor(id, 5);
+        pairs = await getComplementaryForListing(id);
+      }
+      const redacted = pairs.map((p) => p.partner ? ({
+        rank: p.rank,
+        score: p.score,
+        partner: { ...p.partner, body: "", bodyLocked: true, bodyLength: p.partner.body.length },
+      }) : null).filter(Boolean);
+      return res.json(redacted);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // GET /api/sphinx/roundtable — current Top-12 snapshot.
+  app.get("/api/sphinx/roundtable", async (_req, res) => {
+    try {
+      let snap = await getRoundtableSnapshot();
+      if (snap.length === 0) {
+        await recomputeRoundtable();
+        snap = await getRoundtableSnapshot();
+      }
+      // Enrich with listing + creator metadata.
+      const listingIds = Array.from(new Set(snap.map((s) => s.listingId)));
+      const creatorIds = Array.from(new Set(snap.map((s) => s.creatorId)));
+      const [listings, creators] = await Promise.all([
+        Promise.all(listingIds.map((id) => storage.getSpcListing(id))),
+        Promise.all(creatorIds.map((id) => storage.getUser(id))),
+      ]);
+      const lById = new Map(listings.filter(Boolean).map((l) => [l!.id, l!]));
+      const cById = new Map(creators.filter(Boolean).map((c) => [c!.id, c!]));
+      const enriched = snap.map((s) => {
+        const l = lById.get(s.listingId);
+        const cr = cById.get(s.creatorId);
+        return {
+          seatNumber: s.seatNumber,
+          score: Math.round(s.score),
+          hiveScore: Math.round(s.hiveScore),
+          salesCount: s.salesCount,
+          snapshotAt: s.snapshotAt,
+          listing: l ? { id: l.id, title: l.title, pillar: l.pillar, priceCredits: l.priceCredits, hiveScore: l.hiveScore } : null,
+          creator: cr ? { id: cr.id, name: cr.name } : null,
+        };
+      });
+      return res.json(enriched);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/sphinx/roundtable/recompute — admin-only manual trigger.
+  // Gate matches the canonical ADMIN_USER_ID pattern used by all other
+  // admin routes (e.g. /api/admin/ark/backfill at routes.ts:1179).
+  app.post("/api/sphinx/roundtable/recompute", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const adminId = process.env.ADMIN_USER_ID;
+      if (!adminId || userId !== adminId) {
+        return res.status(403).json({ message: "Admin only." });
+      }
+      const result = await recomputeRoundtable();
+      return res.json({ seats: result.seats.length, rotated: result.rotated });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Notifications inbox ───────────────────────────────
+  app.get("/api/notifications", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const [items, unread] = await Promise.all([
+        listNotifications(userId, 25),
+        countUnread(userId),
+      ]);
+      return res.json({ items, unread });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  const markReadSchema = z.object({ ids: z.array(z.string()).optional() });
+  app.post("/api/notifications/read", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const parsed = markReadSchema.parse(req.body ?? {});
+      const n = await markNotificationsRead(userId, parsed.ids);
+      return res.json({ marked: n });
+    } catch (err: any) {
+      return res.status(400).json({ message: err.message });
     }
   });
 
@@ -2289,12 +2460,19 @@ export async function registerRoutes(
       }
       cohortInfo.assignments = (await storage.getCohortAssignments(demoCohort.id)).length;
 
+      // ── M3 — Junglenomics 159-card expansion + ARK Roundtable warm-up ──
+      const jng = await seedJnomicsExpansion();
+      const rt = await recomputeRoundtable();
+
       return res.json({
         message: "Seed complete",
         ccgeCards: ccge.cards,
         ccgeScenarios: ccge.scenarios,
         spcListings: spcListingsCount,
         cohort: cohortInfo,
+        jnomicsCards: jng.cards,
+        cardSynergies: jng.synergies,
+        roundtableSeats: rt.seats.length,
       });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });

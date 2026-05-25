@@ -23,6 +23,7 @@ import { OnboardingTour } from "@/components/OnboardingTour";
 import { useOnboarding } from "@/lib/useOnboarding";
 import { useAuth } from "@/lib/useAuth";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { NotificationBell } from "@/components/layout/NotificationBell";
 
 const ADMIN_LINKS: NavItem[] = [
   { name: "CCGE Importer", href: "/admin/ccge-import", icon: Shield, hint: "Bulk-import compendium cards" },
@@ -60,6 +61,8 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { name: "Skill Games", href: "/play", icon: Gamepad2, hint: "CCGE Arena — earn points" },
       { name: "Marketplace", href: "/marketplace", icon: ShoppingBag, hint: "SPHINX listings" },
+      { name: "Roundtable", href: "/marketplace/roundtable", icon: Activity, hint: "Top-12 SPC leaderboard" },
+      { name: "Synergy Lab", href: "/marketplace/synergy", icon: HelpCircle, hint: "Test card combinations" },
       { name: "Career Mobility", href: "/pathways", icon: Map, hint: "Pivot opportunities" },
     ],
   },
@@ -246,6 +249,8 @@ export function AppLayout({ children }: AppLayoutProps) {
           <Activity className="h-6 w-6 text-primary animate-pulse" />
           <span className="font-display font-bold text-primary tracking-widest text-sm">ARK</span>
         </div>
+        <div className="flex items-center gap-2">
+          <NotificationBell />
         <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
           <SheetTrigger asChild>
             <button
@@ -261,6 +266,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             <SidebarBody location={location} openTour={open} onNavigate={() => setMobileNavOpen(false)} />
           </SheetContent>
         </Sheet>
+        </div>
       </header>
 
       {/* Desktop sidebar (>= md) */}
@@ -270,6 +276,10 @@ export function AppLayout({ children }: AppLayoutProps) {
 
       {/* Main Content */}
       <main className="flex-1 relative overflow-x-hidden">
+        {/* Desktop floating bell (>= sm) — sits in the top-right of the main column. */}
+        <div className="hidden sm:flex absolute top-4 right-4 z-30">
+          <NotificationBell />
+        </div>
         {/* Subtle decorative elements */}
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/3 pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-destructive/5 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/3 pointer-events-none" />
