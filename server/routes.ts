@@ -2731,5 +2731,88 @@ export async function registerRoutes(
     }
   });
 
+  // ── M5 — Matrix Forge Lab (.docx → HIVE pre-check) ─────────────────
+  const { isAllowedDocxMimetype, parseDocxBuffer, ForgeLabParseError, FORGE_LAB_MAX_BYTES } =
+    await import("./forgeLab");
+  const docxUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: FORGE_LAB_MAX_BYTES },
+    fileFilter: (_req, file, cb) => cb(null, isAllowedDocxMimetype(file.mimetype)),
+  });
+
+  app.post(
+    "/api/sphinx/forge-lab/run",
+    requireAuth,
+    docxUpload.single("docx"),
+    async (req, res) => {
+      try {
+        const file = (req as any).file as Express.Multer.File | undefined;
+        if (!file) return res.status(400).json({ message: "Upload a .docx file as 'docx'." });
+        const schema = z.object({
+          title: z.string().min(1).max(200),
+          description: z.string().min(1).max(500),
+          pillar: z.enum(ALL_CARD_PILLARS as unknown as [string, ...string[]]),
+        });
+        const meta = schema.safeParse(req.body);
+        if (!meta.success) {
+          return res.status(400).json({ message: "title, description, pillar required." });
+        }
+        const body = await parseDocxBuffer(file.buffer);
+        if (body.trim().length < 80) {
+          return res.status(400).json({ message: "Parsed prompt body is too short (min 80 chars)." });
+        }
+        const precheck = runHivePrecheck({
+          title: meta.data.title,
+          description: meta.data.description,
+          body,
+          pillar: meta.data.pillar,
+        });
+        return res.json({
+          body,
+          bodyLength: body.length,
+          fileName: file.originalname,
+          precheck,
+        });
+      } catch (err: any) {
+        if (err instanceof ForgeLabParseError) {
+          return res.status(err.status).json({ message: err.message });
+        }
+        if (err?.code === "LIMIT_FILE_SIZE") {
+          return res.status(413).json({ message: ".docx exceeds 5MB limit." });
+        }
+        console.error("Forge Lab error:", err);
+        return res.status(500).json({ message: err.message || "Forge Lab failed." });
+      }
+    },
+  );
+
+  // ── M5 — Bonsai onboarding progress ───────────────────────────────
+  const { getBonsaiProgressForUser, completeBonsaiStage } = await import("./bonsai");
+
+  app.get("/api/sphinx/bonsai/progress", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const progress = await getBonsaiProgressForUser(userId);
+      return res.json(progress);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post(
+    "/api/sphinx/bonsai/progress/:stageId/complete",
+    requireAuth,
+    async (req, res) => {
+      try {
+        const userId = currentUserId(req)!;
+        const stageId = parseInt(String(req.params.stageId), 10);
+        const updated = await completeBonsaiStage(userId, stageId);
+        return res.json(updated);
+      } catch (err: any) {
+        return res.status(err.status || 500).json({ message: err.message });
+      }
+    },
+  );
+
   return httpServer;
 }

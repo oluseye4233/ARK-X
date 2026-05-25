@@ -281,4 +281,31 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+
+  // ── M5 — Matrix Forge Lab (.docx) ──
+  runForgeLab: async (
+    file: File,
+    meta: { title: string; description: string; pillar: string },
+  ) => {
+    const fd = new FormData();
+    fd.append("docx", file);
+    fd.append("title", meta.title);
+    fd.append("description", meta.description);
+    fd.append("pillar", meta.pillar);
+    const res = await fetch("/api/sphinx/forge-lab/run", {
+      method: "POST",
+      body: fd,
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({ message: res.statusText }));
+      throw new Error(e.message || "Forge Lab failed.");
+    }
+    return res.json();
+  },
+
+  // ── M5 — Bonsai onboarding progress ──
+  getBonsaiProgress: () => apiRequest("/api/sphinx/bonsai/progress"),
+  completeBonsaiStage: (stageId: number) =>
+    apiRequest(`/api/sphinx/bonsai/progress/${stageId}/complete`, { method: "POST" }),
 };

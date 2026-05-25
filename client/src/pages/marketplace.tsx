@@ -55,6 +55,8 @@ import {
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { SpcTaxonomyPanel } from "@/components/marketplace/SpcTaxonomyPanel";
+import { ForgeLabPage } from "@/pages/marketplace-forge-lab";
+import { BonsaiPage } from "@/pages/marketplace-bonsai";
 
 const CATEGORY_FILTER = ["All", ...MARKETPLACE_CATEGORIES] as const;
 // M3 — 6-dim taxonomy filters (matches `server/jnomicsSeed.ts`).
@@ -924,6 +926,20 @@ function PublishPage() {
             </button>
           </Link>
         </div>
+
+        <Link href="/marketplace/bonsai" data-testid="link-publish-bonsai-cta">
+          <div className="glass-card p-6 rounded-xl border border-secondary/30 bg-secondary/5 hover:bg-secondary/10 transition-all cursor-pointer space-y-3">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">🌱</span>
+              <h3 className="font-display text-lg text-secondary uppercase tracking-wider">New seller? Start the Bonsai walkthrough</h3>
+            </div>
+            <p className="font-mono text-xs text-muted-foreground leading-relaxed">
+              The 18-stage Bonsai onboarding teaches you how to grow a publish-ready Super Prompt Card from
+              seed to canopy — no certification required.
+            </p>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-secondary">Open Bonsai →</span>
+          </div>
+        </Link>
       </div>
     );
   }
@@ -1168,17 +1184,23 @@ export default function MarketplacePage() {
   const [matchSynergy]    = useRoute("/marketplace/synergy");
   const [matchRoundtable] = useRoute("/marketplace/roundtable");
   const [matchSynthesis]  = useRoute("/marketplace/synthesis");
+  const [matchForgeLab]   = useRoute("/marketplace/forge-lab");
+  const [matchBonsai]     = useRoute("/marketplace/bonsai");
 
   if (matchPublish)    return <PublishPage />;
   if (matchSynergy)    return <SynergyLabPage />;
   if (matchRoundtable) return <RoundtablePage />;
   if (matchSynthesis)  return <SynthesisPage />;
+  if (matchForgeLab)   return <ForgeLabPage />;
+  if (matchBonsai)     return <BonsaiPage />;
   if (matchDetail && paramsDetail) {
     // Defensive guard for static slugs still hitting the :id route.
     if (paramsDetail.id === "publish")    return <PublishPage />;
     if (paramsDetail.id === "synergy")    return <SynergyLabPage />;
     if (paramsDetail.id === "roundtable") return <RoundtablePage />;
     if (paramsDetail.id === "synthesis")  return <SynthesisPage />;
+    if (paramsDetail.id === "forge-lab")  return <ForgeLabPage />;
+    if (paramsDetail.id === "bonsai")     return <BonsaiPage />;
     return <ListingDetail id={paramsDetail.id} />;
   }
   return <ListingsList />;

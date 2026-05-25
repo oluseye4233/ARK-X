@@ -51,6 +51,8 @@ function Router() {
         <Route path="/marketplace/synergy" component={MarketplacePage} />
         <Route path="/marketplace/roundtable" component={MarketplacePage} />
         <Route path="/marketplace/synthesis" component={MarketplacePage} />
+        <Route path="/marketplace/forge-lab" component={MarketplacePage} />
+        <Route path="/marketplace/bonsai" component={MarketplacePage} />
         <Route path="/marketplace/:id" component={MarketplacePage} />
         <Route path="/marketplace" component={MarketplacePage} />
         <Route path="/ark/history" component={ArkHistoryPage} />

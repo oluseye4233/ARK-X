@@ -67,6 +67,8 @@ const NAV_GROUPS: NavGroup[] = [
       { name: "Marketplace", href: "/marketplace", icon: ShoppingBag, hint: "SPHINX listings" },
       { name: "Roundtable", href: "/marketplace/roundtable", icon: Activity, hint: "Top-12 SPC leaderboard" },
       { name: "Synergy Lab", href: "/marketplace/synergy", icon: HelpCircle, hint: "Test card combinations" },
+      { name: "Forge Lab", href: "/marketplace/forge-lab", icon: Upload, hint: "Upload .docx → HIVE pre-check" },
+      { name: "Bonsai Onboarding", href: "/marketplace/bonsai", icon: GraduationCap, hint: "18-stage seller walkthrough" },
       { name: "Career Mobility", href: "/pathways", icon: Map, hint: "Pivot opportunities" },
     ],
   },
