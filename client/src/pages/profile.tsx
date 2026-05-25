@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/useAuth";
 import { api } from "@/lib/api";
-import { SUBSCRIPTION_PLANS, CONTEXT_CRAFT_LEVELS, formatPriceUsd, type SubscriptionPlan, type ContextCraftLevel, type UserCredits } from "@shared/schema";
+import { SUBSCRIPTION_PLANS, CONTEXT_CRAFT_LEVELS, formatPriceDual, type SubscriptionPlan, type ContextCraftLevel, type UserCredits } from "@shared/schema";
 import { GuinProfileView } from "./guin-public";
 import {
   User,
@@ -230,31 +230,21 @@ export default function ProfilePage() {
                 <ShoppingBag className="h-5 w-5 text-primary" />
                 <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">SPHINX Marketplace</span>
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-[9px] uppercase font-mono tracking-widest text-muted-foreground">Credits</div>
                   <div className="flex items-center gap-1.5">
                     <Coins className="h-4 w-4 text-amber-400" />
-                    <span className="font-display font-bold text-xl text-amber-400" data-testid="text-profile-credits">
-                      {credits ? credits.balance : "—"}
+                    <span className="font-display font-bold text-base text-amber-400" data-testid="text-profile-credits">
+                      {credits ? formatPriceDual(credits.balance) : "—"}
                     </span>
                   </div>
-                  {credits && (
-                    <div className="text-[9px] font-mono text-muted-foreground mt-0.5" data-testid="text-profile-credits-usd">
-                      {formatPriceUsd(credits.balance)}
-                    </div>
-                  )}
                 </div>
                 <div>
                   <div className="text-[9px] uppercase font-mono tracking-widest text-muted-foreground">Earned</div>
-                  <div className="font-display font-bold text-xl text-secondary" data-testid="text-profile-earned">
-                    {sales ? sales.totalEarned : "—"}
+                  <div className="font-display font-bold text-base text-secondary" data-testid="text-profile-earned">
+                    {sales ? formatPriceDual(sales.totalEarned) : "—"}
                   </div>
-                  {sales && (
-                    <div className="text-[9px] font-mono text-muted-foreground mt-0.5" data-testid="text-profile-earned-usd">
-                      {formatPriceUsd(sales.totalEarned)}
-                    </div>
-                  )}
                 </div>
                 <div>
                   <div className="text-[9px] uppercase font-mono tracking-widest text-muted-foreground">Sales</div>

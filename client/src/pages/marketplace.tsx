@@ -13,7 +13,6 @@ import {
   SPC_CREATOR_SHARE_PCT,
   SPC_PLATFORM_SHARE_PCT,
   formatPriceDual,
-  formatPriceUsd,
   type ContextCraftLevel,
   type SpcListing,
   type UserCredits,
@@ -67,14 +66,9 @@ function CreditsHeader({ user }: { user: { id: string; name: string } }) {
       <Coins className="h-5 w-5 text-amber-400" />
       <div className="flex flex-col">
         <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-mono">Credits</span>
-        <span className="font-mono text-lg font-bold text-amber-400" data-testid="text-credits-balance">
-          {credits ? credits.balance : "—"}
+        <span className="font-mono text-base font-bold text-amber-400" data-testid="text-credits-balance">
+          {credits ? formatPriceDual(credits.balance) : "—"}
         </span>
-        {credits && (
-          <span className="font-mono text-[9px] text-muted-foreground" data-testid="text-credits-balance-usd">
-            {formatPriceUsd(credits.balance)}
-          </span>
-        )}
       </div>
     </div>
   );
@@ -186,15 +180,10 @@ function ListingsList() {
                 >
                   <div className="flex items-start justify-between gap-2 pr-9">
                     <PillarBadge pillar={l.pillar} />
-                    <div className="flex flex-col items-end gap-0.5 px-2 py-1 rounded bg-amber-400/10 border border-amber-400/30">
-                      <div className="flex items-center gap-1.5">
-                        <Coins className="h-3.5 w-3.5 text-amber-400" />
-                        <span className="font-mono text-sm font-bold text-amber-400" data-testid={`text-price-${l.id}`}>
-                          {l.priceCredits} cr
-                        </span>
-                      </div>
-                      <span className="font-mono text-[9px] text-muted-foreground" data-testid={`text-price-usd-${l.id}`}>
-                        {formatPriceUsd(l.priceCredits)}
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-amber-400/10 border border-amber-400/30">
+                      <Coins className="h-3.5 w-3.5 text-amber-400" />
+                      <span className="font-mono text-xs font-bold text-amber-400" data-testid={`text-price-${l.id}`}>
+                        {formatPriceDual(l.priceCredits)}
                       </span>
                     </div>
                   </div>
@@ -333,15 +322,10 @@ function ListingDetail({ id }: { id: string }) {
             </p>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <div className="flex flex-col items-end gap-1 px-4 py-3 rounded-lg bg-amber-400/10 border border-amber-400/30">
-              <div className="flex items-center gap-2">
-                <Coins className="h-5 w-5 text-amber-400" />
-                <span className="font-mono text-2xl font-bold text-amber-400" data-testid="text-listing-price">
-                  {listing.priceCredits} cr
-                </span>
-              </div>
-              <span className="font-mono text-xs text-muted-foreground" data-testid="text-listing-price-usd">
-                {formatPriceUsd(listing.priceCredits)} USD
+            <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-amber-400/10 border border-amber-400/30">
+              <Coins className="h-5 w-5 text-amber-400" />
+              <span className="font-mono text-lg font-bold text-amber-400" data-testid="text-listing-price">
+                {formatPriceDual(listing.priceCredits)}
               </span>
             </div>
           </div>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useRoute, Link } from "wouter";
 import { motion } from "framer-motion";
-import { formatPriceUsd } from "@shared/schema";
+import { formatPriceDual } from "@shared/schema";
 import {
   Radar,
   RadarChart,
@@ -271,9 +271,8 @@ export function GuinProfileView({ profile, viewerCanEndorse, onEndorse }: {
                     </div>
                   </div>
                   <div className="text-right ml-3">
-                    <div className="font-display font-bold text-base text-amber-400">{s.priceCredits} cr</div>
-                    <div className="text-[9px] uppercase font-mono tracking-widest text-muted-foreground">
-                      {formatPriceUsd(s.priceCredits)}
+                    <div className="font-display font-bold text-sm text-amber-400" data-testid={`text-published-spc-price-${s.id}`}>
+                      {formatPriceDual(s.priceCredits)}
                     </div>
                   </div>
                 </div>
