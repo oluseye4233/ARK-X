@@ -105,19 +105,6 @@ function SidebarBody({ location, openTour, onNavigate }: {
           <h1 className="text-xl font-display font-bold text-primary tracking-widest leading-none">ARK</h1>
           <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-mono">Synthesized Intel</p>
         </div>
-        <div className="ml-auto flex items-center gap-2 pl-2 border-l border-white/10">
-          <img
-            src={atandaLogo}
-            alt="ATANDA"
-            data-testid="img-atanda-logo"
-            className="h-9 w-9 object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.15)]"
-          />
-          <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-mono leading-none">
-            <span className="text-white font-bold">ATANDA</span>
-            <br />
-            <span className="text-[8px]">Studio</span>
-          </span>
-        </div>
       </div>
 
       <nav className="px-4 py-4 flex-1 overflow-y-auto" aria-label="Primary">
@@ -242,9 +229,14 @@ function SidebarBody({ location, openTour, onNavigate }: {
             ONLINE
           </span>
         </div>
-        <div className="flex flex-col items-center gap-1 pt-2 border-t border-white/5">
+        <div className="flex flex-col items-center gap-2 pt-3 border-t border-white/5">
           <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60 font-mono">Powered By</span>
-          <img src={atandaLogo} alt="Atanda" className="h-9 w-auto object-contain opacity-80 hover:opacity-100 transition-opacity" data-testid="img-powered-by-atanda" />
+          <img
+            src={atandaLogo}
+            alt="Atanda"
+            data-testid="img-powered-by-atanda"
+            className="h-24 w-auto object-contain drop-shadow-[0_0_12px_rgba(255,255,255,0.18)] hover:scale-[1.04] transition-transform"
+          />
         </div>
       </div>
     </div>
