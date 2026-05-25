@@ -239,9 +239,9 @@ export function AppLayout({ children }: AppLayoutProps) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-background">
+    <div className="min-h-screen flex flex-col sm:flex-row bg-background">
       {/* Mobile top bar (< md): hamburger drawer */}
-      <header className="md:hidden sticky top-0 z-30 flex items-center justify-between px-4 py-3 border-b border-primary/20 bg-background/90 backdrop-blur-md">
+      <header className="sm:hidden sticky top-0 z-30 flex items-center justify-between px-4 py-3 border-b border-primary/20 bg-background/90 backdrop-blur-md">
         <div className="flex items-center gap-2">
           <Activity className="h-6 w-6 text-primary animate-pulse" />
           <span className="font-display font-bold text-primary tracking-widest text-sm">ARK</span>
@@ -264,7 +264,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       </header>
 
       {/* Desktop sidebar (>= md) */}
-      <aside className="hidden md:flex md:w-64 lg:w-72 glass border-r border-primary/20 flex-shrink-0 z-10 sticky top-0 h-screen">
+      <aside className="hidden sm:flex sm:w-56 md:w-64 lg:w-72 glass border-r border-primary/20 flex-shrink-0 z-10 sticky top-0 h-screen">
         <SidebarBody location={location} openTour={open} />
       </aside>
 
