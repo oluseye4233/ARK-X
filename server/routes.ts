@@ -1687,11 +1687,23 @@ export async function registerRoutes(
   });
 
   // ── SPHINX AI Analysis (M3 / M15 / M20) ─────────────────
+  // Access control: only the creator or a confirmed buyer may run AI
+  // analysis. The endpoint feeds the full prompt body to Claude, and the
+  // system prompt instructs the model to quote prompt wording — so any
+  // non-buyer access would leak paid content. Mirrors the body-gate on
+  // GET /api/sphinx/listings/:id.
   app.post("/api/sphinx/listings/:id/ai-analysis", requireAuth, async (req, res) => {
     try {
       const userId = currentUserId(req)!;
       const listing = await storage.getSpcListing(String(req.params.id));
       if (!listing) return res.status(404).json({ message: "Listing not found." });
+      const isCreator = listing.creatorId === userId;
+      const hasPurchased = isCreator ? true : await storage.hasBuyerPurchasedListing(userId, listing.id);
+      if (!isCreator && !hasPurchased) {
+        return res.status(403).json({
+          message: "AI Analysis is only available to the creator or buyers of this listing.",
+        });
+      }
       const user = await storage.getUser(userId);
       const plan = (user?.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
       const analysis = await analyzeSpcListing({ userId, plan, listing });
