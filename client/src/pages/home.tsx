@@ -29,6 +29,20 @@ export default function Home() {
 
       <div className="relative max-w-5xl mx-auto flex flex-col justify-center min-h-[80vh] space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="space-y-6">
+        {/* Declarative manifesto banner — top-of-page positioning statement. */}
+        <div
+          data-testid="banner-manifesto"
+          className="relative rounded-lg border border-primary/40 bg-gradient-to-r from-primary/10 via-fuchsia-500/5 to-secondary/10 px-5 py-4 shadow-[0_0_30px_hsl(var(--primary)/0.15)]"
+        >
+          <span aria-hidden="true" className="absolute left-0 top-0 bottom-0 w-[3px] bg-gradient-to-b from-primary via-fuchsia-400 to-secondary" />
+          <p className="font-display font-bold text-sm sm:text-base md:text-lg tracking-wide leading-snug text-white uppercase">
+            We don't build AI agents.{" "}
+            <span className="text-primary neon-text">We engineer the DNA that governs them</span>
+            {" "}— powered by your cognition,{" "}
+            <span className="text-secondary">owned by you.</span>
+          </p>
+        </div>
+
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-primary/30 bg-primary/5 text-primary text-xs font-mono uppercase tracking-widest">
           <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
           System Initialization Complete
