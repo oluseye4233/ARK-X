@@ -1,18 +1,20 @@
 /**
  * ZPOS — Zero-loss Prompt Optimization Suite.
  *
- * Five compression methods. All are deterministic, dependency-free, and
- * server-side. Token counts use a heuristic (~4 chars/token) — close enough
- * to a real tokenizer for the UI's reduction-% display and for the cap
- * accounting (which only cares about the relative shrink).
+ * Five deterministic compression methods, all server-side.
  *
  *   PRISM     — line-level deduplication of identical/near-identical lines
  *   SYNTHESIS — merge consecutive paragraphs that share a leading verb
  *   AEOS      — abbreviate repeated multi-word phrases via numeric refs
  *   NEXUS     — cross-reference linker: collapse repeated identifiers
  *   QUANTUM   — aggressive whitespace + filler-word stripping
+ *
+ * Token counts use the real cl100k_base BPE tokenizer (GPT-4 family) via
+ * `gpt-tokenizer`, so pre/post token deltas reflect actual model usage,
+ * not a chars/4 heuristic.
  */
 import { ZPOS_METHODS, type ZposMethod } from "@shared/schema";
+import { encode as encodeCl100k } from "gpt-tokenizer/encoding/cl100k_base";
 
 export type ZposResult = {
   method: ZposMethod;
@@ -31,10 +33,18 @@ const FILLER_WORDS = new Set([
 
 const STOP_PREAMBLE_RE = /^(please|kindly|i would like you to|i want you to)\s+/gi;
 
+/** Real-tokenizer token count via the cl100k_base BPE encoder (the same
+ *  encoding family used by GPT-4 / Claude-class models for English prose).
+ *  Falls back to a chars/4 heuristic only if the encoder throws on exotic
+ *  input — keeps the route resilient. */
 export function estimateTokens(text: string): number {
-  // OpenAI-style ~4 chars/token heuristic. Conservative for English prose.
   if (!text) return 0;
-  return Math.max(1, Math.ceil(text.length / 4));
+  try {
+    const n = encodeCl100k(text).length;
+    return Math.max(1, n);
+  } catch {
+    return Math.max(1, Math.ceil(text.length / 4));
+  }
 }
 
 function normaliseWhitespace(s: string): string {

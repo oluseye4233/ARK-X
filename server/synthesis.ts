@@ -24,6 +24,7 @@ import {
   userCredits,
   synthesisSessions,
   synthesisCreatorsSplit,
+  platformCreditLedger,
   SPC_CREATOR_SHARE_PCT,
   SPC_STARTING_CREDITS,
   type SynthesisSession,
@@ -216,6 +217,18 @@ export async function finalizeSynthesisSession(args: {
       weightBp: Math.round((s.sourcePriceCredits / weightSum) * 10000),
       creditedAmount: s.creditedAmount,
     })));
+
+    // Persist the platform 30% share in the platform credit ledger so the
+    // full creator + platform debit is auditable on-disk and reconciles
+    // exactly to buyer.totalCreditPrice. Unique index on (source, sourceRefId)
+    // makes this idempotent if the same session is somehow re-finalized.
+    if (platformShare > 0) {
+      await tx.insert(platformCreditLedger).values({
+        source: "synthesis",
+        sourceRefId: session.id,
+        amount: platformShare,
+      }).onConflictDoNothing();
+    }
 
     const [finalized] = await tx.update(synthesisSessions)
       .set({ status: "finalized", finalizedAt: new Date() })

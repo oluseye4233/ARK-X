@@ -1324,6 +1324,21 @@ export const synthesisCreatorsSplit = pgTable(
 );
 export type SynthesisCreatorSplit = typeof synthesisCreatorsSplit.$inferSelect;
 
+// Platform credit pool ledger — one row per finalized synthesis (and any
+// other future platform-fee source). Persists the 30% platform share so
+// creator splits + platform credits always sum to buyer debit on-disk,
+// not just in memory.
+export const platformCreditLedger = pgTable("platform_credit_ledger", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  source: text("source").notNull(), // e.g. "synthesis"
+  sourceRefId: varchar("source_ref_id").notNull(), // sessionId
+  amount: integer("amount").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  sourceRefIdx: uniqueIndex("platform_credit_source_ref_uniq").on(t.source, t.sourceRefId),
+}));
+export type PlatformCreditLedger = typeof platformCreditLedger.$inferSelect;
+
 // ── Bonsai onboarding progress (M9 / M14) ───────────────────────────
 // One row per user; tracks 18-stage seller-onboarding walkthrough.
 export const bonsaiProgress = pgTable("bonsai_progress", {

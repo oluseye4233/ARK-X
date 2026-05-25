@@ -2004,7 +2004,19 @@ export async function registerRoutes(
     zposMethod: z.enum(ZPOS_METHOD_LIST as readonly [string, ...string[]]).optional(),
   });
 
-  const redactSynthesisBody = (s: any) => ({ ...s, combinedOutput: "", bodyLocked: true, bodyLength: s.combinedOutput?.length ?? 0 });
+  // DRM gate — full `combinedOutput` is ONLY returned to the originating
+  // buyer AFTER the session is finalized (and the credit debit + royalties
+  // have been written). In preview state we return locked metadata only,
+  // so the synthesized prompt is never accessible pre-purchase.
+  const presentSynthesis = (s: any) => {
+    const isUnlocked = s.status === "finalized";
+    return {
+      ...s,
+      combinedOutput: isUnlocked ? s.combinedOutput : "",
+      bodyLocked: !isUnlocked,
+      bodyLength: s.combinedOutput?.length ?? 0,
+    };
+  };
 
   // POST /api/sphinx/synthesis/sessions — create a preview session.
   // Routes are mounted under /api/sphinx — declared BEFORE /listings/:id
@@ -2017,7 +2029,7 @@ export async function registerRoutes(
       const session = await createSynthesisSession({
         buyerId, listingIds: parsed.listingIds, zposMethod: parsed.zposMethod as any,
       });
-      return res.json(session);
+      return res.json(presentSynthesis(session));
     } catch (err: any) {
       const status = err instanceof SynthesisError ? err.status : 400;
       return res.status(status).json({ message: err.message });
@@ -2031,7 +2043,7 @@ export async function registerRoutes(
       const buyerId = currentUserId(req)!;
       const session = await getSessionForBuyer(String(req.params.id), buyerId);
       if (!session) return res.status(404).json({ message: "Session not found." });
-      return res.json({ ...session, bodyLocked: false, bodyLength: session.combinedOutput.length });
+      return res.json(presentSynthesis(session));
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
@@ -2080,7 +2092,7 @@ export async function registerRoutes(
 
       return res.json({
         ...outcome,
-        session: { ...outcome.session, bodyLocked: false, bodyLength: outcome.session.combinedOutput.length },
+        session: presentSynthesis(outcome.session),
       });
     } catch (err: any) {
       console.error("Synthesis finalize error:", err);
