@@ -1862,9 +1862,16 @@ function SynthesisPage() {
           </div>
 
           {session.status === "preview" && (
-            <div className="p-3 rounded border border-amber-400/30 bg-amber-400/5 text-amber-400 font-mono text-xs flex items-center gap-2" data-testid="text-locked-preview">
-              <Lock className="h-3.5 w-3.5" />
-              Compressed prompt is locked — finalize for {session.totalCreditPrice} cr to unlock the full body.
+            <div className="space-y-2">
+              <div className="text-[10px] uppercase font-mono tracking-widest text-muted-foreground">Compressed prompt preview</div>
+              <pre className="glass-card p-3 rounded border border-primary/20 text-[11px] text-white/80 font-mono whitespace-pre-wrap max-h-40 overflow-y-auto" data-testid="text-combined-preview">
+                {(session as any).previewSnippet || ""}
+                {(session as any).previewTruncated ? " …" : ""}
+              </pre>
+              <div className="p-2.5 rounded border border-amber-400/30 bg-amber-400/5 text-amber-400 font-mono text-[11px] flex items-center gap-2" data-testid="text-locked-preview">
+                <Lock className="h-3.5 w-3.5" />
+                Full compressed body locked — finalize for {session.totalCreditPrice} cr to unlock.
+              </div>
             </div>
           )}
           {session.status === "finalized" && session.combinedOutput && (

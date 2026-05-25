@@ -1999,22 +1999,58 @@ export async function registerRoutes(
   } = await import("./synthesis");
   const { ZPOS_METHODS: ZPOS_METHOD_LIST } = await import("@shared/schema");
 
+  // Accepts `cardIds[]` (spec) or `listingIds[]` (legacy alias) — same
+  // semantic. Schema normalises to `listingIds` for downstream consumers.
   const synthesisCreateSchema = z.object({
-    listingIds: z.array(z.string().min(1)).min(2).max(7),
+    cardIds: z.array(z.string().min(1)).min(2).max(7).optional(),
+    listingIds: z.array(z.string().min(1)).min(2).max(7).optional(),
     zposMethod: z.enum(ZPOS_METHOD_LIST as readonly [string, ...string[]]).optional(),
-  });
+  }).refine((d) => !!(d.cardIds?.length || d.listingIds?.length), {
+    message: "cardIds (or listingIds) is required.",
+  }).transform((d) => ({
+    listingIds: (d.cardIds ?? d.listingIds)!,
+    zposMethod: d.zposMethod,
+  }));
 
-  // DRM gate — full `combinedOutput` is ONLY returned to the originating
-  // buyer AFTER the session is finalized (and the credit debit + royalties
-  // have been written). In preview state we return locked metadata only,
-  // so the synthesized prompt is never accessible pre-purchase.
-  const presentSynthesis = (s: any) => {
-    const isUnlocked = s.status === "finalized";
+  // DRM gate. Three views of a synthesis session:
+  //   1. Originating buyer, status === "finalized" → full combinedOutput.
+  //   2. Originating buyer, status === "preview"   → SHORT truncated
+  //      compressed preview (so they can decide before paying) +
+  //      bodyLocked: true on the full body.
+  //   3. Anyone else                               → locked taxonomy panel
+  //      (metadata + split summary, NO body, NO locked prices).
+  const SYNTH_PREVIEW_CHARS = 280;
+  const presentSynthesis = (s: any, viewerId: string) => {
+    const isOwner = s.buyerId === viewerId;
+    const isUnlocked = isOwner && s.status === "finalized";
+    if (isOwner) {
+      return {
+        ...s,
+        combinedOutput: isUnlocked ? s.combinedOutput : "",
+        previewSnippet: isUnlocked
+          ? null
+          : (s.combinedOutput?.slice(0, SYNTH_PREVIEW_CHARS) ?? ""),
+        previewTruncated: !isUnlocked && (s.combinedOutput?.length ?? 0) > SYNTH_PREVIEW_CHARS,
+        bodyLocked: !isUnlocked,
+        bodyLength: s.combinedOutput?.length ?? 0,
+      };
+    }
+    // Non-buyer locked taxonomy view — exposes shape + ZPOS metadata only.
     return {
-      ...s,
-      combinedOutput: isUnlocked ? s.combinedOutput : "",
-      bodyLocked: !isUnlocked,
+      id: s.id,
+      status: s.status,
+      sourceListingIds: s.sourceListingIds,
+      zposMethod: s.zposMethod,
+      preTokens: s.preTokens,
+      postTokens: s.postTokens,
+      reductionPct: s.reductionPct,
+      semanticPreservation: s.semanticPreservation,
+      totalCreditPrice: s.totalCreditPrice,
+      createdAt: s.createdAt,
+      finalizedAt: s.finalizedAt,
+      bodyLocked: true,
       bodyLength: s.combinedOutput?.length ?? 0,
+      restricted: true,
     };
   };
 
@@ -2029,7 +2065,7 @@ export async function registerRoutes(
       const session = await createSynthesisSession({
         buyerId, listingIds: parsed.listingIds, zposMethod: parsed.zposMethod as any,
       });
-      return res.json(presentSynthesis(session));
+      return res.json(presentSynthesis(session, buyerId));
     } catch (err: any) {
       const status = err instanceof SynthesisError ? err.status : 400;
       return res.status(status).json({ message: err.message });
@@ -2040,10 +2076,11 @@ export async function registerRoutes(
   // sees the full combined body; everyone else gets redacted metadata.
   app.get("/api/sphinx/synthesis/sessions/:id", requireAuth, async (req, res) => {
     try {
-      const buyerId = currentUserId(req)!;
-      const session = await getSessionForBuyer(String(req.params.id), buyerId);
+      const viewerId = currentUserId(req)!;
+      const { getSynthesisSessionAny } = await import("./synthesis");
+      const session = await getSynthesisSessionAny(String(req.params.id));
       if (!session) return res.status(404).json({ message: "Session not found." });
-      return res.json(presentSynthesis(session));
+      return res.json(presentSynthesis(session, viewerId));
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
@@ -2092,7 +2129,7 @@ export async function registerRoutes(
 
       return res.json({
         ...outcome,
-        session: presentSynthesis(outcome.session),
+        session: presentSynthesis(outcome.session, buyerId),
       });
     } catch (err: any) {
       console.error("Synthesis finalize error:", err);

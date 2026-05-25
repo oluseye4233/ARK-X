@@ -284,3 +284,10 @@ export async function getSessionForBuyer(sessionId: string, buyerId: string): Pr
   if (row.buyerId !== buyerId) return null;
   return row;
 }
+
+/** Returns a session for any authenticated viewer; the route layer is
+ *  responsible for redacting non-owner views via `presentSynthesis`. */
+export async function getSynthesisSessionAny(sessionId: string): Promise<SynthesisSession | null> {
+  const [row] = await db.select().from(synthesisSessions).where(eq(synthesisSessions.id, sessionId));
+  return row ?? null;
+}
