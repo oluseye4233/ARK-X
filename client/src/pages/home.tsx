@@ -69,12 +69,34 @@ export default function Home() {
           ))}
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-4 pt-4">
-          <Link href="/upload" data-testid="button-start-assessment" className="inline-flex items-center justify-center bg-primary hover:bg-primary/90 text-primary-foreground font-mono uppercase tracking-wider rounded-none neon-border h-14 px-8 transition-all hover:scale-[1.02] text-sm font-medium">
-            Initialize Analysis <ArrowRight className="ml-2 h-5 w-5" />
-          </Link>
-          <Link href="/login" data-testid="button-view-demo" className="inline-flex items-center justify-center font-mono uppercase tracking-wider rounded-none border border-primary/50 text-primary hover:bg-primary/10 h-14 px-8 transition-all hover:scale-[1.02] text-sm font-medium">
-            Enterprise Login
+        {/* Hero CTA — centered, throbbing, glowing. Enterprise login demoted
+            to a secondary link below so user attention lands on Initialize. */}
+        <div className="flex flex-col items-center gap-4 pt-6">
+          <div className="relative group">
+            {/* Outer pulse ring */}
+            <span
+              aria-hidden="true"
+              className="absolute -inset-3 rounded-full bg-primary/30 blur-2xl animate-ping-slow pointer-events-none"
+            />
+            {/* Inner steady glow */}
+            <span
+              aria-hidden="true"
+              className="absolute -inset-1 rounded-full bg-primary/40 blur-xl pointer-events-none"
+            />
+            <Link
+              href="/upload"
+              data-testid="button-start-assessment"
+              className="relative inline-flex items-center justify-center bg-primary hover:bg-primary/90 text-primary-foreground font-mono uppercase tracking-wider rounded-none neon-border h-16 px-12 transition-all hover:scale-[1.04] text-base font-bold shadow-[0_0_30px_hsl(var(--primary)/0.6)] animate-throb-glow"
+            >
+              Initialize Analysis <ArrowRight className="ml-3 h-6 w-6" />
+            </Link>
+          </div>
+          <Link
+            href="/login"
+            data-testid="button-view-demo"
+            className="text-xs font-mono uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
+          >
+            Or use enterprise login →
           </Link>
         </div>
       </div>
