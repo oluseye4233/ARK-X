@@ -10,7 +10,7 @@ const _filename = typeof __filename !== "undefined"
     ? fileURLToPath((import.meta as any).url)
     : process.cwd() + "/index.js";
 const _require = createRequire(_filename);
-const pdfParse = _require("pdf-parse");
+const { PDFParse } = _require("pdf-parse") as { PDFParse: new (opts: { data: Uint8Array }) => { getText: () => Promise<{ text: string }> } };
 import { storage } from "./storage";
 import { analyzeResume } from "./resumeAnalyzer";
 import { requireAuth, requireSelf, requireInstructor, currentUserId, loginSession } from "./auth";
@@ -742,7 +742,8 @@ export async function registerRoutes(
         });
         let pdfData: { text: string };
         try {
-          pdfData = await Promise.race([pdfParse(file.buffer), pdfTimeout]);
+          const parser = new PDFParse({ data: new Uint8Array(file.buffer) });
+          pdfData = await Promise.race([parser.getText(), pdfTimeout]);
           clearTimeout(pdfTimeoutHandle);
         } catch (parseErr: any) {
           clearTimeout(pdfTimeoutHandle);
