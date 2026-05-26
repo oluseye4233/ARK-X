@@ -28,10 +28,12 @@ import { useNotificationStream, type ArkRoundtableEvent } from "@/lib/useArkStre
 import { useToast } from "@/hooks/use-toast";
 import { useCallback } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { FEATURES } from "@shared/featureFlags";
 
-const ADMIN_LINKS: NavItem[] = [
-  { name: "CCGE Importer", href: "/admin/ccge-import", icon: Shield, hint: "Bulk-import compendium cards" },
+const ALL_ADMIN_LINKS: { item: NavItem; flag: keyof typeof FEATURES | null }[] = [
+  { item: { name: "CCGE Importer", href: "/admin/ccge-import", icon: Shield, hint: "Bulk-import compendium cards" }, flag: "adminCcgeImport" },
 ];
+const ADMIN_LINKS: NavItem[] = ALL_ADMIN_LINKS.filter(x => x.flag === null || FEATURES[x.flag]).map(x => x.item);
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -51,40 +53,52 @@ interface NavGroup {
 
 // Grouped navigation — three intent buckets reduce the wall-of-links
 // problem and let new users find Upload CV / Intelligence Hub quickly.
-const NAV_GROUPS: NavGroup[] = [
+// Nav items are filtered by the feature-flag map below — every item is paired
+// with the flag that controls it, or `null` for always-on MVP surfaces.
+interface FlaggedNavItem extends NavItem { flag: keyof typeof FEATURES | null }
+interface FlaggedNavGroup { label: string; items: FlaggedNavItem[] }
+
+const ALL_NAV_GROUPS: FlaggedNavGroup[] = [
   {
     label: "Analyze",
     items: [
-      { name: "Home", href: "/", icon: HomeIcon, hint: "Landing & overview" },
-      { name: "Upload CV", href: "/upload", icon: Upload, hint: "Run a new assessment" },
-      { name: "Intelligence Hub", href: "/dashboard", icon: BarChart3, hint: "Your scores & insights" },
+      { name: "Home", href: "/", icon: HomeIcon, hint: "Landing & overview", flag: null },
+      { name: "Upload CV", href: "/upload", icon: Upload, hint: "Run a new assessment", flag: null },
+      { name: "Intelligence Hub", href: "/dashboard", icon: BarChart3, hint: "Your scores & insights", flag: null },
     ],
   },
   {
     label: "Explore",
     items: [
-      { name: "Skill Games", href: "/play", icon: Gamepad2, hint: "CCGE Arena — earn points" },
-      { name: "Marketplace", href: "/marketplace", icon: ShoppingBag, hint: "SPHINX listings" },
-      { name: "Roundtable", href: "/marketplace/roundtable", icon: Activity, hint: "Top-12 SPC leaderboard" },
-      { name: "Synergy Lab", href: "/marketplace/synergy", icon: HelpCircle, hint: "Test card combinations" },
-      { name: "Forge Lab", href: "/marketplace/forge-lab", icon: Upload, hint: "Upload .docx → HIVE pre-check" },
-      { name: "Bonsai Onboarding", href: "/marketplace/bonsai", icon: GraduationCap, hint: "18-stage seller walkthrough" },
-      { name: "Career Mobility", href: "/pathways", icon: Map, hint: "Pivot opportunities" },
+      { name: "Skill Games", href: "/play", icon: Gamepad2, hint: "CCGE Arena — earn points", flag: null },
+      { name: "Marketplace", href: "/marketplace", icon: ShoppingBag, hint: "SPHINX listings", flag: null },
+      { name: "Roundtable", href: "/marketplace/roundtable", icon: Activity, hint: "Top-12 SPC leaderboard", flag: "sphinxAdvanced" },
+      { name: "Synergy Lab", href: "/marketplace/synergy", icon: HelpCircle, hint: "Test card combinations", flag: "sphinxAdvanced" },
+      { name: "Forge Lab", href: "/marketplace/forge-lab", icon: Upload, hint: "Upload .docx → HIVE pre-check", flag: "forgeLabDocx" },
+      { name: "Bonsai Onboarding", href: "/marketplace/bonsai", icon: GraduationCap, hint: "18-stage seller walkthrough", flag: null },
+      { name: "Career Mobility", href: "/pathways", icon: Map, hint: "Pivot opportunities", flag: null },
     ],
   },
   {
     label: "Manage",
     items: [
-      { name: "Workforce", href: "/enterprise", icon: Users, hint: "Org-wide view" },
+      { name: "Workforce", href: "/enterprise", icon: Users, hint: "Org-wide view", flag: "enterpriseDashboard" },
     ],
   },
 ];
 
-const SECONDARY_LINKS: NavItem[] = [
-  { name: "Profile", href: "/profile", icon: User, hint: "Account" },
-  { name: "Institution", href: "/school", icon: GraduationCap, hint: "School dashboard" },
-  { name: "Subscription", href: "/subscription", icon: CreditCard, hint: "Plans & billing" },
+// Filter out items whose flag is off; drop groups that end up empty.
+const NAV_GROUPS: NavGroup[] = ALL_NAV_GROUPS
+  .map(g => ({ label: g.label, items: g.items.filter(i => i.flag === null || FEATURES[i.flag]) }))
+  .filter(g => g.items.length > 0);
+
+const ALL_SECONDARY_LINKS: FlaggedNavItem[] = [
+  { name: "Profile", href: "/profile", icon: User, hint: "Account", flag: null },
+  { name: "Institution", href: "/school", icon: GraduationCap, hint: "School dashboard", flag: "cohorts" },
+  { name: "Subscription", href: "/subscription", icon: CreditCard, hint: "Plans & billing", flag: null },
 ];
+
+const SECONDARY_LINKS: NavItem[] = ALL_SECONDARY_LINKS.filter(i => i.flag === null || FEATURES[i.flag]);
 
 function isActiveHref(location: string, href: string): boolean {
   return location === href || (href !== "/" && location.startsWith(href + "/"));
@@ -272,7 +286,9 @@ export function AppLayout({ children }: AppLayoutProps) {
     // Auto-dismiss after 8s regardless of the global TOAST_REMOVE_DELAY.
     setTimeout(() => { try { t.dismiss(); } catch {} }, 8000);
   }, [toast, user?.id]);
-  useNotificationStream(!!user?.id, undefined, onSeat);
+  // Notifications surface is CLASS C — only subscribe when the flag is on,
+  // otherwise we'd open a doomed EventSource against a flagged-off endpoint.
+  useNotificationStream(!!user?.id && FEATURES.notifications, undefined, onSeat);
 
   if (location === '/login') {
     return <main className="min-h-screen bg-background text-foreground font-sans">{children}</main>;
@@ -287,7 +303,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           <span className="font-display font-bold text-primary tracking-widest text-sm">ARK</span>
         </div>
         <div className="flex items-center gap-2">
-          {isMobile && <NotificationBell />}
+          {isMobile && FEATURES.notifications && <NotificationBell />}
         <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
           <SheetTrigger asChild>
             <button
@@ -314,7 +330,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       {/* Main Content */}
       <main className="flex-1 relative overflow-x-hidden">
         {/* Desktop floating bell (>= sm) — sits in the top-right of the main column. */}
-        {!isMobile && (
+        {!isMobile && FEATURES.notifications && (
           <div className="hidden sm:flex absolute top-4 right-4 z-30">
             <NotificationBell />
           </div>

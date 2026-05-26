@@ -18,6 +18,7 @@ import { LhcsSignal, type LhcsData } from "@/components/dashboard/LhcsSignal";
 import { CcmiPillars, type CcmiPillarData } from "@/components/dashboard/CcmiPillars";
 import { JstCcmiDoughnuts } from "@/components/dashboard/JstCcmiDoughnuts";
 import { FlywheelCard, type FlywheelCta } from "@/components/dashboard/FlywheelCard";
+import { FEATURES } from "@shared/featureFlags";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -267,9 +268,11 @@ export default function Dashboard() {
           <Link href="/ark/history" className="inline-flex items-center justify-center border border-secondary/50 text-secondary hover:bg-secondary/10 font-mono text-xs uppercase tracking-widest h-10 px-4 rounded-md" data-testid="link-ark-history">
             <History className="w-4 h-4 mr-2" /> ARK History
           </Link>
-          <Link href="/report" className="inline-flex items-center justify-center border border-primary/50 text-primary hover:bg-primary/10 font-mono text-xs uppercase tracking-widest h-10 px-4 rounded-md">
-            <FileText className="w-4 h-4 mr-2" /> Export Brief
-          </Link>
+          {FEATURES.executiveReport && (
+            <Link href="/report" className="inline-flex items-center justify-center border border-primary/50 text-primary hover:bg-primary/10 font-mono text-xs uppercase tracking-widest h-10 px-4 rounded-md">
+              <FileText className="w-4 h-4 mr-2" /> Export Brief
+            </Link>
+          )}
         </div>
       </div>
 
@@ -511,7 +514,8 @@ export default function Dashboard() {
         </TabsContent>
       </Tabs>
 
-      {/* Email summary — always available, regardless of tab */}
+      {/* Email summary — gated on `assessmentEmail` flag (CLASS C). */}
+      {FEATURES.assessmentEmail && (
       <div className="glass-card p-6 rounded-xl" data-testid="card-email-summary">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -556,6 +560,7 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+      )}
 
     </div>
   );

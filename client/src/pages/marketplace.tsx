@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import NotFound from "@/pages/not-found";
+import { FEATURES } from "@shared/featureFlags";
 import { Link, useLocation, useRoute } from "wouter";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/useAuth";
@@ -1187,20 +1189,26 @@ export default function MarketplacePage() {
   const [matchForgeLab]   = useRoute("/marketplace/forge-lab");
   const [matchBonsai]     = useRoute("/marketplace/bonsai");
 
+  // Stage-1 / MVP: CLASS C marketplace sub-pages route through the always-on
+  // `/marketplace/:id` matcher, so we MUST re-check the flag inside the
+  // component too — not just at the App.tsx route table.
   if (matchPublish)    return <PublishPage />;
-  if (matchSynergy)    return <SynergyLabPage />;
-  if (matchRoundtable) return <RoundtablePage />;
-  if (matchSynthesis)  return <SynthesisPage />;
-  if (matchForgeLab)   return <ForgeLabPage />;
+  if (matchSynergy    && FEATURES.sphinxAdvanced) return <SynergyLabPage />;
+  if (matchRoundtable && FEATURES.sphinxAdvanced) return <RoundtablePage />;
+  if (matchSynthesis  && FEATURES.sphinxAdvanced) return <SynthesisPage />;
+  if (matchForgeLab   && FEATURES.forgeLabDocx)   return <ForgeLabPage />;
   if (matchBonsai)     return <BonsaiPage />;
   if (matchDetail && paramsDetail) {
-    // Defensive guard for static slugs still hitting the :id route.
     if (paramsDetail.id === "publish")    return <PublishPage />;
-    if (paramsDetail.id === "synergy")    return <SynergyLabPage />;
-    if (paramsDetail.id === "roundtable") return <RoundtablePage />;
-    if (paramsDetail.id === "synthesis")  return <SynthesisPage />;
-    if (paramsDetail.id === "forge-lab")  return <ForgeLabPage />;
+    if (paramsDetail.id === "synergy"    && FEATURES.sphinxAdvanced) return <SynergyLabPage />;
+    if (paramsDetail.id === "roundtable" && FEATURES.sphinxAdvanced) return <RoundtablePage />;
+    if (paramsDetail.id === "synthesis"  && FEATURES.sphinxAdvanced) return <SynthesisPage />;
+    if (paramsDetail.id === "forge-lab"  && FEATURES.forgeLabDocx)   return <ForgeLabPage />;
     if (paramsDetail.id === "bonsai")     return <BonsaiPage />;
+    // Reserved CLASS C slugs with flag off → render 404 instead of trying
+    // to fetch a listing with id "synergy"/"roundtable"/etc.
+    const RESERVED = new Set(["synergy", "roundtable", "synthesis", "forge-lab"]);
+    if (RESERVED.has(paramsDetail.id)) return <NotFound />;
     return <ListingDetail id={paramsDetail.id} />;
   }
   return <ListingsList />;

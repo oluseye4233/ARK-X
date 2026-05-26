@@ -21,6 +21,19 @@ All quantitative terms align to the Junglenomics FORGE Institute registries (Gen
 
 ---
 
+## Stage 1 — MVP (active)
+
+Per `exports/ARK_PDD_MVP_Spartan.md`, the deployed surface is the 7 CLASS A features only (Identity, Resume Analyzer, CCGE Arena, SPHINX MVP, Bonsai onboarding, Billing FREE+PRO, GDPR). Every CLASS C surface is **feature-flagged off** so we can lift the gate as each trigger family fires (≥100 listings, first SCHOOL_STUDENT licence, etc.) without redeploying.
+
+- **Single source of truth**: `shared/featureFlags.ts::FEATURES` — 15 flag keys, all default `false`.
+- **Server gate**: `server/featureFlags.ts::requireFeature(key)` middleware returns **404** (not 403 — flagged surfaces are indistinguishable from unimplemented routes). Env overlay: `FEATURE_<SNAKE_CASE>=true` flips a flag without code change.
+- **Client gate**: `client/src/App.tsx` only registers a `<Route>` when its flag is on; `AppLayout` filters `NAV_GROUPS` / `SECONDARY_LINKS` and gates `NotificationBell` + `useNotificationStream`.
+- **Introspection**: `GET /api/features` returns `{ stage, features }` for ops checks.
+
+**Currently flagged OFF (Stage 1)**: `cohorts`, `guinPublic`, `notifications`, `claudeNarrative`, `executiveReport`, `subscriptionCancel`, `assessmentEmail`, `enterpriseDashboard`, `investorDemo`, `forgeLabDocx`, `drm`, `customScenarios`, `adminCcgeImport`, `contextCraftPage`, `sphinxAdvanced`. Phase J implementation code is preserved verbatim — no deletion.
+
+---
+
 ## Current Phase — J: PDD MVP Alignment
 
 ARK identity is the canonical product surface. Single scorer, single writer, atomic flywheel, live SSE updates.

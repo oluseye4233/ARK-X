@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { FEATURES } from "@shared/featureFlags";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/useAuth";
@@ -157,7 +158,7 @@ export default function SubscriptionPage() {
               )}
             </p>
           </div>
-          {currentPlanData.price > 0 && currentPlan !== "ENTERPRISE" && user?.subscriptionStatus !== "canceling" && (
+          {FEATURES.subscriptionCancel && currentPlanData.price > 0 && currentPlan !== "ENTERPRISE" && user?.subscriptionStatus !== "canceling" && (
             <button
               onClick={handleCancel}
               disabled={isUpdating}

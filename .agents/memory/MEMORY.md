@@ -1,2 +1,2 @@
-- [PDF rendering on Replit](pdf-rendering.md) — md-to-pdf needs puppeteer Chrome (`npx puppeteer browsers install chrome`); always pass `--no-sandbox`; use A4 `@page` CSS for margins/headers/footers, not pdf_options margins.
-- [pdf-parse v2 API](pdf-parse-v2.md) — v2.x is `new PDFParse({data: Uint8Array}).getText()`; the v1 `pdfParse(buf)` default-export call is gone.
+- [Feature flag layering](feature-flags.md) — flagged-off surfaces must be re-checked inside any always-on parent route (e.g. `/marketplace/:id` swallows reserved CLASS C slugs even when their own `Route` isn't registered).
+- [Route patcher pitfalls](route-patcher.md) — when curl-smoke-testing flagged routes, send the correct HTTP verb; POSTing a GET-only path returns 404 from Express regardless of the flag, masking real coverage gaps.

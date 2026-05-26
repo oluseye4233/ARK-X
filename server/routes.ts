@@ -14,6 +14,8 @@ const { PDFParse } = _require("pdf-parse") as { PDFParse: new (opts: { data: Uin
 import { storage } from "./storage";
 import { analyzeResume } from "./resumeAnalyzer";
 import { requireAuth, requireSelf, requireInstructor, currentUserId, loginSession } from "./auth";
+import { requireFeature, getResolvedFeatures } from "./featureFlags";
+import { STAGE } from "@shared/featureFlags";
 import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, type SubscriptionPlan, CCGE_TIERS, type CcgeTier, jcseToTier, ALL_CARD_PILLARS, SPC_MIN_CERT_TO_PUBLISH, SPC_PRICE_MIN, SPC_PRICE_MAX, SPC_STATUSES, CERT_LEVEL_RANK, ARK_SCORE_DELTAS, type CardPillar, type SpcStatus } from "@shared/schema";
 import { dealHand, scoreSession } from "./ccge";
 import { orchestrator } from "./orchestrator";
@@ -126,7 +128,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/ai/resume-narrative/:assessmentId", requireAuth, async (req, res) => {
+  app.post("/api/ai/resume-narrative/:assessmentId", requireFeature("claudeNarrative"), requireAuth, async (req, res) => {
     try {
       const userId = currentUserId(req)!;
       const a = await storage.getAssessment(String(req.params.assessmentId));
@@ -143,7 +145,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/admin/ai/generate-scenario", requireAuth, async (req, res) => {
+  app.post("/api/admin/ai/generate-scenario", requireFeature("customScenarios"), requireAuth, async (req, res) => {
     try {
       const userId = currentUserId(req)!;
       const adminId = process.env.ADMIN_USER_ID;
@@ -325,7 +327,7 @@ export async function registerRoutes(
   });
 
   // ── Email Notifications ────────────────────────────
-  app.post("/api/notifications/assessment-summary", requireAuth, async (req, res) => {
+  app.post("/api/notifications/assessment-summary", requireFeature("assessmentEmail"), requireAuth, async (req, res) => {
     try {
       const userId = currentUserId(req)!;
       const { email } = req.body;
@@ -557,7 +559,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/billing/cancel", requireAuth, async (req, res) => {
+  app.post("/api/billing/cancel", requireFeature("subscriptionCancel"), requireAuth, async (req, res) => {
     try {
       const userId = currentUserId(req)!;
       const user = await storage.getUser(userId);
@@ -810,7 +812,7 @@ export async function registerRoutes(
     return value.replace(/[\x00-\x1f\x7f]/g, "?").slice(0, maxLen);
   }
 
-  app.post("/api/drm/event", async (req, res) => {
+  app.post("/api/drm/event", requireFeature("drm"), async (req, res) => {
     try {
       const { contentId, contentType, action, ts } = req.body ?? {};
       if (
@@ -871,7 +873,7 @@ export async function registerRoutes(
   // (userId, contentType) pairs by violation count in the last 24h, plus
   // the raw recent-events tail. Lets ops spot scrapers without standing
   // up a full SIEM pipeline.
-  app.get("/api/admin/drm/violators", requireAuth, async (req, res) => {
+  app.get("/api/admin/drm/violators", requireFeature("drm"), requireAuth, async (req, res) => {
     try {
       const callerId = currentUserId(req)!;
       const adminId = process.env.ADMIN_USER_ID;
@@ -1113,6 +1115,13 @@ export async function registerRoutes(
     }
   });
 
+  // Public feature-flag introspection — clients use the static map in
+  // `shared/featureFlags.ts` at build time; this endpoint lets ops verify
+  // what the server actually resolved after env overlays.
+  app.get("/api/features", (_req, res) => {
+    res.json({ stage: STAGE, features: getResolvedFeatures() });
+  });
+
   app.post("/api/ark/recalc", requireAuth, async (req, res) => {
     try {
       const userId = currentUserId(req)!;
@@ -1206,7 +1215,7 @@ export async function registerRoutes(
     dryRun: z.boolean().optional().default(false),
   });
 
-  app.post("/api/admin/ccge/import-compendium", requireAuth, async (req, res) => {
+  app.post("/api/admin/ccge/import-compendium", requireFeature("adminCcgeImport"), requireAuth, async (req, res) => {
     try {
       const userId = currentUserId(req)!;
       const adminId = process.env.ADMIN_USER_ID;
@@ -1294,7 +1303,7 @@ export async function registerRoutes(
   });
 
   // ── Enterprise / Departments ──────────────────────────
-  app.get("/api/departments", async (_req, res) => {
+  app.get("/api/departments", requireFeature("enterpriseDashboard"), async (_req, res) => {
     try {
       const depts = await storage.getAllDepartments();
       return res.json(depts);
@@ -1329,7 +1338,7 @@ export async function registerRoutes(
 
   // Phase J.1: a logged-in player generates their own industry-specific scenario
   // via Claude. Persisted as a private custom scenario owned by the requester.
-  app.post("/api/ccge/scenarios/custom", requireAuth, async (req, res) => {
+  app.post("/api/ccge/scenarios/custom", requireFeature("customScenarios"), requireAuth, async (req, res) => {
     try {
       const schema = z.object({
         industry: z.string().min(2).max(80),
@@ -1871,7 +1880,7 @@ export async function registerRoutes(
   // Synergy is NOT an ARK score writer in MVP. If/when we activate it, the
   // emission MUST route through orchestrator → arkRecalc.applyCaps under the
   // existing SPHINX +20/30d cap (see threat_model.md §Elevation of Privilege).
-  app.post("/api/sphinx/synergies/calculate", requireAuth, async (req, res) => {
+  app.post("/api/sphinx/synergies/calculate", requireFeature("sphinxAdvanced"), requireAuth, async (req, res) => {
     try {
       const parsed = synergyCalcSchema.parse(req.body);
       const result = await calculateSynergy(parsed.cardIds);
@@ -1882,7 +1891,7 @@ export async function registerRoutes(
   });
 
   // GET /api/sphinx/pairs/top — top-15 strongest synergy pairs platform-wide.
-  app.get("/api/sphinx/pairs/top", requireAuth, async (_req, res) => {
+  app.get("/api/sphinx/pairs/top", requireFeature("sphinxAdvanced"), requireAuth, async (_req, res) => {
     try {
       const rows = await getTopPairsPlatform(15);
       return res.json(rows);
@@ -1892,7 +1901,7 @@ export async function registerRoutes(
   });
 
   // GET /api/sphinx/listings/:id/complementary — top-5 listing partners.
-  app.get("/api/sphinx/listings/:id/complementary", requireAuth, async (req, res) => {
+  app.get("/api/sphinx/listings/:id/complementary", requireFeature("sphinxAdvanced"), requireAuth, async (req, res) => {
     try {
       const id = String(req.params.id);
       let pairs = await getComplementaryForListing(id);
@@ -1916,7 +1925,7 @@ export async function registerRoutes(
   // Re-compute on every fetch so rankDelta + seatSinceAt are always fresh
   // relative to the previous snapshot stored in roundtable_state. This is
   // a 12-row leaderboard — write cost is negligible.
-  app.get("/api/sphinx/roundtable", requireAuth, async (_req, res) => {
+  app.get("/api/sphinx/roundtable", requireFeature("sphinxAdvanced"), requireAuth, async (_req, res) => {
     try {
       const { seats } = await recomputeRoundtable();
       const listingIds = Array.from(new Set(seats.map((s) => s.listingId)));
@@ -1954,7 +1963,7 @@ export async function registerRoutes(
   // POST /api/sphinx/roundtable/recompute — admin-only manual trigger.
   // Gate matches the canonical ADMIN_USER_ID pattern used by all other
   // admin routes (e.g. /api/admin/ark/backfill at routes.ts:1179).
-  app.post("/api/sphinx/roundtable/recompute", requireAuth, async (req, res) => {
+  app.post("/api/sphinx/roundtable/recompute", requireFeature("sphinxAdvanced"), requireAuth, async (req, res) => {
     try {
       const userId = currentUserId(req)!;
       const adminId = process.env.ADMIN_USER_ID;
@@ -1969,7 +1978,7 @@ export async function registerRoutes(
   });
 
   // ── Notifications inbox ───────────────────────────────
-  app.get("/api/notifications", requireAuth, async (req, res) => {
+  app.get("/api/notifications", requireFeature("notifications"), requireAuth, async (req, res) => {
     try {
       const userId = currentUserId(req)!;
       const [items, unread] = await Promise.all([
@@ -2059,7 +2068,7 @@ export async function registerRoutes(
   // Routes are mounted under /api/sphinx — declared BEFORE /listings/:id
   // matchers above? They're already declared below, but Express matches
   // in declaration order, and these slugs don't collide with /listings/:id.
-  app.post("/api/sphinx/synthesis/sessions", requireAuth, async (req, res) => {
+  app.post("/api/sphinx/synthesis/sessions", requireFeature("sphinxAdvanced"), requireAuth, async (req, res) => {
     try {
       const buyerId = currentUserId(req)!;
       const parsed = synthesisCreateSchema.parse(req.body ?? {});
@@ -2075,7 +2084,7 @@ export async function registerRoutes(
 
   // GET /api/sphinx/synthesis/sessions/:id — only the originating buyer
   // sees the full combined body; everyone else gets redacted metadata.
-  app.get("/api/sphinx/synthesis/sessions/:id", requireAuth, async (req, res) => {
+  app.get("/api/sphinx/synthesis/sessions/:id", requireFeature("sphinxAdvanced"), requireAuth, async (req, res) => {
     try {
       const viewerId = currentUserId(req)!;
       const { getSynthesisSessionAny } = await import("./synthesis");
@@ -2088,7 +2097,7 @@ export async function registerRoutes(
   });
 
   // POST /api/sphinx/synthesis/sessions/:id/finalize — debit + royalties + grant.
-  app.post("/api/sphinx/synthesis/sessions/:id/finalize", requireAuth, async (req, res) => {
+  app.post("/api/sphinx/synthesis/sessions/:id/finalize", requireFeature("sphinxAdvanced"), requireAuth, async (req, res) => {
     try {
       const buyerId = currentUserId(req)!;
       const outcome = await finalizeSynthesisSession({ buyerId, sessionId: String(req.params.id) });
@@ -2141,7 +2150,7 @@ export async function registerRoutes(
 
   // GET /api/sphinx/listings/:id/syntheses — "Used in N syntheses" + recent
   // metadata for the Synthesis tab on the listing detail page.
-  app.get("/api/sphinx/listings/:id/syntheses", async (req, res) => {
+  app.get("/api/sphinx/listings/:id/syntheses", requireFeature("sphinxAdvanced"), async (req, res) => {
     try {
       const listingId = String(req.params.id);
       const [count, recent] = await Promise.all([
@@ -2155,7 +2164,7 @@ export async function registerRoutes(
   });
 
   const markReadSchema = z.object({ ids: z.array(z.string()).optional() });
-  app.post("/api/notifications/read", requireAuth, async (req, res) => {
+  app.post("/api/notifications/read", requireFeature("notifications"), requireAuth, async (req, res) => {
     try {
       const userId = currentUserId(req)!;
       const parsed = markReadSchema.parse(req.body ?? {});
@@ -2190,13 +2199,13 @@ export async function registerRoutes(
     return { cohort: c };
   }
 
-  app.get("/api/cohorts", requireInstructor, async (req, res) => {
+  app.get("/api/cohorts", requireFeature("cohorts"), requireInstructor, async (req, res) => {
     const sid = currentUserId(req)!;
     const list = await storage.getCohortsByInstructor(sid);
     res.json(list);
   });
 
-  app.post("/api/cohorts", requireInstructor, async (req, res) => {
+  app.post("/api/cohorts", requireFeature("cohorts"), requireInstructor, async (req, res) => {
     const parsed = cohortCreateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Invalid input.", issues: parsed.error.issues });
     const sid = currentUserId(req)!;
@@ -2204,13 +2213,13 @@ export async function registerRoutes(
     res.status(201).json(cohort);
   });
 
-  app.get("/api/cohorts/comparison", requireInstructor, async (req, res) => {
+  app.get("/api/cohorts/comparison", requireFeature("cohorts"), requireInstructor, async (req, res) => {
     const sid = currentUserId(req)!;
     const data = await storage.getCohortComparison(sid);
     res.json(data);
   });
 
-  app.get("/api/cohorts/:id", requireInstructor, async (req, res) => {
+  app.get("/api/cohorts/:id", requireFeature("cohorts"), requireInstructor, async (req, res) => {
     const ctx = await assertCohortOwnership(req, res);
     if (!ctx) return;
     const [members, assignments] = await Promise.all([
@@ -2220,7 +2229,7 @@ export async function registerRoutes(
     res.json({ cohort: ctx.cohort, members, assignments });
   });
 
-  app.post("/api/cohorts/:id/members", requireInstructor, async (req, res) => {
+  app.post("/api/cohorts/:id/members", requireFeature("cohorts"), requireInstructor, async (req, res) => {
     const ctx = await assertCohortOwnership(req, res);
     if (!ctx) return;
     const parsed = cohortMembersSchema.safeParse(req.body);
@@ -2230,21 +2239,21 @@ export async function registerRoutes(
     res.status(201).json(result);
   });
 
-  app.delete("/api/cohorts/:id/members/:userId", requireInstructor, async (req, res) => {
+  app.delete("/api/cohorts/:id/members/:userId", requireFeature("cohorts"), requireInstructor, async (req, res) => {
     const ctx = await assertCohortOwnership(req, res);
     if (!ctx) return;
     const ok = await storage.removeCohortMember(ctx.cohort.id, String(req.params.userId));
     res.json({ removed: ok });
   });
 
-  app.get("/api/cohorts/:id/assignments", requireInstructor, async (req, res) => {
+  app.get("/api/cohorts/:id/assignments", requireFeature("cohorts"), requireInstructor, async (req, res) => {
     const ctx = await assertCohortOwnership(req, res);
     if (!ctx) return;
     const list = await storage.getCohortAssignments(ctx.cohort.id);
     res.json(list);
   });
 
-  app.post("/api/cohorts/:id/assignments", requireInstructor, async (req, res) => {
+  app.post("/api/cohorts/:id/assignments", requireFeature("cohorts"), requireInstructor, async (req, res) => {
     const ctx = await assertCohortOwnership(req, res);
     if (!ctx) return;
     const parsed = cohortAssignmentSchema.safeParse(req.body);
@@ -2262,14 +2271,14 @@ export async function registerRoutes(
     res.status(201).json(a);
   });
 
-  app.get("/api/cohorts/:id/grades", requireInstructor, async (req, res) => {
+  app.get("/api/cohorts/:id/grades", requireFeature("cohorts"), requireInstructor, async (req, res) => {
     const ctx = await assertCohortOwnership(req, res);
     if (!ctx) return;
     const grades = await storage.getCohortGrades(ctx.cohort.id);
     res.json(grades);
   });
 
-  app.get("/api/cohorts/:id/grades.csv", requireInstructor, async (req, res) => {
+  app.get("/api/cohorts/:id/grades.csv", requireFeature("cohorts"), requireInstructor, async (req, res) => {
     const ctx = await assertCohortOwnership(req, res);
     if (!ctx) return;
     const grades = await storage.getCohortGrades(ctx.cohort.id);
@@ -2294,7 +2303,7 @@ export async function registerRoutes(
   });
 
   // Student-facing: list cohorts the current user belongs to.
-  app.get("/api/me/cohorts", requireAuth, async (req, res) => {
+  app.get("/api/me/cohorts", requireFeature("cohorts"), requireAuth, async (req, res) => {
     const sid = currentUserId(req)!;
     const list = await storage.getCohortsForStudent(sid);
     res.json(list);
@@ -2662,7 +2671,7 @@ export async function registerRoutes(
   });
 
   // ── GUIN+ Identity ────────────────────────────────────
-  app.get("/api/guin/by-id/:userId", requireAuth, async (req, res) => {
+  app.get("/api/guin/by-id/:userId", requireFeature("guinPublic"), requireAuth, async (req, res) => {
     try {
       const profile = await buildGuinProfile(String(req.params.userId));
       if (!profile) return res.status(404).json({ message: "User not found." });
@@ -2672,7 +2681,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/guin/by-username/:username", requireAuth, async (req, res) => {
+  app.get("/api/guin/by-username/:username", requireFeature("guinPublic"), requireAuth, async (req, res) => {
     try {
       const u = await storage.getUserByUsername(String(req.params.username));
       if (!u) return res.status(404).json({ message: "User not found." });
@@ -2690,7 +2699,7 @@ export async function registerRoutes(
     message: z.string().min(8).max(ENDORSEMENT_MAX_LEN),
   });
 
-  app.post("/api/endorsements", requireAuth, async (req, res) => {
+  app.post("/api/endorsements", requireFeature("guinPublic"), requireAuth, async (req, res) => {
     try {
       const parsed = endorsementBodySchema.parse(req.body);
       const endorserId = currentUserId(req)!;
@@ -2723,7 +2732,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/endorsements/by-recipient/:userId", async (req, res) => {
+  app.get("/api/endorsements/by-recipient/:userId", requireFeature("guinPublic"), async (req, res) => {
     try {
       const list = await storage.getEndorsementsForUser(String(req.params.userId));
       return res.json(list);
@@ -2743,6 +2752,7 @@ export async function registerRoutes(
 
   app.post(
     "/api/sphinx/forge-lab/run",
+    requireFeature("forgeLabDocx"),
     requireAuth,
     docxUpload.single("docx"),
     async (req, res) => {

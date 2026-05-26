@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { FEATURES } from "@shared/featureFlags";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/useAuth";
 import { api } from "@/lib/api";
@@ -104,11 +105,13 @@ export default function ProfilePage() {
             ACCOUNT CONFIGURATION // {user.username}
           </p>
         </div>
-        <Link href={`/u/${user.username}`} data-testid="link-view-public-profile">
-          <a className="px-3 py-1.5 rounded-lg font-mono text-[11px] uppercase tracking-wider border border-purple-300/30 bg-purple-300/10 text-purple-200 hover:bg-purple-300/20 transition-colors">
-            View Public Profile →
-          </a>
-        </Link>
+        {FEATURES.guinPublic && (
+          <Link href={`/u/${user.username}`} data-testid="link-view-public-profile">
+            <a className="px-3 py-1.5 rounded-lg font-mono text-[11px] uppercase tracking-wider border border-purple-300/30 bg-purple-300/10 text-purple-200 hover:bg-purple-300/20 transition-colors">
+              View Public Profile →
+            </a>
+          </Link>
+        )}
       </div>
 
       {saveError && (
@@ -203,8 +206,19 @@ export default function ProfilePage() {
             </div>
           </Link>
 
-          <Link href="/context-craft" className="block" data-testid="link-profile-cert">
-            <div className="glass-card p-5 rounded-xl hover:border-primary/30 transition-all hover:scale-[1.02] cursor-pointer border border-transparent">
+          {FEATURES.contextCraftPage ? (
+            <Link href="/context-craft" className="block" data-testid="link-profile-cert">
+              <div className="glass-card p-5 rounded-xl hover:border-primary/30 transition-all hover:scale-[1.02] cursor-pointer border border-transparent">
+                <div className="flex items-center gap-3 mb-3">
+                  <ShieldCheck className="h-5 w-5" style={{ color: cert.color }} />
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Context Craft</span>
+                </div>
+                <p className="font-display font-bold text-lg text-white">{cert.label}</p>
+                <p className="text-sm text-muted-foreground mt-1">{cert.multiplier}x JST Multiplier</p>
+              </div>
+            </Link>
+          ) : (
+            <div className="glass-card p-5 rounded-xl border border-transparent" data-testid="card-profile-cert-static">
               <div className="flex items-center gap-3 mb-3">
                 <ShieldCheck className="h-5 w-5" style={{ color: cert.color }} />
                 <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Context Craft</span>
@@ -212,7 +226,7 @@ export default function ProfilePage() {
               <p className="font-display font-bold text-lg text-white">{cert.label}</p>
               <p className="text-sm text-muted-foreground mt-1">{cert.multiplier}x JST Multiplier</p>
             </div>
-          </Link>
+          )}
 
           {user.institution && (
             <div className="glass-card p-5 rounded-xl border border-transparent">

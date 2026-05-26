@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { FEATURES } from "@shared/featureFlags";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
 import { Button } from "@/components/ui/button";
@@ -607,7 +608,8 @@ export default function PlayPage() {
         </div>
       </div>
 
-      {/* Phase J.1 — Create Your Own Scenario */}
+      {/* Phase J.1 — Create Your Own Scenario (CLASS C, flag-gated) */}
+      {FEATURES.customScenarios && (
       <div className="glass-card rounded-xl border-2 border-fuchsia-500/40 p-5" data-testid="custom-scenario-panel">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex-1 min-w-[260px]">
@@ -757,6 +759,7 @@ export default function PlayPage() {
           </div>
         )}
       </div>
+      )}
 
       <div className="flex flex-wrap gap-2 items-center">
         <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground mr-2">Filter Tier:</span>
