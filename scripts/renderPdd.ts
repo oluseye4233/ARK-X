@@ -36,9 +36,15 @@ body { font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; color: #0f172a
 .cover .meta { margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end;
   font-family: 'JetBrains Mono', monospace; font-size: 9pt; color: #94a3b8; letter-spacing: 0.18em; text-transform: uppercase; }
 .cover .meta .atanda { text-align: right; }
+.cover .meta .atanda { display: flex; flex-direction: column; align-items: flex-end; gap: 3mm; }
 .cover .meta .atanda strong { display: block; font-size: 14pt; color: #f8fafc; letter-spacing: 0.28em; }
 .cover .meta .atanda span { color: #10b981; }
-.cover img.atanda-logo { width: 38mm; height: 38mm; object-fit: contain; filter: drop-shadow(0 0 18px rgba(34,211,238,0.35)); }
+.cover img.atanda-logo { width: 46mm; height: auto; object-fit: contain; filter: drop-shadow(0 0 18px rgba(34,211,238,0.35)); }
+
+.pdd-figure { margin: 5mm 0 6mm; padding: 0; page-break-inside: avoid; }
+.pdd-figure svg { display: block; width: 100%; height: auto; max-height: 90mm; border-radius: 2mm; }
+.pdd-figure figcaption { font-family: 'JetBrains Mono', monospace; font-size: 8.5pt; color: #64748b;
+  margin-top: 2mm; padding-left: 2mm; border-left: 2px solid #0891b2; letter-spacing: 0.02em; }
 
 h1, h2, h3, h4 { font-family: 'Inter', sans-serif; color: #0f172a; font-weight: 700; line-height: 1.2; }
 h1 { font-size: 22pt; border-bottom: 3px solid #0891b2; padding-bottom: 4mm; margin-top: 14mm;
