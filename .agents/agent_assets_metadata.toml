@@ -30,3 +30,15 @@ id = "rOWs9tECPRy4KZRKcs_zN"
 uri = "file://exports/ARK_PDD_v3_Comprehensive.md"
 type = "text"
 title = "ARK Platform — PDD v3 (Markdown source)"
+
+[[outputs]]
+id = "PgUrdkyW2hGgmCV9gU0_6"
+uri = "file://exports/ARK_PDD_MVP_Spartan.pdf"
+type = "pdf"
+title = "ARK Platform — MVP PDD (SPARTAN-compressed, 4 weeks · 24 prompts)"
+
+[[outputs]]
+id = "4DiraD_IXd8CMkKhz0uTO"
+uri = "file://exports/ARK_PDD_MVP_Spartan.md"
+type = "text"
+title = "ARK Platform — MVP PDD (Markdown source)"

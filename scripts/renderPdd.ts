@@ -2,8 +2,8 @@ import { mdToPdf } from "md-to-pdf";
 import { promises as fs } from "fs";
 import { resolve } from "path";
 
-const SRC = "exports/ARK_PDD_v3_Comprehensive.md";
-const OUT = "exports/ARK_PDD_v3_Comprehensive.pdf";
+const SRC = process.argv[2] ?? "exports/ARK_PDD_v3_Comprehensive.md";
+const OUT = process.argv[3] ?? SRC.replace(/\.md$/, ".pdf");
 
 const CSS = `
 @page {
