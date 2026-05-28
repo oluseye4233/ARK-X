@@ -722,4 +722,74 @@ Trigger family H — First institutional licence (SCHOOL_STUDENT or ENTERPRISE)
 
 ---
 
-*End of MVP PDD — SPARTAN-compressed from ARK PDD v3 · 25 prompts · 4 weeks + Phase K activation · Replit Agent · ATANDA Studio · May 2026.*
+# 8. Phase L Addendum — Shareable CCGE Badges (Post-MVP Activation)
+
+**Status:** shipped · public by default · graduates from the social-loop trigger family (zero-cost referral channel for CCGE Arena).
+
+**What it is.** Every finished CCGE session that crosses the Bronze JCSE threshold (≥30) gets a server-rendered 1200×1200 cyberpunk badge PNG and a public share page with Open Graph + Twitter Card unfurls. The badge displays the player's tier ring (Bronze / Silver / Gold / Platinum), JCSE score, scenario title and tier, awardee name + username, current ARK score, cert level, finish date, and the last-eight of the user's `arkIdString` as a forgery anchor. From the CCGE result screen players get one-click Open · Copy link · Download PNG · native `navigator.share` actions.
+
+**Why now.** CCGE Arena is the highest-frequency surface in the MVP loop (one-to-many sessions per user per week) and the only one with a natural "win moment" that maps cleanly to a shareable artefact. Originally deferred under the assumption that social proof requires GUIN+ public profiles (CLASS C, gated on 100+ sellers), but the badge surface ships **without** the profile pages: the badge IS the unfurl. Unguessable UUID session IDs make the share link itself the opt-in — no flag, no toggle, no extra schema.
+
+**Compression check (SPARTAN gates).**
+
+```
+NEW SCHEMA       +0 cols · +0 tables (session UUID is the bearer; no opt-in flag)
+NEW ENDPOINTS    +2 (GET /badge/:sessionId.png · GET /badge/:sessionId)
+NEW CLIENT UI    +1 component (ShareWinCard on /play result view)
+NEW PROMPT       MVCC-CCGE-003 · single prompt scope (Satori renderer + Resvg PNG
+                 + share-page HTML + rate-limit + in-process PNG cache + UI)
+NET PROMPT COUNT 25 → 26 (one prompt added · zero existing prompts modified)
+DEPENDENCIES     +2 npm (satori · @resvg/resvg-js) · 1 outbound fetch (Inter OTF
+                 via jsDelivr v3.19 mirror, cached per process)
+```
+
+**MVCC-CCGE-003 · Shareable CCGE Badge (Satori renderer + public share page)**
+
+`server/badge/render.ts`: Satori JSX-as-plain-objects pipeline rendering a 1200×1200 SVG, converted to PNG via `@resvg/resvg-js`. Layout: header strip (`ARK PLATFORM · CCGE ARENA · CERTIFIED`), centered tier disc with cyan glow (tier label + JCSE numeric + `/50` rule), scenario block (`SCENARIO · <TIER>` + title), footer row (awardee name + `@username`, ARK score + cert level, finish date + `ARK-ID <last8>`). HSL palette matches the project (cyan `188 86% 53%` + dark `222 47% 11%`). Inter Regular + Bold OTFs loaded once from `cdn.jsdelivr.net/gh/rsms/inter@v3.19` and cached for process lifetime.
+
+`server/badge/routes.ts`: two public routes, both gated to `status='finished'` sessions that crossed the Bronze JCSE threshold (returns 404 otherwise — flagged surfaces indistinguishable from missing). `GET /badge/:sessionId.png` returns the PNG with `Cache-Control: public, max-age=3600, s-maxage=86400` + `X-Robots-Tag: noindex`; protected by a per-IP rate limit (30/min via `express-rate-limit`) and an in-process FIFO PNG cache (50 entries, 24h TTL, ~17 MB worst case). Cold render ≈3.6s on first hit (Satori + Resvg + font fetch); cached hit ≈8ms — 450× speedup keeps the surface safe under share-storm traffic. `GET /badge/:sessionId` returns an HTML share page with inline `<style>` and a full Open Graph + Twitter Card meta block: `og:title` = `"<Name> — <Tier> on ARK CCGE"`, `og:image` = same-origin PNG (1200×1200), `og:description` summarises JCSE + scenario + ARK-ID. Page CTA links back to `/play` for the click-through.
+
+`registerBadgeRoutes(app)` mounts in `server/routes.ts` at the top of `registerRoutes()` so the routes attach before the Vite catch-all in dev. `client/src/pages/play.tsx::ShareWinCard` shows on the result view only when `kcseScore >= JCSE_TIER_THRESHOLDS.BRONZE`, with four actions: Open share page (new tab), Copy link (clipboard), Download PNG (signed filename), native Share (uses `navigator.share` where supported, falls back to copy).
+
+**Threat-model deltas.**
+
+```
+INFO DISCLOSURE          Share link is bearer auth via UUID session id — same
+                         model as one-time signed URLs. Badge payload exposes
+                         only name/username/score/scenario/tier/date already
+                         intended for public display. Last-8 of arkIdString is
+                         a hash suffix; no PII or reversible identifier.
+DENIAL OF SERVICE        Satori + Resvg are CPU-heavy (~3.6s cold). Per-IP rate
+                         limit (30/min) + FIFO PNG cache (24h TTL) keep the
+                         endpoint safe under share-storm traffic. Cache hits
+                         drop to ~8ms — no re-render under repeat loads.
+SPOOFING                 ARK-ID last-8 printed on badge ties the artefact to
+                         the awardee; forging requires both the session UUID
+                         and the user's arkIdString suffix.
+CSP                      Page uses inline <style> and same-origin <img>;
+                         covered by existing prod CSP (style-src 'self'
+                         'unsafe-inline'; img-src 'self' data:).
+ROUTE ORDERING           /badge/* is mounted before the Vite catch-all in
+                         dev and before the static SPA fallback in prod — no
+                         shadowing in either environment.
+ROBOT EXPOSURE           X-Robots-Tag: noindex on the PNG keeps share images
+                         out of search indexes; HTML page is intentionally
+                         indexable as a referral surface.
+```
+
+**Graduation trigger added to Part 4.**
+
+```
+Trigger family I — Social referral loop (zero-cost growth channel)
+- Shareable CCGE badges (Phase L) · activated · 0 d (shipped public)
+- Vendor Inter OTFs locally to remove cold-start CDN dependency · 0.5 d
+- Optional: per-session isPublicBadge flag + revocable share token,
+  if product policy ever requires stronger opt-in than bearer-UUID · 1 d
+- Optional: per-tier badge variants (different glow / accent per tier) · 1 d
+```
+
+**Operational notes.** No env flag — the surface ships ON by default because the bearer-UUID model is the opt-in. There is no DB migration; reads are scoped to existing `game_sessions` + `ccge_scenarios` + `users`. The PNG cache lives in process memory (cleared on every redeploy), which is acceptable for the current single-instance autoscale config; if the deployment ever spreads across multiple instances the cache becomes per-instance (still safe — just lower hit rate). Inter font is fetched on first cold start of each instance; if jsDelivr is unreachable the first render fails with a 500 and the next one retries — vendoring the OTFs locally (the follow-up above) closes that single external dependency.
+
+---
+
+*End of MVP PDD — SPARTAN-compressed from ARK PDD v3 · 26 prompts · 4 weeks + Phase K (Corporate Marketplace) + Phase L (Shareable CCGE Badges) activations · Replit Agent · ATANDA Studio · May 2026.*
