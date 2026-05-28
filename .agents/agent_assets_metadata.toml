@@ -54,3 +54,9 @@ id = "yiEhh_-CyaJljhULfmm0l"
 uri = "file://screenshots/badge_live.png"
 type = "image"
 title = "Live CCGE badge — Silver tier, scenario \"Customer Support Auto-Response\""
+
+[[outputs]]
+id = "yxGU6LDoJEnsgBJYq5_S4"
+uri = "file://exports/ARK_PDD_LLM_Usage_Guardrail.md"
+type = "text"
+title = "ARK Platform — LLM Usage Guardrail PDD"
