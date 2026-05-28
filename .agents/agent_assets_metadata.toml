@@ -72,3 +72,9 @@ id = "ywpkYNwFKsiBT_-Rmf_xN"
 uri = "file://exports/Context_Craft_Checkpoint_Design_Guide.pdf"
 type = "pdf"
 title = "Context Craft — Checkpoint Page Design Guide"
+
+[[outputs]]
+id = "hmU_gtNaLuKTkH98-yQIR"
+uri = "file://exports/Context_Craft_Checkpoints_Chapter_by_Chapter.pdf"
+type = "pdf"
+title = "Context Craft — Chapter-by-Chapter Checkpoint Set"
