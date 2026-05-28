@@ -27,8 +27,8 @@ import { scoreSessionWithClaude } from "./ai/kcse";
 import { generateResumeNarrative, ProTierRequiredError } from "./ai/narrative";
 import { CODEC_PRIMITIVES, CODEC_BY_ID } from "@shared/codec-primitives";
 import { generateScenario } from "./ai/scenarioGen";
-import { getMonthlyTokens } from "./ai/usage";
-import { isClaudeAvailable } from "./ai/client";
+import { getTierStatus } from "./ai/usage";
+import { isClaudeAvailable, resolveUseClaude } from "./ai/client";
 import {
   isPaidPlan,
   priceCentsForPlan,
@@ -125,8 +125,10 @@ export async function registerRoutes(
   app.get("/api/ai/status", requireAuth, async (req, res) => {
     try {
       const userId = currentUserId(req)!;
-      const usage = await getMonthlyTokens(userId);
-      return res.json({ available: isClaudeAvailable(), usage });
+      const user = await storage.getUser(userId);
+      const plan = (user?.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
+      const status = await getTierStatus(userId, plan);
+      return res.json({ available: isClaudeAvailable(), plan, ...status });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
@@ -1491,9 +1493,20 @@ export async function registerRoutes(
 
       const actorUserId = currentUserId(req)!;
       let claudeKcse: Awaited<ReturnType<typeof scoreSessionWithClaude>> = null;
-      if (useClaude) {
-        const actor = await storage.getUser(actorUserId);
-        const plan = (actor?.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
+      const actor = await storage.getUser(actorUserId);
+      const plan = (actor?.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
+      // Phase O — gate `useClaude` at the route. With FEATURE_REVENUE_GUARDRAIL
+      // OFF this is identity (legacy behaviour); ON, FREE-tier users cannot buy
+      // a Sonnet/Haiku Claude judge by passing useClaude:true.
+      const effectiveUseClaude = resolveUseClaude(plan, useClaude);
+      if (useClaude && !effectiveUseClaude) {
+        return res.status(402).json({
+          message: "Claude-judged sessions require a paid plan.",
+          upgradePath: "/subscription",
+          currentTier: plan,
+        });
+      }
+      if (effectiveUseClaude) {
         claudeKcse = await scoreSessionWithClaude({
           userId: actorUserId,
           plan,

@@ -878,6 +878,67 @@ export const AI_TIER_DAILY_QUOTA = {
   ENTERPRISE:      { kcse: 200, narrative: 100, scenario_gen: 50 },
 } as const;
 
+// ── Phase O — Revenue / Token-Cost 10% Invariant ─────────────
+// All constants below are dormant until FEATURE_REVENUE_GUARDRAIL=true.
+// The server's `getTierBudgets(plan)` helper picks V1 vs V2 based on
+// that flag — with the flag OFF the engine is byte-identical to pre-O.
+
+// Each cap = ROUND(plan.price * 0.10) in cents, except FREE (absolute 30¢).
+// This is the SECOND gate: enforced alongside AI_TIER_MONTHLY_TOKENS_V2,
+// whichever fires first wins. Guarantees AI COGS ≤ 10% of MRR per user.
+export const AI_TIER_COST_BUDGET_CENTS = {
+  INDIVIDUAL_FREE: 30,
+  SCHOOL_STUDENT: 90,
+  INDIVIDUAL_PRO: 290,
+  ENTERPRISE: 2000,
+} as const;
+
+// Rebalanced token caps. FREE held at 20k exactly per spec; SCHOOL lowered
+// 10% to fit the $0.90 cost ceiling; PRO raised 16% — the headroom freed by
+// plugging the FREE-tier `useClaude` leak gets returned to paying users.
+export const AI_TIER_MONTHLY_TOKENS_V2 = {
+  INDIVIDUAL_FREE: 20000,
+  INDIVIDUAL_PRO: 580000,
+  SCHOOL_STUDENT: 180000,
+  ENTERPRISE: 2000000,
+} as const;
+
+// Rebalanced daily quotas. FREE kcse 5→1 closes the dominant leakage vector
+// (5/day × 30 = 150 calls × ~1.5k tok = 225k tok, 11× the monthly cap).
+export const AI_TIER_DAILY_QUOTA_V2 = {
+  INDIVIDUAL_FREE: { kcse: 1,  narrative: 0,  scenario_gen: 0   },
+  INDIVIDUAL_PRO:  { kcse: 60, narrative: 35, scenario_gen: 12  },
+  SCHOOL_STUDENT:  { kcse: 15, narrative: 8,  scenario_gen: 4   },
+  ENTERPRISE:      { kcse: 200, narrative: 100, scenario_gen: 50 },
+} as const;
+
+// Per-tier model & kind allow-list. FREE is HAIKU-only; SCHOOL gets Sonnet
+// only for narrative; PRO gets Sonnet for any kind; ENTERPRISE unrestricted.
+// `useClaude` (CCGE finish) is the only client-driven model upgrade — its
+// boolean is honored only when allowUseClaude=true.
+export const AI_TIER_MODEL_POLICY = {
+  INDIVIDUAL_FREE: {
+    allowedModels: ["claude-haiku-4-5"] as readonly string[],
+    allowUseClaude: false,
+    sonnetKindsAllowed: [] as readonly AiKind[],
+  },
+  SCHOOL_STUDENT: {
+    allowedModels: ["claude-haiku-4-5", "claude-sonnet-4-6"] as readonly string[],
+    allowUseClaude: true,
+    sonnetKindsAllowed: ["narrative"] as readonly AiKind[],
+  },
+  INDIVIDUAL_PRO: {
+    allowedModels: ["claude-haiku-4-5", "claude-sonnet-4-6"] as readonly string[],
+    allowUseClaude: true,
+    sonnetKindsAllowed: ["narrative", "kcse", "scenario_gen"] as readonly AiKind[],
+  },
+  ENTERPRISE: {
+    allowedModels: ["claude-haiku-4-5", "claude-sonnet-4-6"] as readonly string[],
+    allowUseClaude: true,
+    sonnetKindsAllowed: ["narrative", "kcse", "scenario_gen"] as readonly AiKind[],
+  },
+} as const;
+
 export const aiUsage = pgTable("ai_usage", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),

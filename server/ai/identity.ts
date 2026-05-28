@@ -8,8 +8,8 @@
  * Fully degrades to deterministic fallback templates when Claude is unavailable
  * (no API key, budget exceeded, parse error). Never throws.
  */
-import { getAnthropic, MODELS, isClaudeAvailable } from "./client";
-import { logUsage, enforceBudget } from "./usage";
+import { getAnthropic, MODELS, isClaudeAvailable, assertModelAllowed } from "./client";
+import { logUsage, enforceBudget, enforceCostBudget } from "./usage";
 import {
   CCMI_PILLAR_LABELS,
   type ArkTriggerType,
@@ -75,6 +75,8 @@ export async function generateIdentityNarrative(opts: {
 
   try {
     await enforceBudget(opts.userId, opts.plan);
+    await enforceCostBudget(opts.userId, opts.plan);
+    assertModelAllowed(opts.plan, MODELS.SONNET, "narrative");
     const client = getAnthropic();
     const userPayload = JSON.stringify({
       jst: { index: opts.snapshot.jstIndex, sub: opts.snapshot.jstSub, replacementPct: opts.snapshot.resumeReplacementPct },

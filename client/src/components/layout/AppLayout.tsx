@@ -25,6 +25,7 @@ import { useOnboarding } from "@/lib/useOnboarding";
 import { useAuth } from "@/lib/useAuth";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { NotificationBell } from "@/components/layout/NotificationBell";
+import { AiBudgetBanner } from "@/components/layout/AiBudgetBanner";
 import { useNotificationStream, type ArkRoundtableEvent } from "@/lib/useArkStream";
 import { useToast } from "@/hooks/use-toast";
 import { useCallback } from "react";
@@ -331,6 +332,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
       {/* Main Content */}
       <main className="flex-1 relative overflow-x-hidden">
+        <AiBudgetBanner />
         {/* Desktop floating bell (>= sm) — sits in the top-right of the main column. */}
         {!isMobile && FEATURES.notifications && (
           <div className="hidden sm:flex absolute top-4 right-4 z-30">

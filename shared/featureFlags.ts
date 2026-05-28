@@ -46,7 +46,10 @@ export type FeatureKey =
   | "customScenarios" // admin scenario gen + user custom CCGE scenarios
   | "adminCcgeImport" // admin compendium bulk import UI + route
   // ── SEO / reference (trigger: post-launch SEO push) ──
-  | "contextCraftPage"; // /context-craft levels reference page
+  | "contextCraftPage" // /context-craft levels reference page
+  // ── Phase O — Revenue / Token-Cost 10% Invariant (trigger: first $1k MRR
+  //    OR first user crossing 80% of any cost cap) ──
+  | "revenueGuardrail"; // cost-cap second gate + model policy + V2 budgets
 
 /**
  * MVP defaults — every CLASS C surface is OFF.
@@ -69,6 +72,7 @@ export const MVP_FEATURES: Readonly<Record<FeatureKey, boolean>> = Object.freeze
   customScenarios: false,
   adminCcgeImport: false,
   contextCraftPage: false,
+  revenueGuardrail: false,
 });
 
 /**

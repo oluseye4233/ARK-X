@@ -1,5 +1,5 @@
-import { getAnthropic, MODELS, isClaudeAvailable } from "./client";
-import { logUsage, enforceBudget } from "./usage";
+import { getAnthropic, MODELS, isClaudeAvailable, assertModelAllowed } from "./client";
+import { logUsage, enforceBudget, enforceCostBudget } from "./usage";
 import { ALL_CARD_PILLARS, CCGE_TIERS, type SubscriptionPlan, type InsertCcgeScenario } from "@shared/schema";
 
 const SYSTEM_PROMPT = `You are ARK Game Designer. Generate a single CCGE scenario as strict JSON:
@@ -24,6 +24,8 @@ export async function generateScenario(opts: {
   }
 
   await enforceBudget(opts.userId, opts.plan);
+  await enforceCostBudget(opts.userId, opts.plan);
+  assertModelAllowed(opts.plan, MODELS.SONNET, "scenario_gen");
 
   const contextLines: string[] = [];
   if (opts.industry) contextLines.push(`Industry / Sector: ${opts.industry}`);

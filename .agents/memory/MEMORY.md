@@ -1,2 +1,3 @@
 - [Feature flag layering](feature-flags.md) — flagged-off surfaces must be re-checked inside any always-on parent route (e.g. `/marketplace/:id` swallows reserved CLASS C slugs even when their own `Route` isn't registered).
 - [Route patcher pitfalls](route-patcher.md) — when curl-smoke-testing flagged routes, send the correct HTTP verb; POSTing a GET-only path returns 404 from Express regardless of the flag, masking real coverage gaps.
+- [Revenue guardrail two-gate budget](revenue-guardrail.md) — AI calls need both token-cap AND cost-cap gates; FREE and ENTERPRISE cost caps are absolute, not 10%-derived.

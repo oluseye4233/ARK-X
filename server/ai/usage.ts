@@ -1,6 +1,43 @@
 import { db } from "../db";
-import { aiUsage, AI_PRICING_PER_MTOK, AI_TIER_MONTHLY_TOKENS, AI_TIER_DAILY_QUOTA, type AiKind, type SubscriptionPlan } from "@shared/schema";
+import {
+  aiUsage,
+  AI_PRICING_PER_MTOK,
+  AI_TIER_MONTHLY_TOKENS,
+  AI_TIER_DAILY_QUOTA,
+  AI_TIER_MONTHLY_TOKENS_V2,
+  AI_TIER_DAILY_QUOTA_V2,
+  AI_TIER_COST_BUDGET_CENTS,
+  type AiKind,
+  type SubscriptionPlan,
+} from "@shared/schema";
 import { eq, and, gte, sql } from "drizzle-orm";
+import { isFeatureEnabled } from "../featureFlags";
+
+/**
+ * Phase O — pick V1 (legacy) vs V2 (rebalanced) budgets based on the
+ * `revenueGuardrail` flag. With the flag OFF the engine returns the exact
+ * same numbers as before Phase O — no behaviour change on merge.
+ */
+function tierTokenCap(plan: SubscriptionPlan): number {
+  const table = isFeatureEnabled("revenueGuardrail")
+    ? AI_TIER_MONTHLY_TOKENS_V2
+    : AI_TIER_MONTHLY_TOKENS;
+  return table[plan as keyof typeof table] ?? table.INDIVIDUAL_FREE;
+}
+
+function tierDailyQuotas(plan: SubscriptionPlan): Record<string, number> {
+  const table = isFeatureEnabled("revenueGuardrail")
+    ? AI_TIER_DAILY_QUOTA_V2
+    : AI_TIER_DAILY_QUOTA;
+  return (table[plan as keyof typeof table] ?? table.INDIVIDUAL_FREE) as Record<string, number>;
+}
+
+function tierCostCapCents(plan: SubscriptionPlan): number {
+  return (
+    AI_TIER_COST_BUDGET_CENTS[plan as keyof typeof AI_TIER_COST_BUDGET_CENTS] ??
+    AI_TIER_COST_BUDGET_CENTS.INDIVIDUAL_FREE
+  );
+}
 
 export function computeCostCents(model: keyof typeof AI_PRICING_PER_MTOK, tokensIn: number, tokensOut: number): number {
   const p = AI_PRICING_PER_MTOK[model];
@@ -58,9 +95,32 @@ export class AiBudgetExceededError extends Error {
 }
 
 export async function enforceBudget(userId: string, plan: SubscriptionPlan): Promise<void> {
-  const budget = AI_TIER_MONTHLY_TOKENS[plan as keyof typeof AI_TIER_MONTHLY_TOKENS] ?? AI_TIER_MONTHLY_TOKENS.INDIVIDUAL_FREE;
+  const budget = tierTokenCap(plan);
   const { total } = await getMonthlyTokens(userId);
   if (total >= budget) throw new AiBudgetExceededError(total, budget);
+}
+
+export class AiCostBudgetExceededError extends Error {
+  status = 429;
+  upgradePath = "/subscription";
+  constructor(public usedCents: number, public capCents: number) {
+    super(
+      `AI monthly cost budget exceeded ($${(usedCents / 100).toFixed(2)} of $${(capCents / 100).toFixed(2)}). Upgrade your plan for more.`,
+    );
+  }
+}
+
+/**
+ * Phase O — second, cost-denominated gate. Dead code when
+ * `revenueGuardrail` is OFF (returns immediately). When ON, sums the
+ * trailing-month `cost_cents` from `ai_usage` and throws if ≥ cap.
+ * Pairs with `enforceBudget` (token-cap) — both must pass.
+ */
+export async function enforceCostBudget(userId: string, plan: SubscriptionPlan): Promise<void> {
+  if (!isFeatureEnabled("revenueGuardrail")) return;
+  const cap = tierCostCapCents(plan);
+  const { costCents } = await getMonthlyTokens(userId);
+  if (costCents >= cap) throw new AiCostBudgetExceededError(costCents, cap);
 }
 
 /** Count of fresh AI calls of a given kind in the trailing UTC day. */
@@ -83,10 +143,43 @@ export class AiDailyQuotaExceededError extends Error {
 
 /** Per-user daily quota check. Only fresh (uncached) calls should invoke this. */
 export async function enforceDailyQuota(userId: string, plan: SubscriptionPlan, kind: AiKind): Promise<void> {
-  const planQuotas =
-    AI_TIER_DAILY_QUOTA[plan as keyof typeof AI_TIER_DAILY_QUOTA] ?? AI_TIER_DAILY_QUOTA.INDIVIDUAL_FREE;
-  const quota = (planQuotas as Record<string, number>)[kind] ?? 0;
+  const quota = tierDailyQuotas(plan)[kind] ?? 0;
   if (quota <= 0) throw new AiDailyQuotaExceededError(kind, 0, 0);
   const used = await getDailyUsageCount(userId, kind);
   if (used >= quota) throw new AiDailyQuotaExceededError(kind, used, quota);
+}
+
+/**
+ * Phase O — single surface for `/api/ai/status` and `<AiBudgetBanner/>`.
+ * Returns both gates' caps + the user's % consumption against the binding
+ * (max) one. When the flag is OFF, `costCapCents` is still reported (so the
+ * client can preview the ratio) but enforcement is token-only.
+ */
+export async function getTierStatus(userId: string, plan: SubscriptionPlan): Promise<{
+  usage: { tokensIn: number; tokensOut: number; total: number; costCents: number };
+  caps: { tokenCap: number; costCapCents: number };
+  remaining: { tokens: number; costCents: number };
+  ratioPct: number;
+  upgradeAtPct: 80;
+  hardStopAtPct: 100;
+  guardrailActive: boolean;
+}> {
+  const usage = await getMonthlyTokens(userId);
+  const tokenCap = tierTokenCap(plan);
+  const costCapCents = tierCostCapCents(plan);
+  const tokenPct = tokenCap > 0 ? (usage.total / tokenCap) * 100 : 0;
+  const costPct = costCapCents > 0 ? (usage.costCents / costCapCents) * 100 : 0;
+  const ratioPct = Math.round(Math.max(tokenPct, costPct));
+  return {
+    usage,
+    caps: { tokenCap, costCapCents },
+    remaining: {
+      tokens: Math.max(0, tokenCap - usage.total),
+      costCents: Math.max(0, costCapCents - usage.costCents),
+    },
+    ratioPct,
+    upgradeAtPct: 80,
+    hardStopAtPct: 100,
+    guardrailActive: isFeatureEnabled("revenueGuardrail"),
+  };
 }

@@ -1,6 +1,6 @@
-import { getAnthropic, MODELS, isClaudeAvailable } from "./client";
+import { getAnthropic, MODELS, isClaudeAvailable, assertModelAllowed } from "./client";
 import { cacheGet, cacheSet, cacheKey } from "./cache";
-import { logUsage, enforceBudget, enforceDailyQuota } from "./usage";
+import { logUsage, enforceBudget, enforceCostBudget, enforceDailyQuota } from "./usage";
 import {
   CC_PILLARS,
   hiveToLetterGrade,
@@ -100,8 +100,14 @@ export async function analyzeSpcListing(opts: {
 
   // Daily per-user quota check — only fresh Claude calls count; cache
   // hits above already short-circuited.
+  // NB (Phase O): SPC analysis intentionally maps to the "narrative" AiKind —
+  // it shares the Haiku-cost-and-cadence profile of resume narrative gen. If
+  // product later wants distinct economics for SPC, add a new AiKind in
+  // shared/schema.ts and update AI_TIER_DAILY_QUOTA_V2 + MODEL_POLICY in lockstep.
   await enforceDailyQuota(opts.userId, opts.plan, "narrative");
   await enforceBudget(opts.userId, opts.plan);
+  await enforceCostBudget(opts.userId, opts.plan);
+  assertModelAllowed(opts.plan, MODELS.HAIKU, "narrative");
 
   const client = getAnthropic();
   const message = await client.messages.create({

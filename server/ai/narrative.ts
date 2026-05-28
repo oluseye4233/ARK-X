@@ -1,6 +1,6 @@
-import { getAnthropic, MODELS, isClaudeAvailable } from "./client";
+import { getAnthropic, MODELS, isClaudeAvailable, assertModelAllowed } from "./client";
 import { cacheGet, cacheSet, cacheKey } from "./cache";
-import { logUsage, enforceBudget } from "./usage";
+import { logUsage, enforceBudget, enforceCostBudget } from "./usage";
 import type { Assessment, SubscriptionPlan } from "@shared/schema";
 
 export type ResumeNarrative = {
@@ -74,6 +74,8 @@ export async function generateResumeNarrative(opts: {
   }
 
   await enforceBudget(opts.userId, opts.plan);
+  await enforceCostBudget(opts.userId, opts.plan);
+  assertModelAllowed(opts.plan, MODELS.SONNET, "narrative");
 
   const client = getAnthropic();
   const message = await client.messages.create({
