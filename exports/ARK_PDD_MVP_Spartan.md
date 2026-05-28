@@ -667,4 +667,59 @@ Every triggered upgrade above has an estimate sized for a single developer using
 
 ---
 
-*End of MVP PDD — SPARTAN-compressed from ARK PDD v3 · 24 prompts · 4 weeks · Replit Agent · ATANDA Studio · May 2026.*
+# 7. Phase K Addendum — Corporate SPHINX Marketplace (Post-MVP Activation)
+
+**Status:** shipped · feature-flagged OFF by default (`corporateMarketplace`) · graduates from CLASS C on first institutional licence trigger.
+
+**What it is.** A second SPHINX surface scoped to a single institution. Members of the same `users.institution` (string match, trim + case-insensitive) can browse, publish to, and buy from an internal marketplace that is invisible to the public SPHINX. Listings carry an explicit visibility scope: `OPEN` (public only), `CORPORATE` (institution only), or `BOTH` (dual-publish). The institution string is snapshotted onto the listing at publish time — no foreign key, no cross-tenant join.
+
+**Why now.** Original PDD deferred SPHINX-Roundtable, complementary pairs, and synthesis under trigger "100+ listings / 25+ creators." Corporate Marketplace is the missing trigger family for the **first institutional licence** (SCHOOL_STUDENT or ENTERPRISE plan) — the moment one buyer wants a private SPC trading floor. It ships at zero cost to the public market: scope filtering is a single predicate added to the existing browse query.
+
+**Compression check (SPARTAN gates).**
+
+```
+NEW SCHEMA       +2 cols (spc_listings.scope · spc_listings.institution)
+                 +1 table (spc_feedback · 6 cols · 1 unique index)
+NEW ENDPOINTS    +3 (GET corporate/listings · POST + GET listings/:id/feedback)
+NEW CLIENT PAGE  +1 (/marketplace/corporate · reuses ListingDetail for /:id)
+NEW PROMPT       MVCC-MKT-005 · single prompt scope (schema + storage + 3 routes
+                 + scope toggle + corporate page + feedback widget + nav)
+NET PROMPT COUNT 24 → 25 (one prompt added · zero existing prompts modified)
+```
+
+**MVCC-MKT-005 · Corporate SPHINX Marketplace (post-MVP activation prompt)**
+
+Add `SPC_SCOPES` (`OPEN`/`CORPORATE`/`BOTH`) and `SPC_FEEDBACK_BONUS_BY_STARS` (`{1:0, 2:0, 3:2, 4:6, 5:10}`) to `shared/schema.ts`. Add `scope` + `institution` columns to `spc_listings` and a new `spc_feedback` table (listing_id, buyer_id, stars 1-5, comment, bonus_awarded, created_at) with a unique `(listing_id, buyer_id)` index. Idempotent migration `migrations/0007_corporate_marketplace.sql`. Storage adds `getCorporateListings(institution, filters)`, `submitSpcFeedback` (atomic txn: insert feedback + award `SPC_FEEDBACK_BONUS_BY_STARS[stars]` credits to creator + mirror into `listing.totalEarned`), and `getSpcFeedbackForListing` (returns `{count, average, histogram, recent[{buyerName}], mine}` — no raw buyer/creator IDs in the payload). `getAllSpcListings` now filters `scope === "OPEN"` so corporate-only rows can never leak into the public market. Three new routes, all `requireFeature("corporateMarketplace")` + `requireAuth`: `GET /api/sphinx/corporate/listings` (institution-scoped, 403 if caller has no institution), `POST /api/sphinx/listings/:id/feedback` (buyer-only, 409 on duplicate), `GET /api/sphinx/listings/:id/feedback`. Publish route accepts `scope` (defaults `OPEN`), snapshots `creator.institution`, and uses the server-side `isFeatureEnabled` resolver (honors `FEATURE_CORPORATE_MARKETPLACE` env overlay) — never the static shared map. Purchase route enforces same-institution buyer for `CORPORATE` listings (403) before the credit-debit txn. Client: `/marketplace/corporate` page with institution header + pillar filter + listing grid (links to existing `/marketplace/:id`); scope toggle on PublishPage (Open / Corporate / Both, disabled unless flag on + user has institution); `SpcFeedbackPanel` on ListingDetail with star input + comment + bonus-preview ("creator earns N credits") + recent reviews. Nav entry under Explore, route and link both flag-gated.
+
+**Threat-model deltas.**
+
+```
+ELEVATION OF PRIVILEGE   Corporate purchase gate (403 on inst mismatch) runs
+                         BEFORE executePurchase — no wasted credit debit.
+INFO DISCLOSURE          Feedback payload redacts buyerId/creatorId; resolves
+                         buyer display names via batched users lookup.
+TAMPERING                Bonus credit award + listing earnings mirror happen
+                         in the SAME txn as feedback insert; unique
+                         (listing_id, buyer_id) index is race-safe.
+SPOOFING                 Scope is never client-trusted on read — open browse
+                         hard-filters to OPEN; corporate browse derives
+                         institution from session, not query string.
+FLAG CONSISTENCY         Server uses isFeatureEnabled() (env-aware), client
+                         uses FEATURES map; routes return 404 (not 403) when
+                         flag off — indistinguishable from unimplemented.
+```
+
+**Graduation trigger added to Part 4.**
+
+```
+Trigger family H — First institutional licence (SCHOOL_STUDENT or ENTERPRISE)
+- Corporate SPHINX Marketplace (Phase K) · activated · 0 d (shipped flag-off)
+- Set FEATURE_CORPORATE_MARKETPLACE=true at deploy time · 0 d
+- (Optional) Per-institution analytics rollup on /enterprise · 2 d
+```
+
+**Operational notes.** The flag is OFF on every deployed environment until the first institutional contract is countersigned; flipping `FEATURE_CORPORATE_MARKETPLACE=true` lights up the surface without a code deploy. Existing OPEN-market behaviour is unchanged: the public list excludes `CORPORATE`-only rows but still surfaces `BOTH`. No data migration is required for tenants that never opt in — the new columns default to `'OPEN'` / `NULL`.
+
+---
+
+*End of MVP PDD — SPARTAN-compressed from ARK PDD v3 · 25 prompts · 4 weeks + Phase K activation · Replit Agent · ATANDA Studio · May 2026.*
