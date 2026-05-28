@@ -27,7 +27,8 @@ import { JSTRadar } from "@/components/dashboard/JSTRadar";
 import { VulnerabilityMeter } from "@/components/dashboard/VulnerabilityMeter";
 import { TransferabilityRadar } from "@/components/pathways/TransferabilityRadar";
 import { UpskillingTimeline } from "@/components/pathways/UpskillingTimeline";
-import { ARK_SCORE_DELTAS, CONTEXT_CRAFT_LEVELS, FLYWHEEL_CAPS, SPC_HIVE_MIN_TO_PUBLISH } from "@shared/schema";
+import { ARK_SCORE_DELTAS, CONTEXT_CRAFT_LEVELS, FLYWHEEL_CAPS, SPC_HIVE_MIN_TO_PUBLISH, SPC_FEEDBACK_BONUS_BY_STARS, LHCS_WEIGHTS } from "@shared/schema";
+import { Star } from "lucide-react";
 
 // ─── DEMO DATA ────────────────────────────────────────────────────────────
 // Self-contained sample data for the guided tour. No auth, no backend calls.
@@ -141,6 +142,31 @@ const MARKETPLACE = [
   },
 ];
 
+// Phase J — ARK = JST + CCMI, max 600
+const CCMI = {
+  total: 240,
+  pillars: [
+    { id: "P1", name: "Context", score: 36 },
+    { id: "P2", name: "Decomposition", score: 33 },
+    { id: "P3", name: "Specificity", score: 38 },
+    { id: "P4", name: "Reasoning", score: 34 },
+    { id: "P5", name: "Constraints", score: 30 },
+    { id: "P6", name: "Synthesis", score: 35 },
+    { id: "P7", name: "Iteration", score: 34 },
+  ],
+};
+const LHCS = { cpr: 78, mps: 72, lcis: 81 };
+const LHCS_COMPOSITE = Math.round(
+  LHCS.cpr * LHCS_WEIGHTS.cpr + LHCS.mps * LHCS_WEIGHTS.mps + LHCS.lcis * LHCS_WEIGHTS.lcis,
+);
+
+// Phase K — Corporate marketplace listings (flag-gated CLASS C preview)
+const CORPORATE_LISTINGS = [
+  { id: "corp-1", title: "Atlas Logistics — Q3 OKR Synthesizer", scope: "CORPORATE", price: 0, stars: 4.8, feedbackCount: 27 },
+  { id: "corp-2", title: "Atlas — Vendor Security Review Drafter", scope: "CORPORATE", price: 0, stars: 4.6, feedbackCount: 14 },
+  { id: "corp-3", title: "Atlas — Incident Post-Mortem Template", scope: "BOTH", price: 8, stars: 4.9, feedbackCount: 41 },
+];
+
 const PIVOTS = [
   { role: "AI Integration Manager", feasibility: 87, gapCost: "$2,400", time: "4 months", salary: "+18%" },
   { role: "Product Ops Director", feasibility: 82, gapCost: "$1,800", time: "6 months", salary: "+24%" },
@@ -179,26 +205,63 @@ type Step = {
   render: () => React.ReactElement;
 };
 
-const StepJst = () => (
-  <div className="grid lg:grid-cols-2 gap-6">
-    <JSTGauge
-      score={JST.total}
-      jobsScore={JST.jobs}
-      skillsScore={JST.skills}
-      talentScore={JST.talent}
-      rawTotal={JST.rawTotal}
-      contextCraftLevel={JST.contextCraftLevel}
-      contextCraftMultiplier={JST.contextCraftMultiplier}
-      percentileRank={JST.percentileRank}
-      previousScore={JST.previousScore}
-      industryAverage={JST.industryAverage}
-    />
-    <div className="space-y-4">
-      <JSTRadar jobsScore={JST.jobs} skillsScore={JST.skills} talentScore={JST.talent} />
-      <VulnerabilityMeter level={3} />
+const StepJst = () => {
+  const ark = JST.total + CCMI.total;
+  return (
+    <div className="space-y-6">
+      {/* ARK Identity strip (Phase J) */}
+      <div className="glass-card rounded-xl border-2 border-secondary/40 p-5" data-testid="tour-ark-identity">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-widest text-secondary">ARK Identity · JST + CCMI</div>
+            <div className="font-display text-xs text-muted-foreground">The canonical 0–600 score. Both engines move together.</div>
+          </div>
+          <div className="font-display text-4xl text-secondary neon-text">{ark}<span className="text-base text-muted-foreground"> / 600</span></div>
+        </div>
+        <div className="grid sm:grid-cols-3 gap-3 mb-4">
+          <Stat icon={Gauge} label="JST" value={`${JST.total} / 300`} tone="text-primary" />
+          <Stat icon={Crown} label="CCMI" value={`${CCMI.total} / 300`} tone="text-fuchsia-300" />
+          <Stat icon={Trophy} label="LHCS" value={`${LHCS_COMPOSITE} · ${LHCS_COMPOSITE >= 70 ? "ACTIVE" : LHCS_COMPOSITE >= 40 ? "DEVELOPING" : "BASELINE"}`} tone="text-emerald-300" />
+        </div>
+        <div className="grid grid-cols-7 gap-1.5">
+          {CCMI.pillars.map((p) => (
+            <div key={p.id} className="text-center" data-testid={`tour-ccmi-${p.id}`}>
+              <div className="h-12 bg-background/40 border border-border rounded relative overflow-hidden flex items-end">
+                <div className="w-full bg-gradient-to-t from-fuchsia-500 to-cyan-400" style={{ height: `${(p.score / 50) * 100}%` }} />
+              </div>
+              <div className="text-[9px] font-mono text-muted-foreground mt-1">{p.id}</div>
+              <div className="text-[9px] font-mono text-foreground">{p.score}</div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 pt-3 border-t border-border text-[11px] font-mono text-muted-foreground flex items-center gap-4 flex-wrap">
+          <span>Flywheel caps: <span className="text-cyan-300">+{FLYWHEEL_CAPS.CCGE_PER_DAY} ARK/day (CCGE)</span></span>
+          <span>·</span>
+          <span><span className="text-fuchsia-300">+{FLYWHEEL_CAPS.SPHINX_PER_30D} ARK/30-day (SPHINX)</span></span>
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-6">
+        <JSTGauge
+          score={JST.total}
+          jobsScore={JST.jobs}
+          skillsScore={JST.skills}
+          talentScore={JST.talent}
+          rawTotal={JST.rawTotal}
+          contextCraftLevel={JST.contextCraftLevel}
+          contextCraftMultiplier={JST.contextCraftMultiplier}
+          percentileRank={JST.percentileRank}
+          previousScore={JST.previousScore}
+          industryAverage={JST.industryAverage}
+        />
+        <div className="space-y-4">
+          <JSTRadar jobsScore={JST.jobs} skillsScore={JST.skills} talentScore={JST.talent} />
+          <VulnerabilityMeter level={3} />
+        </div>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const StepSkillGames = () => (
   <div className="space-y-6">
@@ -266,8 +329,14 @@ const StepSkillGames = () => (
 );
 
 const StepMarketplace = () => (
-  <div className="grid md:grid-cols-3 gap-4">
-    {MARKETPLACE.map((m) => (
+  <div className="space-y-6">
+    {/* Public marketplace */}
+    <div>
+      <div className="text-[10px] font-mono uppercase tracking-widest text-cyan-300 mb-3 flex items-center gap-2">
+        <Store className="h-3 w-3" /> Public Scope · OPEN
+      </div>
+      <div className="grid md:grid-cols-3 gap-4">
+        {MARKETPLACE.map((m) => (
       <div
         key={m.id}
         className="glass-card rounded-xl border-2 border-border hover:border-secondary/40 transition-colors p-5 flex flex-col"
@@ -298,7 +367,60 @@ const StepMarketplace = () => (
           <div className="font-display font-bold text-secondary">{m.price} cr</div>
         </div>
       </div>
-    ))}
+        ))}
+      </div>
+    </div>
+
+    {/* Corporate shelf (Phase K) */}
+    <div className="glass-card rounded-xl border-2 border-fuchsia-400/40 p-5" data-testid="tour-corporate-shelf">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <Building2 className="h-4 w-4 text-fuchsia-300" />
+          <div>
+            <div className="font-display text-sm text-foreground">Atlas Logistics · Corporate Shelf</div>
+            <div className="text-[10px] font-mono text-muted-foreground">Visible only to employees of the publishing org.</div>
+          </div>
+        </div>
+        <Badge variant="outline" className="border-fuchsia-400/40 text-fuchsia-200 font-mono text-[10px]">CLASS C · flag-gated</Badge>
+      </div>
+      <div className="space-y-2">
+        {CORPORATE_LISTINGS.map((l) => (
+          <div key={l.id} className="flex items-center justify-between gap-3 rounded-md border border-border bg-background/40 p-3" data-testid={`tour-corp-${l.id}`}>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 mb-0.5">
+                <Badge variant="outline" className={cn("font-mono text-[9px]", l.scope === "CORPORATE" ? "border-fuchsia-400/40 text-fuchsia-200" : "border-cyan-400/40 text-cyan-200")}>{l.scope}</Badge>
+                <span className="text-sm text-foreground truncate">{l.title}</span>
+              </div>
+              <div className="text-[10px] font-mono text-muted-foreground flex items-center gap-1.5">
+                <Star className="h-3 w-3 text-amber-300 fill-amber-300" /> {l.stars} · {l.feedbackCount} ratings
+              </div>
+            </div>
+            <span className="font-display text-sm text-secondary shrink-0">{l.price === 0 ? "Internal" : `${l.price} cr`}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    {/* Star-feedback bonus schedule */}
+    <div className="glass-card rounded-xl border border-border p-5" data-testid="tour-feedback-bonus">
+      <div className="flex items-center gap-2 mb-2">
+        <Star className="h-4 w-4 text-amber-300" />
+        <h3 className="font-display text-sm uppercase tracking-widest text-foreground">Star Feedback → ARK Credits</h3>
+      </div>
+      <p className="text-xs text-muted-foreground mb-4">Verified buyers rate cards 1–5★. A rating of 3★ or higher mints fresh credits to the creator — quality compounds, low ratings cost nothing.</p>
+      <div className="grid grid-cols-3 gap-3">
+        {[5, 4, 3].map((stars) => (
+          <div key={stars} className="rounded-md bg-background/40 border border-border p-3 text-center" data-testid={`tour-feedback-${stars}`}>
+            <div className="flex items-center justify-center gap-0.5 mb-1">
+              {Array.from({ length: stars }).map((_, i) => (
+                <Star key={i} className="h-3 w-3 text-amber-300 fill-amber-300" />
+              ))}
+            </div>
+            <div className="font-display text-lg text-secondary">+{SPC_FEEDBACK_BONUS_BY_STARS[stars as 3 | 4 | 5]} cr</div>
+          </div>
+        ))}
+      </div>
+    </div>
   </div>
 );
 
