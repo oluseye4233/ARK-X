@@ -42,3 +42,9 @@ id = "4DiraD_IXd8CMkKhz0uTO"
 uri = "file://exports/ARK_PDD_MVP_Spartan.md"
 type = "text"
 title = "ARK Platform — MVP PDD (Markdown source)"
+
+[[outputs]]
+id = "UH7MRcpi_uA218Qoqzkpw"
+uri = "file://screenshots/badge_silver.png"
+type = "image"
+title = "Silver tier CCGE badge (Satori-rendered PNG)"

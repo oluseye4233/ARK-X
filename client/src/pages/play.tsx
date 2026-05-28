@@ -21,6 +21,10 @@ import {
   Wand2,
   Briefcase,
   X,
+  Share2,
+  Link as LinkIcon,
+  Download,
+  Check,
 } from "lucide-react";
 import { CCGE_INDUSTRY_PRESETS } from "@shared/schema";
 import { CcgeCard } from "@/components/play/CcgeCard";
@@ -303,6 +307,12 @@ export default function PlayPage() {
   if (result) {
     const { breakdown, tier, flywheel } = result;
     const tierClass = tier ? TIER_BORDER[tier] : "border-muted-foreground/30";
+    const shareUrl = tier
+      ? `${window.location.origin}/badge/${result.session.id}`
+      : null;
+    const badgePngUrl = tier
+      ? `${window.location.origin}/badge/${result.session.id}.png`
+      : null;
     return (
       <div className="max-w-5xl mx-auto space-y-6" data-testid="ccge-result-view">
         <div className={cn("glass-card border-2 p-8 rounded-xl", tierClass)}>
@@ -447,6 +457,10 @@ export default function PlayPage() {
             </div>
           </div>
         </div>
+
+        {tier && shareUrl && badgePngUrl ? (
+          <ShareWinCard shareUrl={shareUrl} pngUrl={badgePngUrl} tier={tier} />
+        ) : null}
 
         <div className="flex gap-3">
           <Button onClick={resetToLobby} className="flex-1" data-testid="button-back-to-lobby">
@@ -892,6 +906,116 @@ export default function PlayPage() {
           Please log in to play. Demo: <code className="font-mono bg-amber-500/10 px-2 py-0.5 rounded">analyst@enterprise.com</code> / <code className="font-mono bg-amber-500/10 px-2 py-0.5 rounded">arkplatform</code>
         </div>
       )}
+    </div>
+  );
+}
+
+function ShareWinCard({ shareUrl, pngUrl, tier }: { shareUrl: string; pngUrl: string; tier: string }) {
+  const [copied, setCopied] = useState(false);
+  const canNativeShare =
+    typeof navigator !== "undefined" && typeof (navigator as any).share === "function";
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard blocked — fall back to selecting the URL
+      window.prompt("Copy your badge link:", shareUrl);
+    }
+  };
+
+  const handleNativeShare = async () => {
+    try {
+      await (navigator as any).share({
+        title: `I earned ${tier} on ARK CCGE`,
+        text: `Just earned ${tier} tier on ARK Platform's Context Craft game.`,
+        url: shareUrl,
+      });
+    } catch {
+      /* user cancelled */
+    }
+  };
+
+  return (
+    <div
+      className="glass-card border-2 border-primary/40 p-6 rounded-xl"
+      data-testid="share-win-card"
+    >
+      <div className="flex items-start gap-4 flex-wrap">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-primary/30 to-secondary/30 flex items-center justify-center shrink-0">
+            <Share2 className="h-6 w-6 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-lg font-display font-bold text-foreground">
+              Share your {tier} win
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Anyone with the link sees a verified badge with Open Graph unfurl on socials.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex gap-2 flex-wrap">
+          <a
+            href={shareUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="link-open-badge"
+          >
+            <Button variant="outline" size="sm" className="font-mono text-xs">
+              <ArrowRight className="h-3.5 w-3.5 mr-1.5" />
+              Open page
+            </Button>
+          </a>
+          <Button
+            variant="outline"
+            size="sm"
+            className="font-mono text-xs"
+            onClick={handleCopy}
+            data-testid="button-copy-share-link"
+          >
+            {copied ? (
+              <>
+                <Check className="h-3.5 w-3.5 mr-1.5 text-emerald-400" />
+                Copied
+              </>
+            ) : (
+              <>
+                <LinkIcon className="h-3.5 w-3.5 mr-1.5" />
+                Copy link
+              </>
+            )}
+          </Button>
+          <a
+            href={pngUrl}
+            download={`ark-badge-${tier.toLowerCase()}.png`}
+            data-testid="link-download-badge"
+          >
+            <Button variant="outline" size="sm" className="font-mono text-xs">
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+              Download PNG
+            </Button>
+          </a>
+          {canNativeShare && (
+            <Button
+              size="sm"
+              className="font-mono text-xs bg-gradient-to-br from-primary to-secondary text-background"
+              onClick={handleNativeShare}
+              data-testid="button-native-share"
+            >
+              <Share2 className="h-3.5 w-3.5 mr-1.5" />
+              Share
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4 px-3 py-2 rounded-md bg-background/40 border border-border/50 font-mono text-xs text-muted-foreground truncate">
+        {shareUrl}
+      </div>
     </div>
   );
 }

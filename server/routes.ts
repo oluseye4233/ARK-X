@@ -53,6 +53,7 @@ import { analyzeSpcListing, SpcAnalysisProTierRequiredError } from "./ai/spcAnal
 import { categoryToPillars, MARKETPLACE_CATEGORIES, type MarketplaceCategory, hiveToTierBadge } from "@shared/schema";
 import { buildGuinProfile, validateEndorsement } from "./guin";
 import { ENDORSEMENT_MAX_LEN } from "@shared/schema";
+import { registerBadgeRoutes } from "./badge/routes";
 import { z } from "zod";
 
 const upload = multer({
@@ -68,6 +69,9 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  // ── Public CCGE badge renderer + share page ───────────
+  registerBadgeRoutes(app);
 
   // ── Flywheel SSE stream ───────────────────────────────
   app.get("/api/ark-score/stream", requireAuth, async (req, res) => {
