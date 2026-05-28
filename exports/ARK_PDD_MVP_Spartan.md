@@ -792,4 +792,82 @@ Trigger family I — Social referral loop (zero-cost growth channel)
 
 ---
 
-*End of MVP PDD — SPARTAN-compressed from ARK PDD v3 · 26 prompts · 4 weeks + Phase K (Corporate Marketplace) + Phase L (Shareable CCGE Badges) activations · Replit Agent · ATANDA Studio · May 2026.*
+# 9. Phase N Addendum — SPC Class Tiering & MAX-Class Synthesis Gate (Post-MVP Activation)
+
+**Status:** designed · feature-flagged OFF by default (`spcClassTiering`) · graduates from the existing Phase M (SPHINX × Matrix) synthesis surface the first time a synthesis preview clears the joint MAX gate. Builds on existing M4 royalty splits + ZPOS compression — no new synthesis machinery, only a class promotion gate on top.
+
+**What it is.** A three-tier listing class (`SI` / `ULTRA_SI` / `MAX`) applied to `spc_listings`, with class-specific HIVE publish floors and class-tiered SPHINX flywheel caps. `MAX` listings are not hand-published — they are *graduated* from a finalized synthesis session that simultaneously clears all gates of the **MAX Synthesis Gate** (joint multi-engine certification). Parent-creator royalties already pay forward via the M4 split engine; Phase N codifies the surviving artefact as a new tradeable listing with its own DNA-lineage receipt rather than a per-buyer one-shot output.
+
+**Why now.** The Phase M synthesis engine ships with `sphinxAdvanced` OFF and treats every multi-source synthesis identically — 2 parents at HIVE 60 and 5 parents at HIVE 95 produce the same output class. The MAX-class literature (ATLAS MAX, SPARTAN MAX) shows the real innovation is the *joint gate*, not the merge itself: two parents must clear a single threshold simultaneously, and the artefact must inherit DNA from both. Phase N is the smallest possible promotion of M4 from "private compressed buy" to "marketplace-native MAX listing" — one prompt, two columns, one gate. It also creates the first principled answer to the deferred "100+ listings / 25+ creators" trigger family: MAX listings are the structural unlock for premium-tier marketplace economics.
+
+**Compression check (SPARTAN gates).**
+
+```
+NEW SCHEMA       +1 col (spc_listings.spcClass) · +1 col (spc_listings.parentListingIds)
+                 +1 col (spc_listings.dnaLineage) · +0 tables
+                 (synthesis_sessions + synthesis_creators_split already exist)
+NEW CONSTANTS    SPC_CLASSES · SPC_CLASS_HIVE_FLOORS · SPC_CLASS_FLYWHEEL_CAPS ·
+                 MAX_SYNTHESIS_GATE (8 joint thresholds)
+NEW ENDPOINTS    +2 (POST sessions/:id/promote-to-max · GET listings?class=)
+                 (existing GET /listings query gains optional ?class filter)
+NEW CLIENT UI    +1 component (MaxGateChecklist on synthesis preview view)
+                 +1 listing badge variant (MAX glyph on /marketplace cards)
+NEW PROMPT       MVCC-MKT-006 · single prompt scope (schema + class gate +
+                 promote-to-max txn + browse filter + checklist UI + badge)
+NET PROMPT COUNT 26 → 27 (one prompt added · zero existing prompts modified)
+DEPENDENCIES     +0 npm · reuses synthesis.ts + zpos.ts + arkRecalc.ts
+```
+
+**MVCC-MKT-006 · SPC Class Tiering & MAX Synthesis Gate (post-MVP activation prompt)**
+
+Add `SPC_CLASSES` (`SI` / `ULTRA_SI` / `MAX`), `SPC_CLASS_HIVE_FLOORS` (`{SI: 60, ULTRA_SI: 80, MAX: 90}`), `SPC_CLASS_FLYWHEEL_CAPS` (`{SI: 10, ULTRA_SI: 20, MAX: 40}` per 30d), and `MAX_SYNTHESIS_GATE` (8 thresholds: `minParents: 2`, `eachParentHive: 80`, `eachParentClass: ['ULTRA_SI','MAX']`, `combinedHive: 90`, `semanticPreservation: 0.97`, `compressionRatio: 0.30`, `pillarDiversity: 2`, `groClear: true`) to `shared/schema.ts`. Add three additive columns to `spc_listings`: `spcClass text not null default 'SI'`, `parentListingIds text[]` (null for SI/ULTRA_SI, required for MAX), `dnaLineage text` (human-readable provenance string, e.g. `"SPHINX → (ATLAS-A × ATLAS-B) → MAX"`, populated only on MAX). Idempotent migration `migrations/0009_spc_class_tiering.sql`. Storage adds `evaluateMaxGate(sessionId)` returning `{passes: boolean, gateResults: Record<keyof MAX_SYNTHESIS_GATE, {value, threshold, pass}>}` and `promoteSynthesisToMaxListing(sessionId, {title, description, priceCredits, pillar})` — atomic txn: re-lock session row, re-run `evaluateMaxGate` server-side (never trust client preview), insert new `spc_listings` row with `spcClass='MAX'`, parent ids snapshotted, dna lineage string, HIVE score = combined gate score, body = `session.combinedOutput`; emit `spc.published` ARK event tagged `class='MAX'`. Routes (all `requireFeature("spcClassTiering")` + `requireAuth`): `POST /api/sphinx/synthesis/sessions/:id/promote-to-max` (buyer-only, 409 if session not `finalized`, 422 if gate fails with full gate-result diagnostic), `GET /api/sphinx/listings?class=MAX|ULTRA_SI|SI` (filter added to existing browse). Publish route enforces `SPC_CLASS_HIVE_FLOORS[body.spcClass ?? 'SI']` so SI listings can ship at HIVE 60 (broadens supply) while ULTRA_SI keeps the existing 80 floor; MAX is unreachable via publish — only via promotion. ARK recalc reads `SPC_CLASS_FLYWHEEL_CAPS[listing.spcClass]` instead of the flat `FLYWHEEL_CAPS.SPHINX_PER_30D` when awarding `spc.sold`/`spc.purchased` events; parent-creator royalty events from M4 finalize use the **MAX** cap when the synthesis was promoted (so parent creators continue to benefit from MAX-tier flywheel every time the MAX listing sells, not just on the original promotion). Client: `MaxGateChecklist` component on `/marketplace/synthesis/:id` preview shows all 8 gate results (green check / red x + actual-vs-threshold), `Promote to MAX` button enabled only when all green; ListingCard renders a MAX glyph badge (purple/gold ring) when `spcClass === 'MAX'`, with a hover-tooltip showing the dna lineage string; `/marketplace` gains a class chip filter (All / SI / ULTRA SI / MAX).
+
+**Threat-model deltas.**
+
+```
+ELEVATION OF PRIVILEGE   Server re-evaluates MAX_SYNTHESIS_GATE inside the
+                         promote-to-max txn from session + parent-listing
+                         state — client-side preview gate is decorative.
+                         spcClass on publish body is clamped to ['SI','ULTRA_SI'];
+                         'MAX' on the publish path returns 400.
+TAMPERING                spcClass + parentListingIds + dnaLineage are write-once
+                         at promote-to-max txn; subsequent listing updates
+                         (price, status) preserve them. Parent listings are
+                         soft-locked (cannot be hard-deleted while any MAX
+                         listing references them — delete returns 409 with the
+                         dependent MAX list).
+INFO DISCLOSURE          dnaLineage exposes only public parent listing titles +
+                         creator display names (already public on parent cards).
+                         No private body text from parents leaks via lineage.
+FLYWHEEL ABUSE           SPC_CLASS_FLYWHEEL_CAPS upgrades MAX caps to +40/30d.
+                         Cap is enforced in arkRecalc.ts the same way as the
+                         existing SPHINX cap — strict ceiling with overshoot
+                         hard-clamped off CCMI before persistence.
+SPOOFING                 Class filter on browse is hard-validated against
+                         SPC_CLASSES; arbitrary strings return 400 (not silent
+                         empty result). Browse never trusts client class claim
+                         from listing payloads — re-derived server-side.
+GATE INTEGRITY           The 8 MAX gate thresholds live in shared/schema.ts as
+                         a single frozen constant; any future tightening is a
+                         shared-schema change visible in both client preview
+                         and server enforcement, so the two can never drift.
+```
+
+**Graduation trigger added to Part 4.**
+
+```
+Trigger family J — Premium marketplace tier (25+ creators / 100+ listings reached)
+- Flip FEATURE_SPHINX_ADVANCED=true (M-series synthesis surface) · 0 d
+- Flip FEATURE_SPC_CLASS_TIERING=true · 0 d (shipped flag-off)
+- Backfill existing listings: every row with hiveScore ≥ 80 → spcClass='ULTRA_SI',
+  others → 'SI'. Idempotent SQL one-liner. · 0.5 d
+- (Optional) MAX-only landing strip on /marketplace homepage · 1 d
+- (Optional) Per-class revenue split tuning (MAX could move from 70/30 to
+  60/40 to widen the parent royalty pool) — economics decision, not eng · 0 d
+```
+
+**Operational notes.** Phase N is purely additive on top of the existing M4 synthesis engine — no existing route or storage method changes signature. With both flags OFF (default), the marketplace behaves exactly as Phase M did: synthesis sessions remain private compressed buys, every listing is implicitly SI-class, no MAX path exists. Flipping `FEATURE_SPC_CLASS_TIERING=true` alone is a no-op without the M-series synthesis surface; flipping it together with `FEATURE_SPHINX_ADVANCED=true` lights up the full SI/ULTRA_SI/MAX taxonomy. The first MAX listing is the canonical proof that the synthesis function is producing more than the sum of its parents — until that listing exists, "MAX class" is just marketing copy. Phase N is the smallest possible code change that makes the claim falsifiable on disk.
+
+---
+
+*End of MVP PDD — SPARTAN-compressed from ARK PDD v3 · 27 prompts · 4 weeks + Phase K (Corporate Marketplace) + Phase L (Shareable CCGE Badges) + Phase N (SPC Class Tiering / MAX-Class Synthesis Gate) activations · Replit Agent · ATANDA Studio · May 2026.*
