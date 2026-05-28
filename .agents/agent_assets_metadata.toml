@@ -60,3 +60,9 @@ id = "yxGU6LDoJEnsgBJYq5_S4"
 uri = "file://exports/ARK_PDD_LLM_Usage_Guardrail.md"
 type = "text"
 title = "ARK Platform — LLM Usage Guardrail PDD"
+
+[[outputs]]
+id = "omQcNBG31AIirGRPg2-Ku"
+uri = "file://exports/ARK_Onecraft_Capability_vs_TREE_Reality_Check.md"
+type = "text"
+title = "ARK / Onecraft — Capability vs. TREE Reality Check"
