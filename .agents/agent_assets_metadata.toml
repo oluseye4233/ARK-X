@@ -48,3 +48,9 @@ id = "UH7MRcpi_uA218Qoqzkpw"
 uri = "file://screenshots/badge_silver.png"
 type = "image"
 title = "Silver tier CCGE badge (Satori-rendered PNG)"
+
+[[outputs]]
+id = "yiEhh_-CyaJljhULfmm0l"
+uri = "file://screenshots/badge_live.png"
+type = "image"
+title = "Live CCGE badge — Silver tier, scenario \"Customer Support Auto-Response\""
