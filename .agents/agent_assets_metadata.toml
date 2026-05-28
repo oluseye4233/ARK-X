@@ -66,3 +66,9 @@ id = "omQcNBG31AIirGRPg2-Ku"
 uri = "file://exports/ARK_Onecraft_Capability_vs_TREE_Reality_Check.md"
 type = "text"
 title = "ARK / Onecraft — Capability vs. TREE Reality Check"
+
+[[outputs]]
+id = "ywpkYNwFKsiBT_-Rmf_xN"
+uri = "file://exports/Context_Craft_Checkpoint_Design_Guide.pdf"
+type = "pdf"
+title = "Context Craft — Checkpoint Page Design Guide"
