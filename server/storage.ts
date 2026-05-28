@@ -105,7 +105,6 @@ export interface IStorage {
   getSpcFeedbackForListing(listingId: string): Promise<{
     count: number;
     average: number;
-    totalBonus: number;
     histogram: Record<string, number>;
     recent: Array<{ id: string; stars: number; comment: string | null; createdAt: string; buyerName: string | null }>;
   }>;
@@ -682,7 +681,6 @@ export class DatabaseStorage implements IStorage {
   async getSpcFeedbackForListing(listingId: string): Promise<{
     count: number;
     average: number;
-    totalBonus: number;
     histogram: Record<string, number>;
     recent: Array<{ id: string; stars: number; comment: string | null; createdAt: string; buyerName: string | null }>;
   }> {
@@ -693,7 +691,6 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(spcFeedback.createdAt));
     const count = items.length;
     const sumStars = items.reduce((s, f) => s + f.stars, 0);
-    const totalBonus = items.reduce((s, f) => s + f.bonusAwarded, 0);
     const average = count > 0 ? Math.round((sumStars / count) * 10) / 10 : 0;
     const histogram: Record<string, number> = { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 };
     for (const f of items) histogram[String(f.stars)] = (histogram[String(f.stars)] ?? 0) + 1;
@@ -713,7 +710,7 @@ export class DatabaseStorage implements IStorage {
       createdAt: f.createdAt instanceof Date ? f.createdAt.toISOString() : String(f.createdAt),
       buyerName: nameById.get(f.buyerId) ?? null,
     }));
-    return { count, average, totalBonus, histogram, recent };
+    return { count, average, histogram, recent };
   }
 
   async getSpcFeedbackByBuyer(listingId: string, buyerId: string): Promise<SpcFeedback | undefined> {

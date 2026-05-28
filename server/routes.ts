@@ -1610,9 +1610,9 @@ export async function registerRoutes(
       }
 
       // Phase K — corporate scope gating. The corporate marketplace is a
-      // CLASS C surface; if the flag is off we silently coerce the listing
-      // back to OPEN so publish never 404s on flag-flips. When ON we require
-      // the creator's institution string to populate the snapshot.
+      // CLASS C surface; when the flag is off we reject CORPORATE/BOTH
+      // publish attempts with 422 (explicit failure, no silent OPEN coerce).
+      // When ON we require the creator's institution string for the snapshot.
       let effectiveScope = parsed.scope;
       let institutionSnapshot: string | null = null;
       if (effectiveScope === "CORPORATE" || effectiveScope === "BOTH") {
@@ -1620,17 +1620,22 @@ export async function registerRoutes(
         // env overlay) — never the static shared FEATURES map, which would
         // disagree with the dedicated corporate routes (gated via
         // requireFeature) when ops flips the flag at runtime.
+        // BUGMXT [L2-K01] — fail explicit instead of silently coercing to
+        // OPEN. A stale client (or API caller) asking for CORPORATE/BOTH
+        // when the flag is off must be told so, not have its listing
+        // quietly redirected into the wrong market.
         if (!isFeatureEnabled("corporateMarketplace")) {
-          effectiveScope = "OPEN";
-        } else {
-          const inst = (creator.institution ?? "").trim();
-          if (!inst) {
-            return res.status(422).json({
-              message: "Corporate-scoped listings require an institution on your profile.",
-            });
-          }
-          institutionSnapshot = inst;
+          return res.status(422).json({
+            message: "Corporate marketplace is not enabled — publish with scope=OPEN.",
+          });
         }
+        const inst = (creator.institution ?? "").trim();
+        if (!inst) {
+          return res.status(422).json({
+            message: "Corporate-scoped listings require an institution on your profile.",
+          });
+        }
+        institutionSnapshot = inst;
       }
 
       const listing = await storage.createSpcListing({
