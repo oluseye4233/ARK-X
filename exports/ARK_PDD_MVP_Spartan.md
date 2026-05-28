@@ -870,4 +870,87 @@ Trigger family J — Premium marketplace tier (25+ creators / 100+ listings reac
 
 ---
 
-*End of MVP PDD — SPARTAN-compressed from ARK PDD v3 · 27 prompts · 4 weeks + Phase K (Corporate Marketplace) + Phase L (Shareable CCGE Badges) + Phase N (SPC Class Tiering / MAX-Class Synthesis Gate) activations · Replit Agent · ATANDA Studio · May 2026.*
+## §10 — Phase O Addendum: Revenue / Token-Cost Invariant (the 10% Rule)
+
+**Status.** Flag-OFF on merge. Pure economics + leakage plug; no new user-facing feature.
+**What it is.** A second, cost-denominated AI budget that runs alongside the existing token-denominated one, so every paid tier obeys `AI cost ≤ 10% of monthly revenue` regardless of how the user's traffic mixes Haiku vs Sonnet, input vs output. Free stays at its 20,000-token cap *and* a $0.30 hard cost ceiling, with every Sonnet path and `useClaude` escape hatch closed off.
+**Why now.** The Phase J–N flywheel is real revenue plumbing (CCGE +15/d, SPHINX SI +10 / ULTRA +20 / MAX +40 per 30d, narrative + KCSE + SPC analysis all paid Anthropic calls). Today's tier sizing was set against a *blended* cost assumption (~$5/MTok at 50/50 Haiku-Sonnet). The current code has **no policy forcing that blend** — a single PRO user running narrative-heavy Sonnet traffic blows the 10% margin to 15.5%. Worse, FREE users can pass `useClaude: true` on CCGE finish and the route honors it. The pricing page promises a margin that the engine does not enforce.
+
+**Compression check.**
+
+```
+NEW SCHEMA       AI_TIER_COST_BUDGET_CENTS · AI_TIER_MODEL_POLICY constants
+                 in shared/schema.ts (no migration — constants only).
+NEW ENDPOINTS    GET /api/ai/status returns { usage, costCents, capCents,
+                 ratioPct, tokensRemaining, centsRemaining, upgradeAtPct=80,
+                 hardStopAtPct=100 } — same path, richer payload.
+                 NO new routes.
+NEW CLIENT UI    <AiBudgetBanner/> in AppLayout — shows at ≥80% of either
+                 budget; promotes to <UpgradeModal/> at 100% with one-click
+                 PRO checkout entry.
+NEW PROMPT       1 (MVCC-ECO-001 — Revenue/Token-Cost Invariant).
+NET PROMPT COUNT 28 (was 27).
+DEPENDENCIES     Anthropic SDK already wired (Phase F). server/ai/usage.ts
+                 already logs cost_cents per call — no new collection needed,
+                 just a second enforcement read.
+```
+
+**MVCC-ECO-001 — Revenue / Token-Cost Invariant.** Add two constants to `shared/schema.ts`: `AI_TIER_COST_BUDGET_CENTS = { INDIVIDUAL_FREE: 30, SCHOOL_STUDENT: 90, INDIVIDUAL_PRO: 290, ENTERPRISE: 2000 }` (each = price × 10%, except FREE which gets an absolute $0.30 ceiling independent of price) and `AI_TIER_MODEL_POLICY = { INDIVIDUAL_FREE: { allowedModels: ["claude-haiku-4-5"], allowUseClaude: false }, SCHOOL_STUDENT: { allowedModels: ["claude-haiku-4-5","claude-sonnet-4-6"], allowUseClaude: true, sonnetKindsAllowed: ["narrative"] }, INDIVIDUAL_PRO: { allowedModels: ["claude-haiku-4-5","claude-sonnet-4-6"], allowUseClaude: true, sonnetKindsAllowed: ["narrative","kcse","scenario_gen"] }, ENTERPRISE: { allowedModels: ["claude-haiku-4-5","claude-sonnet-4-6"], allowUseClaude: true, sonnetKindsAllowed: "*" } }`. In `server/ai/usage.ts` add `enforceCostBudget(userId, plan)` which sums `cost_cents` from `ai_usage` for the trailing month and throws `AiCostBudgetExceededError` (status 429) when ≥ cap; wire it next to every existing `enforceBudget` call (kcse, narrative, scenarioGen, spcAnalysis, identity) so token-cap AND cost-cap both gate the request — whichever fires first wins. Rebalance `AI_TIER_MONTHLY_TOKENS` so each tier matches its cost cap at blended pricing: `INDIVIDUAL_FREE: 20000` (held constant per spec), `SCHOOL_STUDENT: 180000` (was 200k — -10% rebalance to the $0.90 ceiling), `INDIVIDUAL_PRO: 580000` (was 500k — +16% headroom recovered by plugging leakage), `ENTERPRISE: 2000000` (unchanged; contract floor $200/mo to keep 10% ratio). Rebalance `AI_TIER_DAILY_QUOTA`: `INDIVIDUAL_FREE: { kcse: 1, narrative: 0, scenario_gen: 0 }` (was 5/0/0 — the old 5/day allowed 11× the monthly cap and was the dominant leakage vector), `SCHOOL_STUDENT: { kcse: 15, narrative: 8, scenario_gen: 4 }`, `INDIVIDUAL_PRO: { kcse: 60, narrative: 35, scenario_gen: 12 }`, `ENTERPRISE: { kcse: 200, narrative: 100, scenario_gen: 50 }` (unchanged). In `server/routes.ts` at the `/api/ccge/sessions/:id/finish` handler, before honoring `useClaude`, reject the boolean when `AI_TIER_MODEL_POLICY[plan].allowUseClaude === false` (plug L2 — the FREE-tier Sonnet leak via game-finish); return 402 with `{ message: "Claude-judged sessions require a paid plan.", upgradePath: "/subscription" }`. In `server/ai/client.ts` add `assertModelAllowed(plan, model, kind)` invoked by every Anthropic call site; throws 403 when the plan's `allowedModels` excludes the requested model or when `sonnetKindsAllowed` excludes the kind. Extend `GET /api/ai/status` to return `{ available, usage: { tokensIn, tokensOut, total, costCents }, caps: { tokenCap, costCapCents }, remaining: { tokens, costCents }, ratioPct: round((max(total/tokenCap, costCents/costCapCents))*100), upgradeAtPct: 80, hardStopAtPct: 100 }` so the client can render a single graduated banner. Add `<AiBudgetBanner/>` to `client/src/components/layout/AppLayout.tsx`: dormant <80%, amber soft warning 80-99%, crimson hard-stop modal at 100% with a one-click upgrade CTA to `/subscription` (FREE → PRO) or `/contact` (ENTERPRISE breach). All new logic is gated by `FEATURE_REVENUE_GUARDRAIL=true` (defaulting OFF in `shared/featureFlags.ts`); with the flag OFF, behaviour is identical to today and only the constants on disk are new — the second-gate enforcement path is dead code until flipped. Acceptance: a FREE user posting `useClaude:true` to CCGE finish returns 402 with the upgrade payload; a PRO user submitting an all-Sonnet narrative-heavy traffic pattern hits the **cost cap** (429) before the token cap and the response body names the cap that fired; `/api/ai/status` reports identical `ratioPct` for a user before and after consuming the same dollar value through different mixes of Haiku/Sonnet; flipping `FEATURE_REVENUE_GUARDRAIL=false` and replaying the same traffic produces the legacy 429 messages with no cost-cap mention.
+
+**Threat-model deltas.**
+
+```
+ELEVATION OF PRIVILEGE   Model selection is now plan-scoped. assertModelAllowed
+                         is a single chokepoint in client.ts — every existing
+                         Anthropic call (5 surfaces) goes through it, so a
+                         future call-site cannot silently grant Sonnet access
+                         to FREE by importing the SDK directly.
+TAMPERING / COST ABUSE   The cost cap is enforced server-side from the
+                         ai_usage ledger (authoritative, never client). useClaude
+                         on CCGE finish is rejected at the route for any plan
+                         where allowUseClaude=false — the request body cannot
+                         buy the user a paid model.
+DOS                      Daily quotas are tightened, not loosened. FREE goes
+                         from 5/day to 1/day kcse — the dominant token-bloat
+                         vector. The new cost cap is a strict per-request stop;
+                         it never queues, never waits.
+INFO DISCLOSURE          /api/ai/status returns aggregate counts and dollar
+                         caps only — never per-call breakdowns, never model
+                         IDs, never prompt previews. The numbers it returns are
+                         already derivable by the owner from getMonthlyTokens;
+                         we are not widening disclosure, only enriching the
+                         existing surface.
+REPUDIATION              No change. Existing ai_usage rows already carry
+                         {userId, kind, model, tokensIn, tokensOut, costCents,
+                         createdAt} — sufficient to reconstruct any tier
+                         breach. The new enforcement reads but never deletes
+                         or rewrites these rows.
+PRICING DRIFT            AI_TIER_COST_BUDGET_CENTS lives next to
+                         SUBSCRIPTION_PLANS in shared/schema.ts. A unit test
+                         (npm run test:scoring extension) asserts that for
+                         every paid tier, costCapCents == round(price × 10);
+                         if marketing changes a price without rebalancing the
+                         cap, CI fails. The 10% invariant becomes a build-time
+                         contract, not a wiki promise.
+```
+
+**Graduation trigger added to Part 4.**
+
+```
+Trigger family K — Revenue guardrail (first month of >$1k MRR OR first
+                   single user crossing 80% of any cost cap)
+- Flip FEATURE_REVENUE_GUARDRAIL=true · 0 d
+- Backfill cost_cents on legacy ai_usage rows where the column is 0 but
+  tokens are > 0 (one-time UPDATE using AI_PRICING_PER_MTOK lookup) · 0.5 d
+- Wire <AiBudgetBanner/> into AppLayout (already implemented; just unhide) · 0 d
+- Add CI test asserting AI_TIER_COST_BUDGET_CENTS[plan] == round(price × 10)
+  for every paid tier in SUBSCRIPTION_PLANS · 0.5 d
+- (Optional) Ops dashboard: top 10 users by costCents this month, with their
+  tier + ratioPct, for proactive ENTERPRISE upsell conversations · 1 d
+```
+
+**Operational notes.** Phase O is the smallest change that turns the 10% margin from a *pricing-page claim* into a *constant on disk that CI can prove*. The legacy `enforceBudget` (token-cap) is kept verbatim — Phase O adds a parallel `enforceCostBudget` (cost-cap) and both must pass. This double-gate design means the failure mode under pathological Sonnet-only traffic is "user hits cost wall earlier than they expected" (a fixable UX issue resolvable with the upgrade modal), not "platform burns margin to zero" (an existential issue resolvable only by re-pricing the plan after the fact). FREE-tier token cap is held at 20,000/mo exactly as specified; every leakage vector identified in the audit (daily-quota math inconsistency, `useClaude` escape hatch, missing model-policy enforcement, undisclosed cap in `/api/ai/status`, hardcoded model selection per call-site) is closed by this single MVCC prompt. With `FEATURE_REVENUE_GUARDRAIL=false` the constants exist on disk but the enforcement path is dead code — the flag is the safety so this can ship on the next deploy without changing any user's billable experience until ops flips it.
+
+---
+
+*End of MVP PDD — SPARTAN-compressed from ARK PDD v3 · 28 prompts · 4 weeks + Phase K (Corporate Marketplace) + Phase L (Shareable CCGE Badges) + Phase N (SPC Class Tiering / MAX-Class Synthesis Gate) + Phase O (Revenue / Token-Cost 10% Invariant) activations · Replit Agent · ATANDA Studio · May 2026.*
