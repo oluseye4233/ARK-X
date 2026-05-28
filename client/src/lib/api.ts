@@ -149,10 +149,26 @@ export const api = {
     body: string;
     pillar: string;
     priceCredits: number;
+    scope?: "OPEN" | "CORPORATE" | "BOTH";
   }) =>
     apiRequest("/api/sphinx/listings", {
       method: "POST",
       body: JSON.stringify(data),
+    }),
+
+  // Phase K — Corporate marketplace
+  getCorporateListings: (pillar?: string) => {
+    const params = new URLSearchParams();
+    if (pillar && pillar !== "All") params.set("pillar", pillar);
+    const qs = params.toString();
+    return apiRequest(`/api/sphinx/corporate/listings${qs ? `?${qs}` : ""}`);
+  },
+  getSpcFeedback: (listingId: string) =>
+    apiRequest(`/api/sphinx/listings/${listingId}/feedback`),
+  submitSpcFeedback: (listingId: string, stars: number, comment?: string) =>
+    apiRequest(`/api/sphinx/listings/${listingId}/feedback`, {
+      method: "POST",
+      body: JSON.stringify({ stars, comment: comment?.trim() || undefined }),
     }),
 
   getSpcListings: (filters?: { pillar?: string; category?: string; search?: string; disc?: string; rarity?: string; version?: string; tier?: string }) => {

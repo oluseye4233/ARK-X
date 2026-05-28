@@ -295,6 +295,25 @@ export const SPC_FIRST_SALE_TALENT_BOOST = 3;
 export const SPC_STATUSES = ["draft", "active", "delisted"] as const;
 export type SpcStatus = typeof SPC_STATUSES[number];
 
+// ── Corporate marketplace (Phase K) ──
+// Where a listing can be discovered + purchased:
+//   OPEN      — public SPHINX market, visible to everyone (legacy default)
+//   CORPORATE — only visible to members of the same `institution` as creator
+//   BOTH      — listed in both surfaces simultaneously
+export const SPC_SCOPES = ["OPEN", "CORPORATE", "BOTH"] as const;
+export type SpcScope = typeof SPC_SCOPES[number];
+
+// Per-use feedback bonus paid out of the platform share when a verified
+// buyer leaves a star rating. Caps at one bonus per (listingId, buyerId)
+// via the unique index on spc_feedback.
+export const SPC_FEEDBACK_BONUS_BY_STARS: Record<1 | 2 | 3 | 4 | 5, number> = {
+  1: 0,
+  2: 0,
+  3: 2,
+  4: 6,
+  5: 10,
+};
+
 export const CERT_LEVEL_RANK: Record<ContextCraftLevel, number> = {
   NONE: 0,
   CC_100: 1,
@@ -586,6 +605,12 @@ export const spcListings = pgTable("spc_listings", {
   // populated in M3 by the synergy engine. Nullable + empty default so
   // existing inserts continue to work unchanged.
   synergyTagIds: text("synergy_tag_ids").array(),
+  // ── Phase K (Corporate Marketplace) additive columns ──
+  // `scope` defaults to OPEN so existing rows behave exactly as before.
+  // `institution` is snapshotted from the creator at publish time so a
+  // later change to users.institution doesn't silently re-scope listings.
+  scope: text("scope").notNull().default("OPEN"),
+  institution: text("institution"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -596,6 +621,8 @@ export const insertSpcListingSchema = createInsertSchema(spcListings).omit({
   status: true,
   salesCount: true,
   totalEarned: true,
+  scope: true,
+  institution: true,
   createdAt: true,
 });
 export type InsertSpcListing = z.infer<typeof insertSpcListingSchema>;
@@ -629,6 +656,35 @@ export const insertSpcPurchaseSchema = createInsertSchema(spcPurchases).omit({
 });
 export type InsertSpcPurchase = z.infer<typeof insertSpcPurchaseSchema>;
 export type SpcPurchase = typeof spcPurchases.$inferSelect;
+
+// ── Phase K — SPC feedback / star ratings ──
+// One row per (listingId, buyerId). Only a confirmed buyer (per the
+// spc_purchases gate) may create a feedback row. `bonusAwarded` records
+// the credit bonus paid to the creator at insert time so we can audit
+// per-use rewards without recomputing from the stars value later (the
+// payout schedule may change without retroactively re-pricing history).
+export const spcFeedback = pgTable(
+  "spc_feedback",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    listingId: varchar("listing_id").notNull(),
+    buyerId: varchar("buyer_id").notNull(),
+    creatorId: varchar("creator_id").notNull(),
+    stars: integer("stars").notNull(),
+    comment: text("comment"),
+    bonusAwarded: integer("bonus_awarded").notNull().default(0),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("spc_feedback_listing_buyer_uidx").on(t.listingId, t.buyerId)],
+);
+
+export const insertSpcFeedbackSchema = createInsertSchema(spcFeedback).omit({
+  id: true,
+  bonusAwarded: true,
+  createdAt: true,
+});
+export type InsertSpcFeedback = z.infer<typeof insertSpcFeedbackSchema>;
+export type SpcFeedback = typeof spcFeedback.$inferSelect;
 
 // ── GUIN+ Identity Layer ─────────────────────────────────────
 export const endorsements = pgTable(

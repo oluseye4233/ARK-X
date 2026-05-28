@@ -14,7 +14,10 @@ import {
   gameSessions, type GameSession, type InsertGameSession,
   spcListings, type SpcListing, type InsertSpcListing,
   spcPurchases, type SpcPurchase,
+  spcFeedback, type SpcFeedback, type InsertSpcFeedback,
+  SPC_FEEDBACK_BONUS_BY_STARS,
   userCredits, type UserCredits,
+  SPC_STARTING_CREDITS,
   endorsements, type Endorsement, type InsertEndorsement,
   checkoutSessions, type CheckoutSession, type InsertCheckoutSession,
   billingEvents, type BillingEvent, type InsertBillingEvent,
@@ -87,15 +90,26 @@ export interface IStorage {
   }>;
 
   // SPHINX Marketplace
-  createSpcListing(listing: InsertSpcListing & { kcseScore: number; hiveScore: number; status?: string }): Promise<SpcListing>;
+  createSpcListing(listing: InsertSpcListing & { kcseScore: number; hiveScore: number; status?: string; scope?: string; institution?: string | null }): Promise<SpcListing>;
   getSpcListing(id: string): Promise<SpcListing | undefined>;
-  getAllSpcListings(filters?: { pillar?: string; status?: string; disc?: string; rarity?: string; version?: string }): Promise<SpcListing[]>;
+  getAllSpcListings(filters?: { pillar?: string; status?: string; disc?: string; rarity?: string; version?: string; scope?: string; institution?: string }): Promise<SpcListing[]>;
   getSpcListingsByCreator(creatorId: string): Promise<SpcListing[]>;
   updateSpcListing(id: string, data: Partial<SpcListing>): Promise<SpcListing | undefined>;
   getSpcPurchasesByBuyer(buyerId: string): Promise<SpcPurchase[]>;
   getSpcPurchasesByCreator(creatorId: string): Promise<SpcPurchase[]>;
   hasBuyerPurchasedListing(buyerId: string, listingId: string): Promise<boolean>;
   getCredits(userId: string): Promise<UserCredits | undefined>;
+  // ── Phase K — Corporate Marketplace ──
+  getCorporateListings(institution: string, filters?: { pillar?: string; status?: string }): Promise<SpcListing[]>;
+  submitSpcFeedback(args: { listingId: string; buyerId: string; stars: number; comment?: string | null }): Promise<{ feedback: SpcFeedback; creatorBonus: number; creatorBalance: number }>;
+  getSpcFeedbackForListing(listingId: string): Promise<{
+    count: number;
+    average: number;
+    totalBonus: number;
+    histogram: Record<string, number>;
+    recent: Array<{ id: string; stars: number; comment: string | null; createdAt: string; buyerName: string | null }>;
+  }>;
+  getSpcFeedbackByBuyer(listingId: string, buyerId: string): Promise<SpcFeedback | undefined>;
 
   // GUIN+ endorsements
   createEndorsement(e: InsertEndorsement): Promise<Endorsement>;
@@ -485,7 +499,7 @@ export class DatabaseStorage implements IStorage {
     return s;
   }
 
-  async getAllSpcListings(filters?: { pillar?: string; status?: string; disc?: string; rarity?: string; version?: string }): Promise<SpcListing[]> {
+  async getAllSpcListings(filters?: { pillar?: string; status?: string; disc?: string; rarity?: string; version?: string; scope?: string; institution?: string }): Promise<SpcListing[]> {
     const rows = await db.select().from(spcListings).orderBy(desc(spcListings.createdAt));
     // M3 — disc/rarity/version live on jnomics_cards. When any of those filters
     // are set, intersect with cards referenced via synergy_tag_ids.
@@ -497,6 +511,10 @@ export class DatabaseStorage implements IStorage {
     return rows.filter((r) => {
       if (filters?.pillar && r.pillar !== filters.pillar) return false;
       if (filters?.status && r.status !== filters.status) return false;
+      // Phase K — exclude CORPORATE-only listings from the open market.
+      // The corporate surface (/api/sphinx/corporate/listings) uses
+      // `getCorporateListings()` which has its own scope+institution filter.
+      if (filters?.scope === "OPEN" && r.scope === "CORPORATE") return false;
       if (cardIndex) {
         const tags = r.synergyTagIds ?? [];
         const tagged = tags.map((id) => cardIndex!.get(id)).filter(Boolean) as Array<{ disc: string | null; rarity: string | null; version: string | null }>;
@@ -535,6 +553,176 @@ export class DatabaseStorage implements IStorage {
       .from(spcPurchases)
       .where(eq(spcPurchases.creatorId, creatorId))
       .orderBy(desc(spcPurchases.purchasedAt));
+  }
+
+  // ── Phase K — Corporate marketplace queries ──
+  async getCorporateListings(
+    institution: string,
+    filters?: { pillar?: string; status?: string },
+  ): Promise<SpcListing[]> {
+    const norm = institution.trim().toLowerCase();
+    if (!norm) return [];
+    const rows = await db.select().from(spcListings).orderBy(desc(spcListings.createdAt));
+    return rows.filter((r) => {
+      // Scope must include corporate visibility.
+      if (r.scope !== "CORPORATE" && r.scope !== "BOTH") return false;
+      // Institution is snapshotted at publish time — compare case-insensitive.
+      const inst = (r.institution ?? "").trim().toLowerCase();
+      if (inst !== norm) return false;
+      if (filters?.pillar && r.pillar !== filters.pillar) return false;
+      if (filters?.status && r.status !== filters.status) return false;
+      return true;
+    });
+  }
+
+  async submitSpcFeedback(args: {
+    listingId: string;
+    buyerId: string;
+    stars: number;
+    comment?: string | null;
+  }): Promise<{ feedback: SpcFeedback; creatorBonus: number; creatorBalance: number }> {
+    if (!Number.isInteger(args.stars) || args.stars < 1 || args.stars > 5) {
+      throw new Error("Stars must be an integer between 1 and 5.");
+    }
+    return await db.transaction(async (tx) => {
+      // Re-verify the buyer actually purchased this listing inside the txn —
+      // mirrors the body-gate check, race-safe against listing deletion.
+      const [listing] = await tx
+        .select()
+        .from(spcListings)
+        .where(eq(spcListings.id, args.listingId))
+        .for("update");
+      if (!listing) throw new Error("Listing not found.");
+      const [purchase] = await tx
+        .select({ id: spcPurchases.id })
+        .from(spcPurchases)
+        .where(and(eq(spcPurchases.buyerId, args.buyerId), eq(spcPurchases.listingId, args.listingId)))
+        .limit(1);
+      if (!purchase) {
+        throw new Error("Only verified buyers can leave feedback for this listing.");
+      }
+      if (listing.creatorId === args.buyerId) {
+        throw new Error("You can't rate your own SPC.");
+      }
+
+      const bonus = SPC_FEEDBACK_BONUS_BY_STARS[args.stars as 1 | 2 | 3 | 4 | 5] ?? 0;
+      const trimmedComment = args.comment?.trim() || null;
+
+      // Insert feedback row. The unique index on (listing_id, buyer_id) makes
+      // this the race-safe gate against double feedback; the precheck above
+      // is best-effort UX.
+      let feedback: SpcFeedback;
+      try {
+        const [created] = await tx
+          .insert(spcFeedback)
+          .values({
+            listingId: args.listingId,
+            buyerId: args.buyerId,
+            creatorId: listing.creatorId,
+            stars: args.stars,
+            comment: trimmedComment,
+            bonusAwarded: bonus,
+          })
+          .returning();
+        feedback = created;
+      } catch (err: any) {
+        if (String(err?.code) === "23505" || /spc_feedback_listing_buyer_uidx/.test(String(err?.message))) {
+          throw new Error("You have already left feedback for this listing.");
+        }
+        throw err;
+      }
+
+      // Award per-use bonus to the creator (if any) and bump total_earned.
+      let creatorBalance = 0;
+      if (bonus > 0) {
+        // Initialize creator credit row if missing (idempotent).
+        await tx
+          .insert(userCredits)
+          .values({
+            userId: listing.creatorId,
+            balance: SPC_STARTING_CREDITS,
+            lifetimeEarned: SPC_STARTING_CREDITS,
+            lifetimeSpent: 0,
+          })
+          .onConflictDoNothing();
+        const [creator] = await tx
+          .select()
+          .from(userCredits)
+          .where(eq(userCredits.userId, listing.creatorId))
+          .for("update");
+        const [updated] = await tx
+          .update(userCredits)
+          .set({
+            balance: creator.balance + bonus,
+            lifetimeEarned: creator.lifetimeEarned + bonus,
+            updatedAt: new Date(),
+          })
+          .where(eq(userCredits.userId, listing.creatorId))
+          .returning();
+        creatorBalance = updated.balance;
+        // Mirror the bonus into the listing's totalEarned so creator
+        // dashboards show feedback rewards alongside purchase splits.
+        await tx
+          .update(spcListings)
+          .set({ totalEarned: listing.totalEarned + bonus })
+          .where(eq(spcListings.id, args.listingId));
+      } else {
+        const [creator] = await tx
+          .select({ balance: userCredits.balance })
+          .from(userCredits)
+          .where(eq(userCredits.userId, listing.creatorId))
+          .limit(1);
+        creatorBalance = creator?.balance ?? 0;
+      }
+
+      return { feedback, creatorBonus: bonus, creatorBalance };
+    });
+  }
+
+  async getSpcFeedbackForListing(listingId: string): Promise<{
+    count: number;
+    average: number;
+    totalBonus: number;
+    histogram: Record<string, number>;
+    recent: Array<{ id: string; stars: number; comment: string | null; createdAt: string; buyerName: string | null }>;
+  }> {
+    const items = await db
+      .select()
+      .from(spcFeedback)
+      .where(eq(spcFeedback.listingId, listingId))
+      .orderBy(desc(spcFeedback.createdAt));
+    const count = items.length;
+    const sumStars = items.reduce((s, f) => s + f.stars, 0);
+    const totalBonus = items.reduce((s, f) => s + f.bonusAwarded, 0);
+    const average = count > 0 ? Math.round((sumStars / count) * 10) / 10 : 0;
+    const histogram: Record<string, number> = { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 };
+    for (const f of items) histogram[String(f.stars)] = (histogram[String(f.stars)] ?? 0) + 1;
+    // Resolve buyer display names in batch to populate recent comments —
+    // never return raw buyerId/creatorId in the public feedback payload
+    // (avoids enumeration / cross-user identity disclosure).
+    const recentRows = items.slice(0, 20);
+    const buyerIds = Array.from(new Set(recentRows.map((r) => r.buyerId)));
+    const buyers = buyerIds.length
+      ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, buyerIds))
+      : [];
+    const nameById = new Map(buyers.map((b) => [b.id, b.name]));
+    const recent = recentRows.map((f) => ({
+      id: f.id,
+      stars: f.stars,
+      comment: f.comment ?? null,
+      createdAt: f.createdAt instanceof Date ? f.createdAt.toISOString() : String(f.createdAt),
+      buyerName: nameById.get(f.buyerId) ?? null,
+    }));
+    return { count, average, totalBonus, histogram, recent };
+  }
+
+  async getSpcFeedbackByBuyer(listingId: string, buyerId: string): Promise<SpcFeedback | undefined> {
+    const [row] = await db
+      .select()
+      .from(spcFeedback)
+      .where(and(eq(spcFeedback.listingId, listingId), eq(spcFeedback.buyerId, buyerId)))
+      .limit(1);
+    return row;
   }
 
   async hasBuyerPurchasedListing(buyerId: string, listingId: string): Promise<boolean> {

@@ -61,6 +61,7 @@ function Router() {
         {FEATURES.sphinxAdvanced && <Route path="/marketplace/synergy" component={MarketplacePage} />}
         {FEATURES.sphinxAdvanced && <Route path="/marketplace/roundtable" component={MarketplacePage} />}
         {FEATURES.sphinxAdvanced && <Route path="/marketplace/synthesis" component={MarketplacePage} />}
+        {FEATURES.corporateMarketplace && <Route path="/marketplace/corporate" component={MarketplacePage} />}
         {FEATURES.forgeLabDocx && <Route path="/marketplace/forge-lab" component={MarketplacePage} />}
         {FEATURES.guinPublic && <Route path="/u/:username" component={GuinPublicPage} />}
         {FEATURES.investorDemo && <Route path="/demo" component={DemoPage} />}

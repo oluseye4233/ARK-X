@@ -17,6 +17,7 @@ import {
   SPC_PRICE_MAX,
   SPC_CREATOR_SHARE_PCT,
   SPC_PLATFORM_SHARE_PCT,
+  SPC_FEEDBACK_BONUS_BY_STARS,
   MARKETPLACE_CATEGORIES,
   GRADE_PRICING_MATRIX,
   formatPriceDual,
@@ -31,6 +32,7 @@ import {
   type SpcAiAnalysis,
   type UserCredits,
   type HivePrecheck,
+  type SpcScope,
 } from "@shared/schema";
 import {
   ShoppingBag,
@@ -54,6 +56,9 @@ import {
   Star,
   Award,
   Tag,
+  Building2,
+  MessageSquare,
+  Globe,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { SpcTaxonomyPanel } from "@/components/marketplace/SpcTaxonomyPanel";
@@ -838,6 +843,227 @@ function ListingDetail({ id }: { id: string }) {
         <TabsContent value="pairs"><ComplementaryPairsTab listingId={listing.id} /></TabsContent>
         <TabsContent value="synthesis"><SynthesisTab listingId={listing.id} /></TabsContent>
       </Tabs>
+      {FEATURES.corporateMarketplace && (
+        <div data-testid="panel-feedback-section">
+          <SpcFeedbackPanel listing={listing} viewer={user} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Phase K — Star feedback widget (bonus credits to creator) ─────────
+type FeedbackSummary = {
+  count: number;
+  average: number;
+  histogram: Record<string, number>;
+  recent: Array<{ id: string; stars: number; comment: string | null; createdAt: string; buyerName: string | null }>;
+  mine: { id: string; stars: number; comment: string | null; createdAt: string } | null;
+};
+
+function SpcFeedbackPanel({ listing, viewer }: { listing: any; viewer: any }) {
+  const [data, setData] = useState<FeedbackSummary | null>(null);
+  const [stars, setStars] = useState(5);
+  const [comment, setComment] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const isCreator = viewer && listing && viewer.id === listing.creatorId;
+  const canSubmit = !!viewer && !isCreator && !listing.bodyLocked; // bodyLocked=false implies purchased
+  const load = () => {
+    api.getSpcFeedback(listing.id)
+      .then((d: FeedbackSummary) => setData(d))
+      .catch(() => setData(null));
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [listing.id]);
+  const submit = async () => {
+    setBusy(true); setError(null);
+    try {
+      await api.submitSpcFeedback(listing.id, stars, comment);
+      setComment("");
+      load();
+    } catch (e: any) {
+      setError(e?.message || "Failed to submit feedback.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const alreadyLeft = !!data?.mine;
+  return (
+    <div className="glass-card p-5 rounded-xl border border-primary/15 space-y-4" data-testid="panel-spc-feedback">
+      <div className="flex items-center gap-2">
+        <MessageSquare className="h-4 w-4 text-primary" />
+        <h3 className="font-display font-bold text-sm text-primary tracking-wider uppercase">Buyer Feedback</h3>
+        {data && data.count > 0 && (
+          <span className="font-mono text-[11px] text-muted-foreground">
+            ★ {data.average.toFixed(1)} · {data.count} review{data.count === 1 ? "" : "s"}
+          </span>
+        )}
+      </div>
+      {!viewer && (
+        <p className="font-mono text-[11px] text-muted-foreground">Sign in to view and leave feedback.</p>
+      )}
+      {viewer && !canSubmit && !alreadyLeft && (
+        <p className="font-mono text-[11px] text-muted-foreground">
+          {isCreator ? "You are the creator — feedback comes from your buyers." : "Purchase this SPC to leave feedback."}
+        </p>
+      )}
+      {viewer && canSubmit && !alreadyLeft && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-1" data-testid="row-star-input">
+            {[1,2,3,4,5].map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setStars(n)}
+                data-testid={`button-star-${n}`}
+                className={`p-1 transition-colors ${n <= stars ? "text-yellow-400" : "text-muted-foreground/40"}`}
+              >
+                <Star className="h-5 w-5" fill={n <= stars ? "currentColor" : "none"} />
+              </button>
+            ))}
+            <span className="font-mono text-[11px] text-muted-foreground ml-2">
+              Bonus to creator: {SPC_FEEDBACK_BONUS_BY_STARS[stars as 1|2|3|4|5]} credits
+            </span>
+          </div>
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            maxLength={1000}
+            rows={3}
+            placeholder="What worked, what could be sharper? (optional)"
+            data-testid="input-feedback-comment"
+            className="w-full bg-white/5 border border-white/10 rounded-lg p-2 font-mono text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/40"
+          />
+          {error && <p className="font-mono text-[11px] text-destructive" data-testid="text-feedback-error">{error}</p>}
+          <button
+            type="button"
+            disabled={busy}
+            onClick={submit}
+            data-testid="button-submit-feedback"
+            className="px-4 py-2 rounded-lg bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30 font-mono text-xs uppercase tracking-widest disabled:opacity-50"
+          >
+            {busy ? "Submitting…" : "Submit Feedback"}
+          </button>
+        </div>
+      )}
+      {alreadyLeft && data?.mine && (
+        <div className="p-3 rounded-lg bg-primary/5 border border-primary/20" data-testid="row-feedback-mine">
+          <div className="flex items-center gap-1 mb-1">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Star key={i} className={`h-3.5 w-3.5 ${i < data.mine!.stars ? "text-yellow-400 fill-current" : "text-muted-foreground/30"}`} />
+            ))}
+            <span className="font-mono text-[10px] text-muted-foreground ml-2 uppercase tracking-wider">Your review</span>
+          </div>
+          {data.mine.comment && <p className="font-mono text-xs text-muted-foreground">{data.mine.comment}</p>}
+        </div>
+      )}
+      {data && data.recent.length > 0 && (
+        <div className="space-y-2">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">Recent reviews</p>
+          {data.recent.map((r) => (
+            <div key={r.id} className="p-3 rounded-lg bg-white/5 border border-white/10" data-testid={`row-feedback-${r.id}`}>
+              <div className="flex items-center gap-1 mb-1">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Star key={i} className={`h-3 w-3 ${i < r.stars ? "text-yellow-400 fill-current" : "text-muted-foreground/30"}`} />
+                ))}
+                <span className="font-mono text-[10px] text-muted-foreground ml-2">{r.buyerName || "Buyer"}</span>
+              </div>
+              {r.comment && <p className="font-mono text-xs text-muted-foreground">{r.comment}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+      {data && data.count === 0 && (
+        <p className="font-mono text-[11px] text-muted-foreground/70">No feedback yet — be the first to review.</p>
+      )}
+    </div>
+  );
+}
+
+// ── Phase K — Corporate (institution-scoped) marketplace listing page ──
+function CorporateMarketplacePage() {
+  const [, navigate] = useLocation();
+  const [data, setData] = useState<{ institution: string; listings: any[] } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pillar, setPillar] = useState<string>("All");
+  useEffect(() => {
+    setData(null); setError(null);
+    api.getCorporateListings(pillar)
+      .then((d) => setData(d))
+      .catch((e) => setError(e?.message || "Failed to load corporate marketplace."));
+  }, [pillar]);
+  return (
+    <div className="max-w-6xl mx-auto p-6 space-y-6">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => navigate("/marketplace")}
+          className="p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10"
+          data-testid="button-back-to-market"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </button>
+        <div className="flex items-center gap-2">
+          <Building2 className="h-5 w-5 text-primary" />
+          <h1 className="font-display font-bold text-2xl tracking-wider uppercase">Corporate Marketplace</h1>
+        </div>
+      </div>
+      {data && (
+        <div className="glass-card p-4 rounded-xl border border-primary/20">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">Institution</p>
+          <p className="font-display text-lg text-primary" data-testid="text-institution-name">{data.institution}</p>
+          <p className="font-mono text-[11px] text-muted-foreground mt-1">
+            Internal SPCs published by members of your institution. Purchases are restricted to fellow members.
+          </p>
+        </div>
+      )}
+      {error && (
+        <div className="glass-card p-4 rounded-xl border border-destructive/30 bg-destructive/5">
+          <p className="font-mono text-sm text-destructive" data-testid="text-corporate-error">{error}</p>
+        </div>
+      )}
+      <FilterChipRow
+        label="Pillar"
+        testGroup="corp-pillar"
+        options={["All", ...CC_PILLARS]}
+        value={pillar}
+        onChange={setPillar}
+      />
+      {!data && !error && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        </div>
+      )}
+      {data && data.listings.length === 0 && (
+        <div className="glass-card p-8 rounded-xl text-center" data-testid="text-corporate-empty">
+          <p className="font-mono text-sm text-muted-foreground">No corporate SPCs published yet for {data.institution}.</p>
+        </div>
+      )}
+      {data && data.listings.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="grid-corporate-listings">
+          {data.listings.map((l) => (
+            <Link
+              key={l.id}
+              href={`/marketplace/${l.id}`}
+              data-testid={`card-corporate-${l.id}`}
+              className="glass-card p-4 rounded-xl border border-white/10 hover:border-primary/40 transition-colors block"
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <Tag className="h-3 w-3 text-primary" />
+                <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{l.pillar}</span>
+                <span className="ml-auto font-mono text-[10px] text-primary">{hiveToTierBadge(l.hiveScore)}</span>
+              </div>
+              <h3 className="font-display font-bold text-base mb-1 line-clamp-2">{l.title}</h3>
+              <p className="font-mono text-xs text-muted-foreground line-clamp-2 mb-3">{l.description}</p>
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-xs text-primary flex items-center gap-1">
+                  <Coins className="h-3 w-3" /> {formatPriceDual(l.priceCredits)}
+                </span>
+                <span className="font-mono text-[10px] text-muted-foreground">HIVE {l.hiveScore}</span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -887,7 +1113,10 @@ function PublishPage() {
     body: "",
     pillar: "System" as string,
     priceCredits: 25,
+    scope: "OPEN" as SpcScope,
   });
+  const userInstitution = ((user as any)?.institution as string | null | undefined)?.trim() || "";
+  const canPublishCorporate = FEATURES.corporateMarketplace && userInstitution.length > 0;
   const [precheck, setPrecheck] = useState<HivePrecheck | null>(null);
   const [precheckBusy, setPrecheckBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -974,6 +1203,7 @@ function PublishPage() {
         body: form.body,
         pillar: form.pillar,
         priceCredits: form.priceCredits,
+        scope: form.scope,
       });
       navigate(`/marketplace/${result.listing.id}`);
     } catch (e: any) {
@@ -1001,6 +1231,51 @@ function PublishPage() {
       </div>
 
       <PricingMatrixBanner />
+
+      {FEATURES.corporateMarketplace && (
+        <div className="glass-card p-5 rounded-xl border border-primary/20 space-y-3" data-testid="panel-publish-scope">
+          <div className="flex items-center gap-2">
+            <Building2 className="h-4 w-4 text-primary" />
+            <h3 className="font-display font-bold text-sm text-primary tracking-wider uppercase">Visibility</h3>
+          </div>
+          <p className="font-mono text-[11px] text-muted-foreground">
+            {canPublishCorporate
+              ? <>Corporate scope restricts this SPC to members of <span className="text-white">{userInstitution}</span>. Choose Both to publish to both surfaces.</>
+              : <>Set an institution on your profile to unlock the corporate marketplace. Defaulting to public SPHINX.</>}
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            {([
+              { id: "OPEN",      label: "Public SPHINX", icon: Globe,    desc: "Visible to everyone" },
+              { id: "CORPORATE", label: "Corporate Only", icon: Building2, desc: "Same institution only" },
+              { id: "BOTH",      label: "Both",            icon: Sparkles, desc: "Public + corporate" },
+            ] as const).map((opt) => {
+              const Icon = opt.icon;
+              const disabled = (opt.id !== "OPEN") && !canPublishCorporate;
+              const active = form.scope === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => setForm({ ...form, scope: opt.id })}
+                  data-testid={`button-scope-${opt.id.toLowerCase()}`}
+                  className={`p-3 rounded-lg border text-left transition-all font-mono ${
+                    active
+                      ? "bg-primary/15 border-primary/50 text-primary"
+                      : "bg-white/5 border-white/10 text-muted-foreground hover:bg-white/10"
+                  } ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <Icon className="h-3.5 w-3.5" />
+                    <span className="text-[11px] uppercase tracking-wider font-bold">{opt.label}</span>
+                  </div>
+                  <div className="text-[10px] opacity-80">{opt.desc}</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="glass-card p-6 rounded-xl space-y-5">
         <div>
@@ -1188,6 +1463,7 @@ export default function MarketplacePage() {
   const [matchSynthesis]  = useRoute("/marketplace/synthesis");
   const [matchForgeLab]   = useRoute("/marketplace/forge-lab");
   const [matchBonsai]     = useRoute("/marketplace/bonsai");
+  const [matchCorporate]  = useRoute("/marketplace/corporate");
 
   // Stage-1 / MVP: CLASS C marketplace sub-pages route through the always-on
   // `/marketplace/:id` matcher, so we MUST re-check the flag inside the
@@ -1198,6 +1474,7 @@ export default function MarketplacePage() {
   if (matchSynthesis  && FEATURES.sphinxAdvanced) return <SynthesisPage />;
   if (matchForgeLab   && FEATURES.forgeLabDocx)   return <ForgeLabPage />;
   if (matchBonsai)     return <BonsaiPage />;
+  if (matchCorporate  && FEATURES.corporateMarketplace) return <CorporateMarketplacePage />;
   if (matchDetail && paramsDetail) {
     if (paramsDetail.id === "publish")    return <PublishPage />;
     if (paramsDetail.id === "synergy"    && FEATURES.sphinxAdvanced) return <SynergyLabPage />;
@@ -1205,9 +1482,10 @@ export default function MarketplacePage() {
     if (paramsDetail.id === "synthesis"  && FEATURES.sphinxAdvanced) return <SynthesisPage />;
     if (paramsDetail.id === "forge-lab"  && FEATURES.forgeLabDocx)   return <ForgeLabPage />;
     if (paramsDetail.id === "bonsai")     return <BonsaiPage />;
+    if (paramsDetail.id === "corporate"  && FEATURES.corporateMarketplace) return <CorporateMarketplacePage />;
     // Reserved CLASS C slugs with flag off → render 404 instead of trying
     // to fetch a listing with id "synergy"/"roundtable"/etc.
-    const RESERVED = new Set(["synergy", "roundtable", "synthesis", "forge-lab"]);
+    const RESERVED = new Set(["synergy", "roundtable", "synthesis", "forge-lab", "corporate"]);
     if (RESERVED.has(paramsDetail.id)) return <NotFound />;
     return <ListingDetail id={paramsDetail.id} />;
   }

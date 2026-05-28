@@ -36,6 +36,7 @@ export type FeatureKey =
   // ── School / Enterprise SKU (trigger: first SCHOOL_STUDENT licence) ──
   | "cohorts" // /school page + all /api/cohorts/* + /api/me/cohorts
   | "enterpriseDashboard" // /enterprise page + /api/departments
+  | "corporateMarketplace" // /marketplace/corporate page + corporate-scoped listings + star feedback
   // ── Investor / pre-Series A (trigger: first investor meeting) ──
   | "investorDemo" // /demo + /demo-tour public personas
   // ── Marketplace .docx ingest (trigger: 100+ Forge Lab requests) ──
@@ -61,6 +62,7 @@ export const MVP_FEATURES: Readonly<Record<FeatureKey, boolean>> = Object.freeze
   assessmentEmail: false,
   cohorts: false,
   enterpriseDashboard: false,
+  corporateMarketplace: false,
   investorDemo: false,
   forgeLabDocx: false,
   drm: false,

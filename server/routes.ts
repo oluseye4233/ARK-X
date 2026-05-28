@@ -14,9 +14,9 @@ const { PDFParse } = _require("pdf-parse") as { PDFParse: new (opts: { data: Uin
 import { storage } from "./storage";
 import { analyzeResume } from "./resumeAnalyzer";
 import { requireAuth, requireSelf, requireInstructor, currentUserId, loginSession } from "./auth";
-import { requireFeature, getResolvedFeatures } from "./featureFlags";
+import { requireFeature, getResolvedFeatures, isFeatureEnabled } from "./featureFlags";
 import { STAGE } from "@shared/featureFlags";
-import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, type SubscriptionPlan, CCGE_TIERS, type CcgeTier, jcseToTier, ALL_CARD_PILLARS, SPC_MIN_CERT_TO_PUBLISH, SPC_PRICE_MIN, SPC_PRICE_MAX, SPC_STATUSES, CERT_LEVEL_RANK, ARK_SCORE_DELTAS, type CardPillar, type SpcStatus } from "@shared/schema";
+import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, type SubscriptionPlan, CCGE_TIERS, type CcgeTier, jcseToTier, ALL_CARD_PILLARS, SPC_MIN_CERT_TO_PUBLISH, SPC_PRICE_MIN, SPC_PRICE_MAX, SPC_STATUSES, SPC_SCOPES, CERT_LEVEL_RANK, ARK_SCORE_DELTAS, type CardPillar, type SpcStatus } from "@shared/schema";
 import { dealHand, scoreSession } from "./ccge";
 import { orchestrator } from "./orchestrator";
 import { recalcArkForUser } from "./arkRecalc";
@@ -1575,6 +1575,11 @@ export async function registerRoutes(
     body: z.string().min(80).max(50000),
     pillar: z.enum(ALL_CARD_PILLARS as unknown as [string, ...string[]]),
     priceCredits: z.number().int().min(SPC_PRICE_MIN).max(SPC_PRICE_MAX),
+    // Phase K — visibility scope for the new corporate marketplace surface.
+    // Defaults to OPEN to preserve legacy publish flow when the corporate
+    // feature flag is off. Corporate/Both require the creator to have a
+    // non-empty users.institution string (snapshotted at publish time).
+    scope: z.enum(SPC_SCOPES as unknown as [string, ...string[]]).default("OPEN"),
   });
 
   app.post("/api/sphinx/listings", requireAuth, async (req, res) => {
@@ -1604,6 +1609,30 @@ export async function registerRoutes(
         });
       }
 
+      // Phase K — corporate scope gating. The corporate marketplace is a
+      // CLASS C surface; if the flag is off we silently coerce the listing
+      // back to OPEN so publish never 404s on flag-flips. When ON we require
+      // the creator's institution string to populate the snapshot.
+      let effectiveScope = parsed.scope;
+      let institutionSnapshot: string | null = null;
+      if (effectiveScope === "CORPORATE" || effectiveScope === "BOTH") {
+        // Use the server-side resolver (honors FEATURE_CORPORATE_MARKETPLACE
+        // env overlay) — never the static shared FEATURES map, which would
+        // disagree with the dedicated corporate routes (gated via
+        // requireFeature) when ops flips the flag at runtime.
+        if (!isFeatureEnabled("corporateMarketplace")) {
+          effectiveScope = "OPEN";
+        } else {
+          const inst = (creator.institution ?? "").trim();
+          if (!inst) {
+            return res.status(422).json({
+              message: "Corporate-scoped listings require an institution on your profile.",
+            });
+          }
+          institutionSnapshot = inst;
+        }
+      }
+
       const listing = await storage.createSpcListing({
         creatorId,
         title: parsed.title,
@@ -1614,6 +1643,8 @@ export async function registerRoutes(
         kcseScore: precheck.kcseScore,
         hiveScore: precheck.hiveScore,
         status: "active",
+        scope: effectiveScope,
+        institution: institutionSnapshot,
       });
 
       await orchestrator.emit(creatorId, "spc.published", {
@@ -1664,6 +1695,8 @@ export async function registerRoutes(
         disc: filters.disc && filters.disc !== "All" ? filters.disc : undefined,
         rarity: filters.rarity && filters.rarity !== "All" ? filters.rarity : undefined,
         version: filters.version && filters.version !== "All" ? filters.version : undefined,
+        // Phase K — open market never shows CORPORATE-only listings.
+        scope: "OPEN",
       });
       // Category filter (M19): map to pillars and intersect.
       let scoped = all;
@@ -1776,6 +1809,21 @@ export async function registerRoutes(
   app.post("/api/sphinx/listings/:id/purchase", requireAuth, async (req, res) => {
     try {
       const buyerId = currentUserId(req)!;
+      // Phase K — corporate scope enforcement. CORPORATE listings can only
+      // be purchased by members of the same institution as the creator. BOTH
+      // and OPEN are unrestricted (open-market behavior). We check this
+      // BEFORE executePurchase to avoid a wasted credit-debit transaction.
+      const target = await storage.getSpcListing(String(req.params.id));
+      if (target && target.scope === "CORPORATE") {
+        const buyer = await storage.getUser(buyerId);
+        const buyerInst = (buyer?.institution ?? "").trim().toLowerCase();
+        const listingInst = (target.institution ?? "").trim().toLowerCase();
+        if (!buyerInst || !listingInst || buyerInst !== listingInst) {
+          return res.status(403).json({
+            message: "This SPC is restricted to members of the publishing institution.",
+          });
+        }
+      }
       const outcome = await executePurchase(buyerId, String(req.params.id));
       await orchestrator.emit(buyerId, "spc.purchased", {
         listingId: outcome.listing.id,
@@ -1850,6 +1898,80 @@ export async function registerRoutes(
       const purchases = await storage.getSpcPurchasesByCreator(String(req.params.userId));
       const totalEarned = purchases.reduce((s, p) => s + p.creatorShare, 0);
       return res.json({ purchases, totalEarned, salesCount: purchases.length });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // ── Phase K — Corporate Marketplace (flag-gated CLASS C surface) ───
+  // ────────────────────────────────────────────────────────────────────
+
+  // List corporate-scope SPCs for the caller's institution. Returns 403 if
+  // the caller has no institution on their profile (the corporate market
+  // is fundamentally institution-scoped — no fallback to global).
+  app.get("/api/sphinx/corporate/listings", requireFeature("corporateMarketplace"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const me = await storage.getUser(userId);
+      const inst = (me?.institution ?? "").trim();
+      if (!inst) {
+        return res.status(403).json({
+          message: "No institution on your profile — corporate marketplace unavailable.",
+        });
+      }
+      const pillar = typeof req.query.pillar === "string" && req.query.pillar !== "All" ? req.query.pillar : undefined;
+      const rows = await storage.getCorporateListings(inst, { pillar, status: "active" });
+      // Same body-redaction envelope as the open market.
+      const redacted = rows.map((l) => ({
+        ...l,
+        body: redactBody(l.body),
+        bodyLocked: true,
+        bodyLength: l.body.length,
+      }));
+      return res.json({ institution: inst, listings: redacted });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  const submitFeedbackSchema = z.object({
+    stars: z.number().int().min(1).max(5),
+    comment: z.string().max(1000).optional(),
+  });
+
+  // Submit (or attempt to submit — duplicates 409) star feedback on a SPC.
+  // Buyer-only; bonus credits are paid to the creator inside the txn.
+  app.post("/api/sphinx/listings/:id/feedback", requireFeature("corporateMarketplace"), requireAuth, async (req, res) => {
+    try {
+      const buyerId = currentUserId(req)!;
+      const parsed = submitFeedbackSchema.parse(req.body);
+      const result = await storage.submitSpcFeedback({
+        listingId: String(req.params.id),
+        buyerId,
+        stars: parsed.stars,
+        comment: parsed.comment ?? null,
+      });
+      return res.status(201).json(result);
+    } catch (err: any) {
+      const msg = String(err?.message ?? "");
+      const status =
+        /already left feedback/.test(msg) ? 409 :
+        /verified buyers|own SPC|between 1 and 5|not found/.test(msg) ? 400 :
+        500;
+      return res.status(status).json({ message: msg });
+    }
+  });
+
+  // Read feedback aggregate + recent comments for a listing. Visible to any
+  // authenticated user once the feature flag is on (transparent reputation).
+  app.get("/api/sphinx/listings/:id/feedback", requireFeature("corporateMarketplace"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const listingId = String(req.params.id);
+      const summary = await storage.getSpcFeedbackForListing(listingId);
+      const mine = await storage.getSpcFeedbackByBuyer(listingId, userId);
+      return res.json({ ...summary, mine: mine ?? null });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
