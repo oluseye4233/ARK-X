@@ -228,6 +228,21 @@ export default function PlayPage() {
     }
   };
 
+  // Book Companion (Task #22) deep-link: /play?scenario=bc-f1-system auto-starts
+  // the chapter's pillar-targeted scenario once data + user are ready. Runs once.
+  const [autoStarted, setAutoStarted] = useState(false);
+  useEffect(() => {
+    if (autoStarted || loading || session) return;
+    const params = new URLSearchParams(window.location.search);
+    const wanted = params.get("scenario");
+    if (!wanted) return;
+    if (!user?.id) return;
+    const match = scenarios.find((s) => s.id === wanted);
+    if (!match) return;
+    setAutoStarted(true);
+    startSession(wanted);
+  }, [autoStarted, loading, session, scenarios, user?.id]);
+
   const playCard = (id: string) => {
     if (played.includes(id)) return;
     if (played.length >= 5) return;

@@ -49,7 +49,10 @@ export type FeatureKey =
   | "contextCraftPage" // /context-craft levels reference page
   // ── Phase O — Revenue / Token-Cost 10% Invariant (trigger: first $1k MRR
   //    OR first user crossing 80% of any cost cap) ──
-  | "revenueGuardrail"; // cost-cap second gate + model policy + V2 budgets
+  | "revenueGuardrail" // cost-cap second gate + model policy + V2 budgets
+  // ── Book Companion (Task #22) — reader onboarding journey (trigger: book
+  //    launch / first reader cohort) ──
+  | "bookCompanion"; // /book journey + /b/:slug QR resolver + chapter badges + Ledger
 
 /**
  * MVP defaults — every CLASS C surface is OFF.
@@ -73,6 +76,7 @@ export const MVP_FEATURES: Readonly<Record<FeatureKey, boolean>> = Object.freeze
   adminCcgeImport: false,
   contextCraftPage: false,
   revenueGuardrail: false,
+  bookCompanion: false,
 });
 
 /**

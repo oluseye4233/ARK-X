@@ -1470,3 +1470,46 @@ export const insertBonsaiProgressSchema = createInsertSchema(bonsaiProgress).omi
 });
 export type InsertBonsaiProgress = z.infer<typeof insertBonsaiProgressSchema>;
 export type BonsaiProgress = typeof bonsaiProgress.$inferSelect;
+
+// ── Book Companion (Task #22) ───────────────────────────────────────
+// Named chapter badges auto-awarded off flywheel events (never self-marked).
+// One row per (user, journey node); the unique index makes awarding idempotent.
+export const bookJourneyBadges = pgTable("book_journey_badges", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  nodeId: text("node_id").notNull(), // "prologue" | "ch1".."ch11" | "epilogue"
+  badge: text("badge").notNull(), // canonical named badge (display)
+  pillar: text("pillar"), // Context Craft pillar (nullable)
+  ccLevel: text("cc_level"), // aligned cert level (nullable)
+  earnedVia: text("earned_via").notNull(), // "assessment"|"ccge"|"spc_publish"|"ledger_final"
+  refId: varchar("ref_id"), // source event id (sessionId / assessmentId / listingId)
+  earnedAt: timestamp("earned_at").notNull().defaultNow(),
+}, (t) => ({
+  userNodeUnique: uniqueIndex("book_journey_user_node_uniq").on(t.userId, t.nodeId),
+}));
+export const insertBookJourneyBadgeSchema = createInsertSchema(bookJourneyBadges).omit({
+  id: true, earnedAt: true,
+});
+export type InsertBookJourneyBadge = z.infer<typeof insertBookJourneyBadgeSchema>;
+export type BookJourneyBadge = typeof bookJourneyBadges.$inferSelect;
+
+// Digital Ledger snapshots — baseline (immutable, captured at Prologue) and
+// final (captured at Epilogue). One row per (user, kind).
+export const bookLedgerSnapshots = pgTable("book_ledger_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  kind: text("kind").notNull(), // "baseline" | "final"
+  jstIndex: integer("jst_index").notNull(),
+  ccmi: integer("ccmi").notNull(),
+  arkScore: integer("ark_score").notNull(),
+  badgesEarned: integer("badges_earned").notNull().default(0),
+  spcPublished: integer("spc_published").notNull().default(0),
+  capturedAt: timestamp("captured_at").notNull().defaultNow(),
+}, (t) => ({
+  userKindUnique: uniqueIndex("book_ledger_user_kind_uniq").on(t.userId, t.kind),
+}));
+export const insertBookLedgerSnapshotSchema = createInsertSchema(bookLedgerSnapshots).omit({
+  id: true, capturedAt: true,
+});
+export type InsertBookLedgerSnapshot = z.infer<typeof insertBookLedgerSnapshotSchema>;
+export type BookLedgerSnapshot = typeof bookLedgerSnapshots.$inferSelect;

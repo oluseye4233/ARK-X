@@ -324,4 +324,14 @@ export const api = {
   getBonsaiProgress: () => apiRequest("/api/sphinx/bonsai/progress"),
   completeBonsaiStage: (stageId: number) =>
     apiRequest(`/api/sphinx/bonsai/progress/${stageId}/complete`, { method: "POST" }),
+
+  // ── Task #22 — Context Craft Book Companion ──
+  getBookJourney: () => apiRequest("/api/book/journey"),
+  getBookLedger: () => apiRequest("/api/book/ledger"),
+  captureBookSnapshot: (kind: "final" = "final") =>
+    apiRequest("/api/book/ledger/snapshot", {
+      method: "POST",
+      body: JSON.stringify({ kind }),
+    }),
+  getBookSlugs: () => apiRequest("/api/book/slugs"),
 };

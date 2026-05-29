@@ -6,7 +6,7 @@ import { JnomicsCardList } from "@/components/dashboard/JnomicsCardList";
 import { ArchetypeHandicap } from "@/components/dashboard/ArchetypeHandicap";
 import { TaskHeatmap } from "@/components/dashboard/TaskHeatmap";
 import { VulnerabilityTimeline } from "@/components/dashboard/VulnerabilityTimeline";
-import { Cpu, FileText, Loader2, TrendingUp, Mail, CheckCircle2, Activity, Zap, History, Info, ArrowUpRight, Upload as UploadIcon } from "lucide-react";
+import { Cpu, FileText, Loader2, TrendingUp, Mail, CheckCircle2, Activity, Zap, History, Info, ArrowUpRight, Upload as UploadIcon, BookOpen } from "lucide-react";
 import { useArkStream, describeEvent } from "@/lib/useArkStream";
 import { Link } from "wouter";
 import { useAuth } from "@/lib/useAuth";
@@ -268,6 +268,11 @@ export default function Dashboard() {
           <Link href="/ark/history" className="inline-flex items-center justify-center border border-secondary/50 text-secondary hover:bg-secondary/10 font-mono text-xs uppercase tracking-widest h-10 px-4 rounded-md" data-testid="link-ark-history">
             <History className="w-4 h-4 mr-2" /> ARK History
           </Link>
+          {FEATURES.bookCompanion && (
+            <Link href="/book" className="inline-flex items-center justify-center border border-primary/50 text-primary hover:bg-primary/10 font-mono text-xs uppercase tracking-widest h-10 px-4 rounded-md" data-testid="link-book-companion">
+              <BookOpen className="w-4 h-4 mr-2" /> Book Companion
+            </Link>
+          )}
           {FEATURES.executiveReport && (
             <Link href="/report" className="inline-flex items-center justify-center border border-primary/50 text-primary hover:bg-primary/10 font-mono text-xs uppercase tracking-widest h-10 px-4 rounded-md">
               <FileText className="w-4 h-4 mr-2" /> Export Brief

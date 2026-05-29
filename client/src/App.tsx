@@ -29,6 +29,7 @@ import TermsPage from "@/pages/legal/terms";
 import DemoPage from "@/pages/demo";
 import DemoTourPage from "@/pages/demo-tour";
 import AdminCcgeImportPage from "@/pages/admin-ccge-import";
+import BookCompanionPage from "@/pages/book-companion";
 
 function Router() {
   return (
@@ -67,6 +68,7 @@ function Router() {
         {FEATURES.investorDemo && <Route path="/demo" component={DemoPage} />}
         {FEATURES.investorDemo && <Route path="/demo-tour" component={DemoTourPage} />}
         {FEATURES.adminCcgeImport && <Route path="/admin/ccge-import" component={AdminCcgeImportPage} />}
+        {FEATURES.bookCompanion && <Route path="/book" component={BookCompanionPage} />}
 
         {/* Fallback to 404 */}
         <Route component={NotFound} />

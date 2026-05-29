@@ -54,7 +54,27 @@ import { categoryToPillars, MARKETPLACE_CATEGORIES, type MarketplaceCategory, hi
 import { buildGuinProfile, validateEndorsement } from "./guin";
 import { ENDORSEMENT_MAX_LEN } from "@shared/schema";
 import { registerBadgeRoutes } from "./badge/routes";
+import { renderChapterBadgePng } from "./badge/chapter";
+import {
+  resolveSlugDestination,
+  slugDirectory,
+  getNodeById,
+  BOOK_TITLE,
+} from "@shared/bookCompanion";
+import { buildJourney, buildLedger, captureLedgerSnapshot } from "./bookCompanion";
+import rateLimit from "express-rate-limit";
 import { z } from "zod";
+
+// Book Companion chapter badge art is generic (no PII) and identical for every
+// reader, so a tiny process-memory cache keyed by nodeId fully covers it.
+const bookBadgeCache = new Map<string, Buffer>();
+const bookBadgeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { message: "Too many badge renders, please slow down." },
+});
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -1126,6 +1146,98 @@ export async function registerRoutes(
   // what the server actually resolved after env overlays.
   app.get("/api/features", (_req, res) => {
     res.json({ stage: STAGE, features: getResolvedFeatures() });
+  });
+
+  // ── Book Companion (Task #22) ──────────────────────────────────────
+  // All routes gated by the `bookCompanion` flag → 404 when off.
+
+  // QR / deep-link resolver. Printed in the book as /b/<slug>. Works
+  // logged-out — the destination route prompts login if needed. 302s to the
+  // real in-app surface with a ?book=<nodeId> tag so the landing surface can
+  // highlight the active chapter. Unknown slugs fall back to the journey hub.
+  app.get("/b/:slug", requireFeature("bookCompanion"), (req, res) => {
+    const dest = resolveSlugDestination(String(req.params.slug));
+    return res.redirect(302, dest ?? "/book");
+  });
+
+  // Canonical slug → destination table (ops / book-print verification).
+  app.get("/api/book/slugs", requireFeature("bookCompanion"), (_req, res) => {
+    res.json({ bookTitle: BOOK_TITLE, slugs: slugDirectory() });
+  });
+
+  // Per-user journey: every node + earned status.
+  app.get("/api/book/journey", requireFeature("bookCompanion"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const journey = await buildJourney(userId);
+      return res.json(journey);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Digital Ledger: baseline + final snapshots + live values + delta.
+  app.get("/api/book/ledger", requireFeature("bookCompanion"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const ledger = await buildLedger(userId);
+      return res.json(ledger);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Capture the FINAL Ledger snapshot (reader-initiated at the Epilogue). The
+  // baseline is captured server-internally on `assessment.completed` only — it
+  // is NEVER client-settable, otherwise a caller could pre-poison the immutable
+  // baseline (and thus the delta) before the Prologue assessment ran.
+  app.post("/api/book/ledger/snapshot", requireFeature("bookCompanion"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const schema = z.object({ kind: z.literal("final") });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "kind must be 'final'" });
+      }
+      const snap = await captureLedgerSnapshot(userId, parsed.data.kind);
+      const ledger = await buildLedger(userId);
+      return res.json({ snapshot: snap, ledger });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Generic chapter badge art (no PII) — cached per nodeId. EARNED / LOCKED
+  // overlay is applied client-side from the journey data.
+  app.get("/badge/book/:nodeId.png", requireFeature("bookCompanion"), bookBadgeLimiter, async (req, res) => {
+    try {
+      const nodeId = String(req.params.nodeId);
+      const node = getNodeById(nodeId);
+      if (!node) return res.status(404).json({ message: "Unknown chapter" });
+      const cached = bookBadgeCache.get(nodeId);
+      if (cached) {
+        res.setHeader("Content-Type", "image/png");
+        res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=86400");
+        res.setHeader("X-Robots-Tag", "noindex");
+        return res.send(cached);
+      }
+      const png = await renderChapterBadgePng({
+        chapterLabel: node.chapterLabel,
+        title: node.title,
+        badge: node.badge,
+        pillar: node.pillar,
+        ccLevel: node.ccLevel,
+        tier: node.tierArt,
+      });
+      bookBadgeCache.set(nodeId, png);
+      res.setHeader("Content-Type", "image/png");
+      res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=86400");
+      res.setHeader("X-Robots-Tag", "noindex");
+      return res.send(png);
+    } catch (err: any) {
+      console.error("[book] badge render failed:", err?.message || err);
+      return res.status(500).json({ message: "Badge render failed" });
+    }
   });
 
   app.post("/api/ark/recalc", requireAuth, async (req, res) => {

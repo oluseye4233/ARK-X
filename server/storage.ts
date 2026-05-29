@@ -29,6 +29,8 @@ import {
   cohorts, type Cohort, type InsertCohort,
   cohortMemberships, type CohortMembership,
   cohortAssignments, type CohortAssignment, type InsertCohortAssignment,
+  bookJourneyBadges, type BookJourneyBadge, type InsertBookJourneyBadge,
+  bookLedgerSnapshots, type BookLedgerSnapshot, type InsertBookLedgerSnapshot,
 } from "@shared/schema";
 import { or } from "drizzle-orm";
 
@@ -181,6 +183,14 @@ export interface IStorage {
     avgCcmi: number;
     avgArk: number;
   }>>;
+
+  // ── Book Companion (Task #22) ──
+  getBookBadges(userId: string): Promise<BookJourneyBadge[]>;
+  /** Idempotent award; returns the badge row + whether it was newly created. */
+  awardBookBadge(badge: InsertBookJourneyBadge): Promise<{ badge: BookJourneyBadge; created: boolean }>;
+  getLedgerSnapshots(userId: string): Promise<BookLedgerSnapshot[]>;
+  /** Baseline is immutable (insert-once); final upserts on each capture. */
+  upsertLedgerSnapshot(snap: InsertBookLedgerSnapshot): Promise<BookLedgerSnapshot>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1243,6 +1253,76 @@ export class DatabaseStorage implements IStorage {
       });
     }
     return out;
+  }
+
+  // ── Book Companion (Task #22) ──
+  async getBookBadges(userId: string): Promise<BookJourneyBadge[]> {
+    return db
+      .select()
+      .from(bookJourneyBadges)
+      .where(eq(bookJourneyBadges.userId, userId))
+      .orderBy(desc(bookJourneyBadges.earnedAt));
+  }
+
+  async awardBookBadge(
+    badge: InsertBookJourneyBadge,
+  ): Promise<{ badge: BookJourneyBadge; created: boolean }> {
+    // Idempotent: the unique (userId, nodeId) index makes a repeat award a
+    // no-op. ON CONFLICT DO NOTHING returns no row, so we detect the existing
+    // award and read it back.
+    const [inserted] = await db
+      .insert(bookJourneyBadges)
+      .values(badge)
+      .onConflictDoNothing({ target: [bookJourneyBadges.userId, bookJourneyBadges.nodeId] })
+      .returning();
+    if (inserted) return { badge: inserted, created: true };
+    const [existing] = await db
+      .select()
+      .from(bookJourneyBadges)
+      .where(and(eq(bookJourneyBadges.userId, badge.userId), eq(bookJourneyBadges.nodeId, badge.nodeId)));
+    return { badge: existing, created: false };
+  }
+
+  async getLedgerSnapshots(userId: string): Promise<BookLedgerSnapshot[]> {
+    return db
+      .select()
+      .from(bookLedgerSnapshots)
+      .where(eq(bookLedgerSnapshots.userId, userId));
+  }
+
+  async upsertLedgerSnapshot(snap: InsertBookLedgerSnapshot): Promise<BookLedgerSnapshot> {
+    if (snap.kind === "baseline") {
+      // Baseline is immutable — capture once, never overwrite. If it already
+      // exists, return it untouched.
+      const [inserted] = await db
+        .insert(bookLedgerSnapshots)
+        .values(snap)
+        .onConflictDoNothing({ target: [bookLedgerSnapshots.userId, bookLedgerSnapshots.kind] })
+        .returning();
+      if (inserted) return inserted;
+      const [existing] = await db
+        .select()
+        .from(bookLedgerSnapshots)
+        .where(and(eq(bookLedgerSnapshots.userId, snap.userId), eq(bookLedgerSnapshots.kind, "baseline")));
+      return existing;
+    }
+    // Final snapshot refreshes on every capture.
+    const [row] = await db
+      .insert(bookLedgerSnapshots)
+      .values(snap)
+      .onConflictDoUpdate({
+        target: [bookLedgerSnapshots.userId, bookLedgerSnapshots.kind],
+        set: {
+          jstIndex: snap.jstIndex,
+          ccmi: snap.ccmi,
+          arkScore: snap.arkScore,
+          badgesEarned: snap.badgesEarned ?? 0,
+          spcPublished: snap.spcPublished ?? 0,
+          capturedAt: new Date(),
+        },
+      })
+      .returning();
+    return row;
   }
 }
 

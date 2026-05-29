@@ -32,7 +32,7 @@ const FONT_URLS = [
 type LoadedFont = { name: string; data: ArrayBuffer; weight: 400 | 700; style: "normal" };
 let fontPromise: Promise<LoadedFont[]> | null = null;
 
-async function loadFonts(): Promise<LoadedFont[]> {
+export async function loadFonts(): Promise<LoadedFont[]> {
   if (fontPromise) return fontPromise;
   fontPromise = (async () => {
     const out: LoadedFont[] = [];
@@ -51,7 +51,7 @@ async function loadFonts(): Promise<LoadedFont[]> {
   }
 }
 
-const TIER_PALETTE: Record<BadgeData["tier"], { ring: string; glow: string; chip: string }> = {
+export const TIER_PALETTE: Record<BadgeData["tier"], { ring: string; glow: string; chip: string }> = {
   Bronze:   { ring: "#c97b3a", glow: "rgba(201,123,58,0.55)",  chip: "#3a2618" },
   Silver:   { ring: "#b8c6d6", glow: "rgba(184,198,214,0.55)", chip: "#1d2733" },
   Gold:     { ring: "#f6c453", glow: "rgba(246,196,83,0.65)",  chip: "#3a2f10" },

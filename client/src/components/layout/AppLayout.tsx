@@ -15,6 +15,7 @@ import {
   ShoppingBag,
   Building2,
   HelpCircle,
+  BookOpen,
   Menu,
   X,
   Shield,
@@ -67,6 +68,7 @@ const ALL_NAV_GROUPS: FlaggedNavGroup[] = [
       { name: "Home", href: "/", icon: HomeIcon, hint: "Landing & overview", flag: null },
       { name: "Upload CV", href: "/upload", icon: Upload, hint: "Run a new assessment", flag: null },
       { name: "Intelligence Hub", href: "/dashboard", icon: BarChart3, hint: "Your scores & insights", flag: null },
+      { name: "Book Companion", href: "/book", icon: BookOpen, hint: "Context Craft reading journey", flag: "bookCompanion" },
     ],
   },
   {

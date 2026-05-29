@@ -87,6 +87,31 @@ class Orchestrator {
           console.error("[orchestrator] recalc failed (best-effort):", trigger, recalcErr);
         }
       }
+
+      // Book Companion (Task #22) — auto-award chapter badges off the same
+      // flywheel events. Best-effort + flag-gated inside evaluateBookJourney.
+      try {
+        const { evaluateBookJourney } = await import("./bookCompanion");
+        if (type === "assessment.completed") {
+          await evaluateBookJourney(userId, {
+            type: "assessment.completed",
+            assessmentId: (payload as ArkEventPayloads["assessment.completed"]).assessmentId,
+          });
+        } else if (type === "game.session.finished") {
+          const p = payload as ArkEventPayloads["game.session.finished"];
+          await evaluateBookJourney(userId, {
+            type: "game.session.finished",
+            sessionId: p.sessionId,
+            scenarioId: p.scenarioId,
+            kcseScore: p.kcseScore,
+          });
+        } else if (type === "spc.published") {
+          const p = payload as ArkEventPayloads["spc.published"];
+          await evaluateBookJourney(userId, { type: "spc.published", listingId: p.listingId });
+        }
+      } catch (bookErr) {
+        console.error("[orchestrator] book companion eval failed (best-effort):", type, bookErr);
+      }
       return row;
     } catch (err) {
       console.error("[orchestrator] emit failed (best-effort):", type, err);
