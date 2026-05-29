@@ -69,7 +69,7 @@ export const MVP_FEATURES: Readonly<Record<FeatureKey, boolean>> = Object.freeze
   cohorts: false,
   enterpriseDashboard: false,
   corporateMarketplace: false,
-  investorDemo: false,
+  investorDemo: true,
   forgeLabDocx: false,
   drm: false,
   customScenarios: false,

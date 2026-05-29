@@ -18,6 +18,9 @@ import {
   TrendingUp,
   Users,
   ShieldAlert,
+  BookOpen,
+  QrCode,
+  Award,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +31,7 @@ import { VulnerabilityMeter } from "@/components/dashboard/VulnerabilityMeter";
 import { TransferabilityRadar } from "@/components/pathways/TransferabilityRadar";
 import { UpskillingTimeline } from "@/components/pathways/UpskillingTimeline";
 import { ARK_SCORE_DELTAS, CONTEXT_CRAFT_LEVELS, FLYWHEEL_CAPS, SPC_HIVE_MIN_TO_PUBLISH, SPC_FEEDBACK_BONUS_BY_STARS, LHCS_WEIGHTS } from "@shared/schema";
+import { BOOK_TITLE, BOOK_TOTAL_NODES, JOURNEY_STAGES, JOURNEY_NODES } from "@shared/bookCompanion";
 import { Star } from "lucide-react";
 
 // ─── DEMO DATA ────────────────────────────────────────────────────────────
@@ -189,6 +193,19 @@ const WORKFORCE_VULN_MIX = [
   { label: "Vulnerable", pct: 19, color: "bg-orange-400" },
   { label: "Critical", pct: 8, color: "bg-rose-400" },
 ];
+
+// Phase / Task #22 — Context Craft Book Companion (flag-gated reader journey)
+const BOOK_TIER_ART: Record<string, string> = {
+  Bronze: "from-amber-700 to-orange-500",
+  Silver: "from-slate-400 to-slate-200",
+  Gold: "from-yellow-500 to-amber-300",
+  Platinum: "from-fuchsia-500 to-cyan-400",
+};
+// Demo Ledger — baseline captured at the Prologue, final at the Epilogue.
+const BOOK_LEDGER = {
+  baselineArk: 312,
+  finalArk: JST.total + CCMI.total,
+};
 
 // ─── STEPS ────────────────────────────────────────────────────────────────
 
@@ -521,6 +538,75 @@ const StepWorkforce = () => {
   );
 };
 
+const StepBook = () => {
+  const delta = BOOK_LEDGER.finalArk - BOOK_LEDGER.baselineArk;
+  return (
+    <div className="space-y-6">
+      {/* Book header + Ledger */}
+      <div className="glass-card rounded-xl border-2 border-fuchsia-400/40 p-6" data-testid="tour-book-header">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-start gap-3">
+            <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-fuchsia-500/30 to-cyan-400/20 border border-fuchsia-400/40 flex items-center justify-center shrink-0">
+              <BookOpen className="h-6 w-6 text-fuchsia-300" />
+            </div>
+            <div>
+              <div className="text-[10px] font-mono uppercase tracking-widest text-fuchsia-300">The Book Companion</div>
+              <h3 className="font-display font-bold text-xl text-foreground leading-tight">{BOOK_TITLE}</h3>
+              <div className="text-xs text-muted-foreground mt-0.5">{BOOK_TOTAL_NODES} chapters · {JOURNEY_STAGES.length} stages · scan a QR in the book, land on the real surface.</div>
+            </div>
+          </div>
+          <Badge variant="outline" className="border-fuchsia-400/40 text-fuchsia-200 font-mono text-[10px]">CLASS C · flag-gated</Badge>
+        </div>
+
+        {/* Ledger: baseline → final */}
+        <div className="grid sm:grid-cols-3 gap-3 mt-5">
+          <Stat icon={Compass} label="Baseline ARK · Prologue" value={`${BOOK_LEDGER.baselineArk} / 600`} tone="text-muted-foreground" />
+          <Stat icon={Award} label="Final ARK · Epilogue" value={`${BOOK_LEDGER.finalArk} / 600`} tone="text-secondary" />
+          <Stat icon={TrendingUp} label="Proven Delta" value={`+${delta} ARK`} tone="text-emerald-300" />
+        </div>
+        <div className="mt-3 text-[11px] font-mono text-muted-foreground">
+          The Ledger captures an immutable baseline when you start and a final snapshot at the Epilogue — the book proves your growth, not a marketing claim.
+        </div>
+      </div>
+
+      {/* Stage-by-stage journey */}
+      <div className="space-y-5">
+        {JOURNEY_STAGES.map((stage, si) => {
+          const nodes = JOURNEY_NODES.filter((n) => n.stage === stage.id);
+          return (
+            <div key={stage.id} className="glass-card rounded-xl border border-border p-5" data-testid={`tour-book-stage-${stage.id}`}>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="h-6 w-6 rounded-md bg-primary/15 border border-primary/40 flex items-center justify-center font-display text-xs text-primary">{si + 1}</span>
+                <h4 className="font-display text-sm uppercase tracking-widest text-foreground">{stage.label}</h4>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4 ml-8">{stage.blurb}</p>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {nodes.map((n) => (
+                  <div key={n.id} className="rounded-md border border-border bg-background/40 p-3 flex items-start gap-3" data-testid={`tour-book-node-${n.id}`}>
+                    <div className={cn("h-8 w-8 rounded-md bg-gradient-to-br flex items-center justify-center shrink-0", BOOK_TIER_ART[n.tierArt] ?? "from-slate-500 to-slate-300")}>
+                      <Award className="h-4 w-4 text-background" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                        {n.chapterLabel}
+                        {n.pillar && <span className="text-cyan-300">· {n.pillar}</span>}
+                      </div>
+                      <div className="font-display text-sm text-foreground leading-tight truncate">{n.title}</div>
+                      <div className="text-[10px] font-mono text-fuchsia-200 mt-1 flex items-center gap-1">
+                        <QrCode className="h-3 w-3" /> {n.badge}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 const STEPS: Step[] = [
   {
     id: "jst",
@@ -606,6 +692,23 @@ const STEPS: Step[] = [
       "Connects to cohort assignments for institutional rollouts",
     ],
     render: StepWorkforce,
+  },
+  {
+    id: "book",
+    num: 6,
+    icon: BookOpen,
+    title: "Book Companion",
+    subtitle: `${BOOK_TITLE} — the book that walks you through the platform`,
+    route: "/book",
+    routeLabel: "Open the Journey",
+    narrative:
+      `Every chapter of "${BOOK_TITLE}" prints a QR code that drops you straight onto a real ARK surface — no marketing detour. Work the ${BOOK_TOTAL_NODES}-chapter journey across ${JOURNEY_STAGES.length} stages, earn a named badge per chapter by actually playing the matching CCGE challenge, and let the Ledger prove your ARK growth from Prologue baseline to Epilogue.`,
+    takeaways: [
+      "Each chapter badge is earned on a real surface — never granted for reading",
+      "QR slugs resolve to live deep links (works even when logged out)",
+      "The Ledger captures an immutable baseline and a final delta",
+    ],
+    render: StepBook,
   },
 ];
 
