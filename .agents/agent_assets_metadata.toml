@@ -78,3 +78,9 @@ id = "hmU_gtNaLuKTkH98-yQIR"
 uri = "file://exports/Context_Craft_Checkpoints_Chapter_by_Chapter.pdf"
 type = "pdf"
 title = "Context Craft — Chapter-by-Chapter Checkpoint Set"
+
+[[outputs]]
+id = "NFUJI1aw2PpUNovBeqGuC"
+uri = "file://exports/ARK_PDD_Current_ATLAS.md"
+type = "text"
+title = "ARK Platform — Comprehensive PDD (ATLAS, Current Snapshot)"
