@@ -25,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { FEATURES, type FeatureKey } from "@shared/featureFlags";
 import { JSTGauge } from "@/components/dashboard/JSTGauge";
 import { JSTRadar } from "@/components/dashboard/JSTRadar";
 import { VulnerabilityMeter } from "@/components/dashboard/VulnerabilityMeter";
@@ -217,6 +218,13 @@ type Step = {
   subtitle: string;
   route: string;
   routeLabel: string;
+  /**
+   * Feature flag that gates the deep-link target. When set and the flag is OFF
+   * the surface's `<Route>` isn't registered in `App.tsx`, so the in-tour
+   * "Open ..." button must NOT link there (it would land on the 404 page).
+   * Undefined ⇒ a CLASS A surface that's always reachable.
+   */
+  flag?: FeatureKey;
   narrative: string;
   takeaways: string[];
   render: () => React.ReactElement;
@@ -684,6 +692,7 @@ const STEPS: Step[] = [
     subtitle: "Enterprise dashboard — where AI risk lives inside your org",
     route: "/enterprise",
     routeLabel: "Open Workforce Dashboard",
+    flag: "enterpriseDashboard",
     narrative:
       "Roll up every assessed employee into a per-department JST heatmap and an org-wide vulnerability mix. Spot the team that's three quarters away from automation displacement before HR does, and stage upskilling investment where ROI is highest.",
     takeaways: [
@@ -701,6 +710,7 @@ const STEPS: Step[] = [
     subtitle: `${BOOK_TITLE} — the book that walks you through the platform`,
     route: "/book",
     routeLabel: "Open the Journey",
+    flag: "bookCompanion",
     narrative:
       `Every chapter of "${BOOK_TITLE}" prints a QR code that drops you straight onto a real ARK surface — no marketing detour. Work the ${BOOK_TOTAL_NODES}-chapter journey across ${JOURNEY_STAGES.length} stages, earn a named badge per chapter by actually playing the matching CCGE challenge, and let the Ledger prove your ARK growth from Prologue baseline to Epilogue.`,
     takeaways: [
@@ -746,6 +756,13 @@ export default function DemoTourPage() {
     setIdx(Math.max(0, Math.min(STEPS.length - 1, i)));
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
+  // Only deep-link when the step's target surface is actually registered (i.e.
+  // its feature flag is on). For flagged-off surfaces, route visitors to /login
+  // so the tour never dead-ends on the 404 page.
+  const stepReachable = !step.flag || FEATURES[step.flag];
+  const openHref = stepReachable ? step.route : "/login";
+  const openLabel = stepReachable ? step.routeLabel : "Sign in to explore";
 
   return (
     <div className="min-h-screen pb-24" data-testid="demo-tour-page">
@@ -863,8 +880,8 @@ export default function DemoTourPage() {
                   className="border-primary/40 text-primary hover:bg-primary/10"
                   data-testid={`button-open-${step.id}`}
                 >
-                  <Link href={step.route}>
-                    {step.routeLabel} <ExternalLink className="h-4 w-4 ml-2" />
+                  <Link href={openHref}>
+                    {openLabel} <ExternalLink className="h-4 w-4 ml-2" />
                   </Link>
                 </Button>
               </div>
