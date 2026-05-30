@@ -10,7 +10,8 @@ CANNOT auto-resolve a browser in this environment — it throws at `resolveExecu
 
 **Fix:** export `PUPPETEER_EXECUTABLE_PATH` to the nix-store chromium binary before running, e.g.
 
-    export PUPPETEER_EXECUTABLE_PATH="$(ls -d /nix/store/*chromium*/bin/chromium | head -1)"
+    # pick a REAL chromium browser (not chromium-bsu the game, not ungoogled):
+    export PUPPETEER_EXECUTABLE_PATH="$(ls -d /nix/store/*-chromium-[0-9]*/bin/chromium | head -1)"
     npx tsx scripts/renderPdd.ts exports/X.md exports/X.pdf
 
 **Why:** the nix chromium isn't on PATH where puppeteer-core looks, and the launch args in

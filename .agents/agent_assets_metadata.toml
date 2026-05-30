@@ -90,3 +90,15 @@ id = "_rzaPmVvZ27ukQaMuBG7w"
 uri = "file://exports/ARK_PDD_Current_ATLAS.pdf"
 type = "pdf"
 title = "ARK Platform — ATLAS Living PDD (v10, current status)"
+
+[[outputs]]
+id = "Cp6nF5UV8mHkkwiBHx0iZ"
+uri = "file://exports/ARK_PDD_Current_MVP_Spartan.pdf"
+type = "pdf"
+title = "ARK Platform — SPARTAN MVP PDD (compressed from full ATLAS PDD)"
+
+[[outputs]]
+id = "jt5lyS6qEltRJz2TLEBhP"
+uri = "file://exports/ARK_PDD_Current_MVP_Spartan.md"
+type = "text"
+title = "SPARTAN MVP PDD — source markdown"
