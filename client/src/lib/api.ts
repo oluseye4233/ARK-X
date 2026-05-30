@@ -334,4 +334,27 @@ export const api = {
       body: JSON.stringify({ kind }),
     }),
   getBookSlugs: () => apiRequest("/api/book/slugs"),
+
+  // ── Free JST Assessment (guest funnel — no login) ──
+  getFreeAssessmentSpots: () => apiRequest("/api/free-assessment/spots"),
+  submitFreeAssessment: (input: { method: "questionnaire" | "linkedin"; answers?: string[]; text?: string }) =>
+    apiRequest("/api/free-assessment", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  submitFreeAssessmentResume: async (file: File) => {
+    const fd = new FormData();
+    fd.append("method", "resume");
+    fd.append("resume", file);
+    const res = await fetch("/api/free-assessment", {
+      method: "POST",
+      body: fd,
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({ message: res.statusText }));
+      throw new Error(e.message || "Assessment failed");
+    }
+    return res.json();
+  },
 };

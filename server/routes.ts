@@ -1084,6 +1084,130 @@ export async function registerRoutes(
       };
   }
 
+  // ── Free JST Assessment (guest funnel — NO auth) ──────
+  // Public marketing surface: a visitor runs ONE JST assessment with no login
+  // via questionnaire, resume upload, or pasted LinkedIn profile, then we
+  // upsell a subscription. Computes with the SAME analyzer as the logged-in
+  // pipeline but DOES NOT persist to a user, recalc ARK, or emit SSE — guests
+  // have no account. A tiny anonymous row backs the "first 100 free" counter.
+  const FREE_ASSESSMENT_PROMO_LIMIT = 100;
+  const freeAssessmentLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 12, // generous for honest use; blocks scripted abuse of PDF parsing
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    message: { message: "Too many free assessments from this network. Please try again later." },
+  });
+
+  // Keyword-rich text per archetype so the questionnaire answers feed the real
+  // analyzer (no fabricated scores — the JST is computed from the visitor's own
+  // selections, just like a resume's keywords drive a logged-in assessment).
+  const ARCHETYPE_TEXT: Record<string, string> = {
+    Architect: "Designed system architecture and technical strategy. Built scalable software platforms, data infrastructure, and automation pipelines. Led engineering innovation and defined long-term technical vision.",
+    Orchestrator: "Coordinated cross-functional teams and managed complex programs at scale. Aligned stakeholders, optimized operational workflows, and led delivery across multiple departments and product lines.",
+    Conductor: "Executed and shipped projects hands-on under tight deadlines. Solved critical problems, mentored peers, drove client communication, and owned the critical path to delivery.",
+  };
+
+  app.get("/api/free-assessment/spots", async (_req, res) => {
+    try {
+      const claimed = await storage.countGuestAssessments();
+      const remaining = Math.max(0, FREE_ASSESSMENT_PROMO_LIMIT - claimed);
+      return res.json({ claimed, limit: FREE_ASSESSMENT_PROMO_LIMIT, remaining });
+    } catch {
+      // Counter is best-effort marketing flair — never fail the page on it.
+      return res.json({ claimed: 0, limit: FREE_ASSESSMENT_PROMO_LIMIT, remaining: FREE_ASSESSMENT_PROMO_LIMIT });
+    }
+  });
+
+  app.post("/api/free-assessment", freeAssessmentLimiter, upload.single("resume"), async (req, res) => {
+    try {
+      const method = String(req.body?.method ?? "");
+      if (!["questionnaire", "resume", "linkedin"].includes(method)) {
+        return res.status(400).json({ message: "Invalid assessment method." });
+      }
+
+      let text = "";
+      if (method === "resume") {
+        const file = req.file;
+        if (!file) return res.status(400).json({ message: "No file uploaded. Accepted formats: PDF, TXT." });
+        if (file.mimetype === "application/pdf") {
+          let h: ReturnType<typeof setTimeout> | undefined;
+          const timeout = new Promise<never>((_, rej) => {
+            h = setTimeout(() => rej(new Error("PDF parsing timed out")), 15_000);
+          });
+          try {
+            const parser = new PDFParse({ data: new Uint8Array(file.buffer) });
+            const data = await Promise.race([parser.getText(), timeout]);
+            clearTimeout(h);
+            text = data.text;
+          } catch (e: any) {
+            clearTimeout(h);
+            if (e.message === "PDF parsing timed out") {
+              return res.status(422).json({ message: "That PDF took too long to process. Try a smaller or simpler file." });
+            }
+            throw e;
+          }
+        } else {
+          text = file.buffer.toString("utf-8");
+        }
+      } else if (method === "questionnaire") {
+        const answers = Array.isArray(req.body?.answers) ? req.body.answers : [];
+        text = answers.map((a: unknown) => ARCHETYPE_TEXT[String(a)] ?? "").filter(Boolean).join(" ");
+      } else {
+        text = String(req.body?.text ?? "");
+      }
+
+      if (!text || text.trim().length < 50) {
+        return res.status(422).json({
+          message: method === "linkedin"
+            ? "Please paste at least a few lines of your LinkedIn profile (your About / Experience sections work best)."
+            : "We couldn't read enough content to build an assessment. Try a different option.",
+        });
+      }
+
+      const analysis = analyzeResume(text, "NONE");
+      const a = analysis.assessment;
+
+      // Best-effort anonymous logging for the scarcity counter + analytics.
+      let claimed = 0;
+      try {
+        await storage.createGuestAssessment({
+          method,
+          jstTotal: a.jstTotal,
+          vulnerabilityLevel: a.vulnerabilityLevel,
+          readinessProfile: a.readinessProfile,
+        });
+        claimed = await storage.countGuestAssessments();
+      } catch (logErr) {
+        console.error("[free-assessment] guest log failed (best-effort):", logErr);
+      }
+      const remaining = Math.max(0, FREE_ASSESSMENT_PROMO_LIMIT - claimed);
+
+      return res.status(201).json({
+        method,
+        jstTotal: a.jstTotal,
+        jstJobs: a.jstJobs,
+        jstSkills: a.jstSkills,
+        jstTalent: a.jstTalent,
+        vulnerabilityLevel: a.vulnerabilityLevel,
+        readinessProfile: a.readinessProfile,
+        archetype: {
+          architect: a.archetypeArchitect,
+          orchestrator: a.archetypeOrchestrator,
+          conductor: a.archetypeConductor,
+        },
+        riskModifiers: a.riskModifiers ?? [],
+        transferabilityVectors: analysis.transferabilityVectors,
+        pivotOpportunities: analysis.pivotOpportunities,
+        upskillingPlans: analysis.upskillingPlans,
+        spots: { claimed, limit: FREE_ASSESSMENT_PROMO_LIMIT, remaining },
+      });
+    } catch (err: any) {
+      console.error("[/api/free-assessment] error:", err);
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
   // ── PDD §3.4 — ARK identity surfaces ───────────────────
   app.get("/api/ark/identity", requireAuth, async (req, res) => {
     try {

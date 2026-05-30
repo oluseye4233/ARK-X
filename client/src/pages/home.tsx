@@ -1,8 +1,34 @@
 import { Link } from "wouter";
-import { ArrowRight, ShieldAlert, Target, Zap, Crown, GraduationCap, User, Building2, Check, Upload, BarChart3, Compass, PlayCircle } from "lucide-react";
+import { ArrowRight, ShieldAlert, Target, Zap, Crown, GraduationCap, User, Building2, Check, Upload, BarChart3, Compass, PlayCircle, Sparkles } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { SUBSCRIPTION_PLANS } from "@shared/schema";
+import { api } from "@/lib/api";
 import heroBgVideo from "@assets/WEB_LEARNING_SYSTEMS_(1920_x_1280_px)_(2)_1779676596124.mp4";
+
+function ScarcityBadge() {
+  const { data } = useQuery<{ claimed: number; limit: number; remaining: number }>({
+    queryKey: ["/api/free-assessment/spots"],
+    queryFn: () => api.getFreeAssessmentSpots(),
+    refetchOnWindowFocus: false,
+  });
+  const remaining = data?.remaining ?? 100;
+  const limit = data?.limit ?? 100;
+  const soldOut = remaining <= 0;
+  return (
+    <div
+      className="inline-flex items-center gap-2 rounded-full border border-secondary/50 bg-secondary/10 px-4 py-1.5 text-xs font-mono uppercase tracking-widest text-secondary shadow-[0_0_20px_hsl(var(--secondary)/0.25)]"
+      data-testid="badge-home-spots"
+    >
+      <Sparkles className="h-3.5 w-3.5" />
+      {soldOut ? (
+        <span data-testid="text-home-spots-remaining">All {limit} free spots claimed — still free to try</span>
+      ) : (
+        <>First 100 Free · <span className="font-bold text-white" data-testid="text-home-spots-remaining">{remaining}</span>/{limit} spots left</>
+      )}
+    </div>
+  );
+}
 
 export default function Home() {
   return (
@@ -84,8 +110,9 @@ export default function Home() {
         </div>
 
         {/* Hero CTA — centered, throbbing, glowing. Enterprise login demoted
-            to a secondary link below so user attention lands on Initialize. */}
+            to a secondary link below so user attention lands on the free funnel. */}
         <div className="flex flex-col items-center gap-4 pt-6">
+          <ScarcityBadge />
           <div className="relative group">
             {/* Outer pulse ring */}
             <span
@@ -98,11 +125,11 @@ export default function Home() {
               className="absolute -inset-1 rounded-full bg-primary/40 blur-xl pointer-events-none"
             />
             <Link
-              href="/upload"
+              href="/free"
               data-testid="button-start-assessment"
               className="relative inline-flex items-center justify-center bg-primary hover:bg-primary/90 text-primary-foreground font-mono uppercase tracking-wider rounded-none neon-border h-16 px-12 transition-all hover:scale-[1.04] text-base font-bold shadow-[0_0_30px_hsl(var(--primary)/0.6)] animate-throb-glow"
             >
-              Initialize Analysis <ArrowRight className="ml-3 h-6 w-6" />
+              Claim Free JST Assessment <ArrowRight className="ml-3 h-6 w-6" />
             </Link>
           </div>
 

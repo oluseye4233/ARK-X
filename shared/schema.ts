@@ -1513,3 +1513,21 @@ export const insertBookLedgerSnapshotSchema = createInsertSchema(bookLedgerSnaps
 });
 export type InsertBookLedgerSnapshot = z.infer<typeof insertBookLedgerSnapshotSchema>;
 export type BookLedgerSnapshot = typeof bookLedgerSnapshots.$inferSelect;
+
+// ── Free JST Assessment (guest / no-login marketing funnel) ──
+// Anonymous lead-funnel record. No PII and no FK to users — guests are NOT
+// logged in. Powers the "first 100 free" scarcity counter on the landing page
+// plus lightweight conversion analytics. One row per completed guest run.
+export const guestAssessments = pgTable("guest_assessments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  method: text("method").notNull(), // "questionnaire" | "resume" | "linkedin"
+  jstTotal: integer("jst_total").notNull().default(0),
+  vulnerabilityLevel: integer("vulnerability_level").notNull().default(2),
+  readinessProfile: text("readiness_profile").notNull().default("Conductor"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export const insertGuestAssessmentSchema = createInsertSchema(guestAssessments).omit({
+  id: true, createdAt: true,
+});
+export type InsertGuestAssessment = z.infer<typeof insertGuestAssessmentSchema>;
+export type GuestAssessment = typeof guestAssessments.$inferSelect;

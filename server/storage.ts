@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { eq, sql, desc, and, inArray } from "drizzle-orm";
+import { guestAssessments, type InsertGuestAssessment, type GuestAssessment } from "@shared/schema";
 import {
   users, type User, type InsertUser, type UpdateUser,
   assessments, type Assessment, type InsertAssessment,
@@ -43,6 +44,9 @@ export interface IStorage {
   createAssessment(assessment: InsertAssessment): Promise<Assessment>;
   getAssessment(id: string): Promise<Assessment | undefined>;
   getAssessmentsByUser(userId: string): Promise<Assessment[]>;
+
+  createGuestAssessment(row: InsertGuestAssessment): Promise<GuestAssessment>;
+  countGuestAssessments(): Promise<number>;
   getLatestAssessment(userId: string): Promise<Assessment | undefined>;
   updateAssessmentScore(id: string, data: Partial<Pick<Assessment, "jstTotal" | "jstJobs" | "jstSkills" | "jstTalent">>): Promise<Assessment | undefined>;
 
@@ -230,6 +234,16 @@ export class DatabaseStorage implements IStorage {
   async createAssessment(assessment: InsertAssessment): Promise<Assessment> {
     const [created] = await db.insert(assessments).values(assessment).returning();
     return created;
+  }
+
+  async createGuestAssessment(row: InsertGuestAssessment): Promise<GuestAssessment> {
+    const [created] = await db.insert(guestAssessments).values(row).returning();
+    return created;
+  }
+
+  async countGuestAssessments(): Promise<number> {
+    const [r] = await db.select({ c: sql<number>`count(*)` }).from(guestAssessments);
+    return Number(r?.c ?? 0);
   }
 
   async getAssessment(id: string): Promise<Assessment | undefined> {
