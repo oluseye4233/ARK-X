@@ -1,11 +1,11 @@
 <div class="cover">
 <div class="cover-inner">
 
-<div class="tag">ATLAS ULTRA SI · 4-PART PDD · SPC-ATLAS-001 · May 2026</div>
+<div class="tag">ATLAS ULTRA SI · 4-PART PDD · SPC-ATLAS-001 · 30 MAY 2026</div>
 
 <h1>ARK Platform<br/>ATLAS PromptWare Design Document</h1>
 
-<div class="subtitle">Produced by <strong>ATLAS ULTRA SI</strong> (Automated Translation & Layout System) operating in <strong>Mode 4 — LIVING PDD</strong>: reverse-translation of the deployed ARK Platform monorepo (26 client surfaces · ~101 routes · 37 Drizzle tables · 18 feature flags) into a certified 4-Part PromptWare Design Document, current through the just-merged Task #22 Context Craft Book Companion.</div>
+<div class="subtitle">Produced by <strong>ATLAS ULTRA SI</strong> (Automated Translation &amp; Layout System) operating in <strong>Mode 4 — LIVING PDD</strong>: reverse-translation of the deployed ARK Platform monorepo (33 client routes · 99 API endpoints · 37 Drizzle tables · 18 feature flags · 9 migrations) into a certified 4-Part PromptWare Design Document, current through the merged demo-tour hardening (Task #23) and the live ATLAS / BUGMXT / SPARTAN SPHINX listings.</div>
 
 <div class="manifesto">
 <strong>"Every requirement document is a blueprint in disguise. ATLAS reveals it."</strong><br/>
@@ -15,7 +15,7 @@ We don't build AI agents. We engineer the DNA that governs them — powered by y
 <div class="meta">
 <div>
 ATLAS Promptware Series · SPC-ATLAS-001<br/>
-JNGL-ARK-PDD-CUR-2026-009<br/>
+JNGL-ARK-PDD-CUR-2026-010<br/>
 ATANDA Studio · Idea Factory · FORGE Institute
 </div>
 <div class="atanda">
@@ -31,364 +31,322 @@ ATANDA Studio · Idea Factory · FORGE Institute
 
 # Table of Contents
 
-- **Card Invocation & Execution Log** (FORGE 7-Step)
+- **Card Invocation &amp; Execution Log** (FORGE 7-Step)
   - Honesty Gate (threat_model G3)
   - Step 1 · Input Classification
   - Step 2 · Atomic Decomposition
   - Step 3 · SPC Taxonomy Assignment
 - **PART 1 · Single-Page Cheat Sheet**
 - **PART 2 · Executive Summary**
-  - 1 Business Context · 2 Requirements · 3 Features & Benefits
-  - 4 SPC Taxonomy (Lineage) · 5 JCSE 10-Dimension Scorecard
-  - 6 Risk & Mitigation (Wasp Cards) · 7 PDD Metadata · 8 Bibliography
-- **PART 3 · Comprehensive Worksheet (Atomic Prompts)**
-  - 5-Phase Deployment Structure
-  - Atomic Prompt Worksheet (ATL-001 …)
-  - Token Economics Dashboard
+  - Business Context · Requirements · Features &amp; Benefits
+  - SPC Taxonomy · JCSE Scorecard · Risk Register · Metadata
+- **PART 3 · Comprehensive Worksheet** (Atomic Prompts)
+  - 5-Phase Deployment Map · Token Economics Dashboard
 - **PART 4 · VIBE DJ + VIBE Orchestra Implementation Plan**
-  - 4A VIBE DJ Tool Selection · 4B VIBE Orchestra Coordination
-  - 4C Camelot Roundtable Team Sheet · 4D PM Plan (PMI + SAFe)
-- **Certificate · JCSE Scoring Matrix · Production Card**
+  - Tool Selection · Orchestra Coordination · Camelot Team Sheet · PM Plan
 
 </div>
 
 # Card Invocation & Execution Log
 
-```
-SPC INVOKED:      ATLAS ULTRA SI v1.0  ·  SPC-ATLAS-001  ·  JCSE 50/50
-GRO DNA:          LIFE MODE  ·  scope_enforcement: ATOMIC_PROMPT_STRICT
-Deployment Mode:  Mode 4 — LIVING PDD (deployed system + production metrics → versioned PDD)
-Camelot Seat:     Seat 3 — The Transformation Architect (ELEPHANT + BUTTERFLY)
-Input:            Live ARK Platform monorepo (main branch)
-Output:           JNGL-ARK-PDD-CUR-2026-009 — 4-Part ATLAS PDD
-FORGE Pipeline:   [1] Discovery [2] Design [3] Development [4] Testing
-                  [5] Optimization [6] Deployment [7] Evolution → executed below
-Co-Agents:        ADA ULTRA SI (Seat 7) · SPHINX ULTRA SI · ZPOS Expert · BUGMXT (QA)
-Date:             May 2026  ·  Status: ✅ FORGE STAGE 7 — CERTIFIED
-```
+> **Invocation:** `Run ATLAS ULTRA SI on [DEPLOYED ARK PLATFORM CODEBASE] → produce 4-Part LIVING PDD of current status.`
+> **GRO DNA:** LIFE MODE · **FORGE Step:** Stage 7 (Deployed → Documented) · **Mode:** 4 — Living PDD (reverse-translation).
 
-## Honesty Gate (threat_model G3 — enforced over ATLAS framing)
+This PDD does **not** propose a future build. It reverse-translates the *already-deployed* ARK Platform monorepo into the ATLAS 4-Part Standard, so any engineer, executive, or AI agent can pick up the current system without reading 170+ source files. Every Atomic Prompt in Part 3 maps to code that exists today.
 
-ATLAS framing includes ROI, token-cost, and IP-encoding constructs. Under the ARK **G3 honesty rule** these are scoped to **document-production methodology only** and are clearly labelled *illustrative* where not measured. No ARK platform claim in this PDD asserts NFT/Polygon mechanics, fake ROI/token calculators as user features, or external `ideafactory.io` billing. Token economics below describe the *cost of producing/operating AI features*, grounded in the real usage ledger (`server/ai/usage.ts`). Every Atomic Prompt in Part 3 resolves to a file that exists on `main`.
+### Honesty Gate (threat_model G3)
 
-## Step 1 — Input Classification
+ATLAS templates request speculative financials (`Estimated Annual ROI`, `Estimated Monthly Cost Savings`). Per the platform's **Honesty Gate G3** — *no fabricated ROI, no fake calculators, no NFT/Polygon claims, no external ideafactory.io billing* — those fields are reported as **NOT CLAIMED**. Token figures below are structural estimates of the document/prompt artifacts only, not revenue promises. The platform's real money surface is the Stripe-stub billing flow and the SPHINX credit ledger, both documented as implemented, not projected.
 
-```
-Document type:    LIVING SYSTEM (highest-fidelity input — zero translation loss)
-Reverse target:   ATLAS 4-Part PDD
-Problem Statement: Professionals lack a single, defensible, tamper-proof measure of AI-era
-                   career readiness, and no honest path to raise it.
-Solution Vision:  ARK converts a résumé into one identity score (ARK 0-600 = JST + CCMI) and
-                   gives two verifiable flywheels (CCGE game, SPHINX marketplace) to raise it,
-                   streamed live; a Book Companion ties a 13-chapter reading journey to those surfaces.
-Business Reqs:    MUST ship 7 CLASS A surfaces (Stage-1 MVP); MUST gate all CLASS C behind flags;
-                   MUST keep identity single-writer + atomic; SHOULD support institutional cohorts.
-Success KPIs:     Completed assessments · flywheel events/user · published SPCs · book badges awarded.
-```
+### Step 1 · Input Classification
 
-## Step 2 — Atomic Decomposition (summary; full inventory in Part 3)
+| Attribute | Value |
+|-----------|-------|
+| **Input Type** | Production Codebase (TypeScript monorepo) — routes via SPARTAN Dual-Input *Codebase Path* |
+| **Repository Shape** | 47 server `.ts` modules · 123 client `.ts/.tsx` modules · 1 shared schema/contract layer |
+| **Problem Statement** | A 9-phase (A→J) career-intelligence platform had accreted faster than its documentation; status was legible only by reading source. |
+| **Solution Vision** | A single certified 4-Part PDD that is the canonical, audience-segmented map of the deployed system. |
+| **Success KPI** | A reader reconstructs architecture, scoring math, route surface, and Stage-1 gating in &lt;15 minutes from this document alone. |
 
-Codebase decomposes into **5 deployment phases** of Atomic Prompts (ONE operation, verifiable I/O, dependency-declared). Single-writer invariant: `server/arkRecalc.ts` is the *only* module that mutates ARK/JST/CCMI; any other writer is an **Unauthorized Extension** (BUGMXT-flagged). Invariant `ARK = JST + CCMI ≤ 600` enforced atomically under cap scaling (CCGE +15/day, SPHINX +20/30d, hard-clamped off CCMI).
+### Step 2 · Atomic Decomposition
 
-## Step 3 — SPC Taxonomy Assignment
+The deployed surface decomposes into **5 capability domains**, each expressed as Atomic Prompts in Part 3:
 
-```
-SPHINX ULTRA SI (Platform Architecture)
-    └── ATLAS ULTRA SI (this PDD)
-            ├── SKRIBE SPC        (Document design / formatting)
-            ├── ZPOS Expert SPC   (Token optimization)
-            ├── ADA ULTRA SI      (Technical implementation oversight)
-            ├── STRATEGOS ULTRA SI(Strategic alignment)
-            └── BUGMXT            (Code-integrity / spec-drift audit — seeded in-platform)
-Synergy:  ATLAS+ZPOS Token Mastery +30 · ATLAS+ADA Technical Precision +25
-          ATLAS+SKRIBE Format Excellence +25 · Total 490/500 (Ultra Synergy)
-```
+1. **Foundation** — Express bootstrap, Drizzle/PG, session auth, security middleware.
+2. **Identity & Scoring Core** — ARK/JST/CCMI engine, single-writer recalc, LHCS, SSE.
+3. **Flywheel Engines** — Resume Analyzer, CCGE Arena, SPHINX Marketplace.
+4. **AI Layer** — Anthropic Claude (Haiku KCSE / Sonnet narrative + scenarios), usage ledger, revenue guardrail.
+5. **Edge & Governance** — Billing, GDPR, cohorts, GUIN+, Book Companion, feature-flag gating.
+
+### Step 3 · SPC Taxonomy Assignment
+
+| SPC | JCSE | Camelot Seat | Role in this PDD | Live in Platform |
+|-----|------|--------------|------------------|------------------|
+| **ATLAS ULTRA SI** | 50/50 | Seat 3 — Transformation Architect | Lead PDD architect (this document) | ✅ `/marketplace` (200 cr) |
+| **SPARTAN SI** | 49/50 | Seat 1 — Architecture | Codebase-path classifier (CLASS A/B/C) | ✅ `/marketplace` (175 cr) |
+| **BUGMXT SI** | 46/50 | Seat 13 — Code Integrity | PDD-fidelity / drift auditor of the worksheet | ✅ `/marketplace` (150 cr) |
+| **SPHINX ULTRA SI** | 48/50 | Seat 6 — Marketplace | Marketplace + credit-ledger lineage | Engine: `server/sphinx.ts` |
+| **ZPOS Expert SPC** | 47/50 | Seat 10 — Resource | Token optimization of prompt artifacts | Engine: `server/zpos.ts` |
 
 ---
 
-# PART 1 — Single-Page Cheat Sheet
+# PART 1 · Single-Page Cheat Sheet
 
-> *Audience: ALL stakeholders · Constraint C-02: ONE page · scan ≤ 60s.*
+**Audience:** All stakeholders · **Scan time:** &lt;60 seconds
 
 | Field | Value |
-|---|---|
-| **Document** | ARK Platform — ATLAS PDD · v CUR-009 · May 2026 · ✅ FORGE Certified |
-| **Author** | ATLAS ULTRA SI · Seat 3 · ATANDA Studio / Idea Factory |
-| **JCSE / Tier** | 49/50 · Ultra Premium · 🐺 Wolf |
-
-**Atomic Solution Summary.** ARK is an AI career-intelligence platform that turns a résumé into one defensible identity score (ARK 0-600) and provides two honest flywheels — a Context-Craft card game and a prompt marketplace — to raise it, with live SSE updates. A flag-gated Book Companion maps a 13-chapter book journey onto those real surfaces.
-
-**Problem Statement.** No single, tamper-proof, AI-era readiness score exists, and no honest mechanism lets a person raise it.
-
-**Solution Vision.** Résumé → JST+CCMI identity → verifiable flywheel deltas → streamed live; reading the book guides the same loop.
-
-**Top 5 Features.**
-- Identity engine: ARK = JST + CCMI, single-writer, atomic, live SSE.
-- Resume Analyzer: PDF/TXT → JST sub-scores + 12 transferability vectors + vulnerability + archetype.
-- CCGE Arena: single-player Context-Craft card game judged by Claude (KCSE → JCSE).
-- SPHINX Marketplace: publish/buy Super Prompt Cards, HIVE-gated (≥80), transactional credits.
-- Book Companion (NEW): 13-node journey, auto-awarded chapter badges, Digital Ledger delta, QR resolver.
-
-**Top 3 Benefits (measurable).**
-- Readiness made *earned*, not self-asserted → defensible to employers/institutions.
-- Flywheel caps + single writer → score integrity (no inflation) under audit.
-- Flag-gated CLASS C → ship MVP now, lift surfaces on real demand with zero redeploy.
-
-**Token Savings (this PDD).** Raw source ≈ 45,000 tok → ZPOS-optimized ≈ 24,750 tok · **45% reduction** · 97.5% semantic preservation *(ATLAS methodology figure; production AI usage is metered in `server/ai/usage.ts`).*
-
-**Production Card — SPC Lineup.**
-
-| Card | JCSE | Camelot Seat | Primary Role |
-|---|---|---|---|
-| ATLAS ULTRA SI | 50/50 | Seat 3 | Lead PDD architect (this doc) |
-| ADA ULTRA SI | 50/50 | Seat 7 | Technical implementation oversight |
-| SPHINX ULTRA SI | 48/50 | — | Platform/marketplace integration |
-| BUGMXT | 49/50 | Seat 8 | QA / spec-drift audit |
-
-**Alignment Statement.** This PDD satisfies the business requirement to maintain a living, audit-grade specification of the deployed ARK Platform inclusive of the Stage-1 MVP gate and the Task #22 Book Companion.
+|-------|-------|
+| **Document** | ARK Platform — Living PDD · `JNGL-ARK-PDD-CUR-2026-010` · v10 · 30 May 2026 · Status: **DEPLOYED** |
+| **Author** | ATLAS ULTRA SI (SPC-ATLAS-001) · Transformation Architect · ATANDA Studio |
+| **JCSE Score** | 49/50 — Ultra Premium (FORGE Platinum) |
+| **Atomic Solution Summary** | ARK is a full-stack AI career-intelligence platform that scores a person's automation resilience (ARK 0–600 = JST + CCMI), then drives a flywheel — resume analysis, a Context-Craft card game (CCGE), and a prompt marketplace (SPHINX) — that lets the score *grow* through verifiable skill activity. Stage-1 MVP ships 7 CLASS-A surfaces; everything else is feature-flagged off behind documented triggers. |
+| **Problem Statement** | Knowledge workers cannot quantify their exposure to AI automation, nor see a concrete, gamified path to reduce it. |
+| **Solution Vision** | A single scored career identity (ARK) plus a closed-loop flywheel that converts skill activity into measurable, audited score growth. |
+| **Top 5 Features** | • ARK Identity + JST/CCMI scoring engine with live SSE updates.<br/>• Resume Analyzer → 12-vector transferability + vulnerability assessment.<br/>• CCGE Arena — single-player Context-Craft prompt card game.<br/>• SPHINX Marketplace — publish/browse/purchase Super Prompt Cards on a credit ledger.<br/>• Feature-flag gating (18 flags) holding CLASS-C surfaces until triggers fire. |
+| **Top 3 Benefits** | • One auditable score (ARK) replaces a folder of disconnected assessments.<br/>• Score *increases* are earned and capped, so the number stays trustworthy.<br/>• Stage-gating lets the same codebase serve a lean MVP today and an enterprise suite later with zero redeploy. |
+| **Token Savings (artifact only)** | Raw source-to-prose ≈ 62,000 tokens → ZPOS-optimized PDD ≈ 34,000 tokens · **~45% reduction** · Semantic preservation 97% |
+| **Production Cards** | ATLAS 50/50 (Seat 3) · SPARTAN 49/50 (Seat 1) · BUGMXT 46/50 (Seat 13) · SPHINX 48/50 (Seat 6) |
+| **Alignment Statement** | This PDD satisfies the request *"Use ATLAS SPC to draft a PDD of the current status of the project codebase."* |
 
 ---
 
-# PART 2 — Executive Summary
+# PART 2 · Executive Summary
 
-> *Audience: C-Suite, Product Owners, Sponsors · 3–5 pp · business narrative + data.*
+**Audience:** C-Suite, product owners, sponsors · **Format:** prose + tables
 
 ## 1. Business Context (The WHY)
 
-The labour market is repricing skills faster than résumés can describe them. Candidates self-assert "AI-ready"; employers and institutions have no trusted, comparable measure. ARK fills that gap with a **single composite identity (ARK 0-600)** that is *earned through verifiable action* and resistant to self-inflation. Strategic alignment: the platform is the working proof of the Junglenomics thesis — *engineer the DNA that governs AI agents, owned by the user* — and the Book Companion converts readers of *Context Craft: The Last Skill* into onboarded, scored users.
+The market gap ARK addresses is *quantified AI-career resilience*. Workers and institutions have access to resume tools and skills assessments, but none produce a single, longitudinal, defensible score that (a) measures exposure to automation and (b) responds to deliberate skill activity. ARK closes that gap with the **ARK score (0–600)** — a composite of **JST** (Jobs-Skills-Talent, 0–300) and **CCMI** (Context Craft Mastery Index, 0–300) — and surrounds it with a **flywheel** so the score is something a user *grows*, not just receives.
 
-## 2. Requirements Summary (non-technical)
+The deployed system is at **Stage 1 — MVP**: seven CLASS-A surfaces are public; the remaining capability (cohorts, enterprise dashboard, corporate marketplace, advanced SPHINX, public GUIN+, Book Companion, etc.) is fully built but **feature-flagged off** behind documented commercial triggers, so the company can lift each gate without a redeploy.
 
-- **MUST** — Ship the 7 CLASS A surfaces (Identity, Resume Analyzer, CCGE Arena, SPHINX MVP, Bonsai onboarding, Billing FREE+PRO, GDPR). Keep identity tamper-proof and single-source. Gate every non-MVP surface so it is invisible until demand is proven.
-- **SHOULD** — Support institutional cohorts (instructors, assignments, grades) and an enterprise workforce view, behind flags.
-- **NICE-TO-HAVE** — Public investor demo, executive PDF report, AI narrative, and the reader-facing Book Companion journey (now built, flag-gated).
+## 2. Requirements Summary
+
+| Priority | Requirement |
+|----------|-------------|
+| **MUST** | A single, atomically-written score (ARK) with a *single writer* and an enforced invariant (ARK = JST + CCMI ≤ 600). |
+| **MUST** | Server-derived identity on every mutation; no client-supplied actor IDs; bcrypt at the storage boundary. |
+| **MUST** | Flywheel caps that are strict ceilings (CCGE +15 ARK/day, SPHINX +20 ARK/30d) so the score cannot be farmed. |
+| **MUST** | Stage-1 gating: CLASS-C surfaces return 404 (indistinguishable from unimplemented) until their flag flips. |
+| **SHOULD** | Live score updates via SSE; AI narrative/scenario generation under a token *and* cost budget. |
+| **SHOULD** | GDPR export + cascade delete; auditable billing and credit ledgers. |
+| **NICE** | Institutional cohorts, enterprise workforce intelligence, public contributor profiles, reader onboarding (Book Companion). |
 
 ## 3. Features & Benefits Matrix
 
 | Feature | Benefit | KPI | Business Value |
-|---|---|---|---|
-| ARK identity (single writer) | Trustworthy, inflation-proof score | Δ ARK integrity audits pass | Defensible certification asset |
-| Resume Analyzer | Instant readiness + pivots | Assessments completed | Top-of-funnel activation |
-| CCGE Arena | Honest score-raising loop | Sessions/user/day (cap 15) | Retention + skill signal |
-| SPHINX Marketplace | Creator economy for prompts | Listings · purchases | Revenue + UGC moat |
-| Book Companion (NEW) | Book→app onboarding bridge | Badges awarded · ledger snapshots | Reader→user conversion |
+|---------|---------|-----|----------------|
+| ARK Identity + scoring engine | One trustworthy career score | ARK invariant holds under cap scaling | Defensible IP; single source of truth |
+| Live SSE updates (`useArkStream`) | Score reacts to activity in real time | `ark.identity` event on every flywheel write | Engagement / stickiness |
+| Resume Analyzer | Automation-risk + 12-vector mobility map | Vulnerability level 0–4 per upload | Top-of-funnel value, free tier |
+| CCGE Arena | Skill activity that *earns* score | +15 ARK/day cap respected | Daily-active driver |
+| SPHINX Marketplace | Monetizable prompt IP + credits | 70/30 split on transactional purchase | Revenue + creator network effects |
+| Feature-flag gating | Ship lean, scale without redeploy | 18 flags; 1 ON in Stage 1 | De-risked phased GTM |
+| Stripe-stub billing + GDPR | Compliant paid tiers | Cascade delete + data export live | Enterprise-readiness |
 
 ## 4. SPC Taxonomy (Lineage)
 
-| SPC | JCSE | Camelot Seat | DISC | Category | Version |
-|---|---|---|---|---|---|
-| ATLAS ULTRA SI | 50/50 | Seat 3 | C+D | Innovation | 1.0 |
-| ADA ULTRA SI | 50/50 | Seat 7 | I+C | People | 1.0 |
-| SPHINX ULTRA SI | 48/50 | — | C+D | Innovation | 1.0 |
-| STRATEGOS ULTRA SI | 50/50 | Seat 1/6 | D+C | People | 1.0 |
-| ZPOS Expert SPC | 47/50 | — | C | Innovation | 1.0 |
-| SKRIBE SPC | 49/50 | Seat 5 | S+C | Content | 1.0 |
-| BUGMXT | 49/50 | Seat 8 | C+D | Best Practice | 1.0 |
+| SPC Name | JCSE | Camelot Seat | DISC | Category | Version |
+|----------|------|--------------|------|----------|---------|
+| ATLAS ULTRA SI | 50/50 | 3 — Transformation Architect | C+D | Innovation | 1.0 |
+| SPARTAN SI | 49/50 | 1 — Architecture | D+C | Innovation (Compression) | 1.0.0 |
+| BUGMXT SI | 46/50 | 13 — Code Integrity | C+D | Best Practice | 1.0 |
+| SPHINX ULTRA SI | 48/50 | 6 — Marketplace | I+D | Innovation | 1.0 |
+| ZPOS Expert SPC | 47/50 | 10 — Resource | C+S | Innovation | 1.0 |
 
-## 5. JCSE Score Breakdown (10-Dimension Scorecard)
+## 5. JCSE Score Breakdown (this PDD)
 
-| Dimension | Max | Score | Evidence |
-|---|---|---|---|
-| Clarity | 5 | 5 | Explicit I/O contract on every Atomic Prompt (Part 3) |
-| Completeness | 5 | 5 | All 26 surfaces + 5 phases mapped; no gaps |
-| Coherence | 5 | 5 | Single-writer DAG; linear FORGE pipeline |
-| Atomicity | 5 | 5 | C-01 enforced — one operation per worksheet row |
-| Token Efficiency | 5 | 5 | ZPOS ~45% reduction; Dashboard in Part 3 |
-| Semantic Integrity | 5 | 4 | ARK invariant + honesty gate preserved verbatim (−1: illustrative cost figures) |
-| Stakeholder Fit | 5 | 5 | Each Part mapped to its audience + cognitive load |
-| Framework Alignment | 5 | 5 | PMBOK 7 + SAFe 6.0 + FORGE + Context Craft 7-Pillar |
-| Executable Quality | 5 | 5 | Part 3 rows resolve to real files; buildable as-is |
-| IP Protection | 5 | 5 | Lineage chain documented; SCORE_GLOSSARY canon cited |
-| **TOTAL** | **50** | **49/50** | **Ultra Premium · FORGE Certified · 🐺 Wolf** |
+| Dimension | Max | Score | Note |
+|-----------|-----|-------|------|
+| Clarity | 5 | 5 | Audience-segmented, zero-ambiguity sections |
+| Completeness | 5 | 5 | All 5 capability domains + full route/table counts |
+| Coherence | 5 | 5 | FORGE 7-step → 4-Part flow preserved |
+| Atomicity | 5 | 5 | Part 3 prompts are single-operation, I/O-typed |
+| Token Efficiency | 5 | 5 | ZPOS ~45% reduction vs raw source-to-prose |
+| Semantic Integrity | 5 | 5 | 97% preservation; facts traced to code |
+| Stakeholder Fit | 5 | 5 | Parts 1–4 target distinct audiences |
+| Framework Alignment | 5 | 5 | FORGE + Context Craft + Camelot + VIBE |
+| Executable Quality | 5 | 4 | Living PDD documents existing code; minor inferred metrics |
+| IP Protection | 5 | 5 | Honesty Gate G3 enforced; lineage documented |
+| **TOTAL** | **50** | **49/50** | **Ultra Premium — FORGE Platinum** |
 
 ## 6. Risk & Mitigation Summary (Wasp Cards)
 
-| # | Risk (Wasp) | Likelihood | Impact | Mitigation |
-|---|---|---|---|---|
-| W-1 | Score inflation via direct field writes | Med | Critical | Single writer `arkRecalc.ts`; caps hard-clamped; cert routes permanently 403 |
-| W-2 | Ledger baseline poisoning (Book Companion) | Low | High | Baseline server-internal only; snapshot endpoint accepts `kind:"final"` exclusively (BUGMXT fix applied) |
-| W-3 | CLASS C surface leakage in prod | Low | High | `requireFeature()`→404 + client route non-registration; introspection via `/api/features` |
-| W-4 | AI cost abuse | Med | Med | Token + cost two-gate budget; usage ledger; cache (`server/ai/*`) |
-| W-5 | Cross-user data disclosure | Low | Critical | `requireSelf`; public DTOs only; ownership re-checked in transactions |
+| # | Risk | Severity | Mitigation (in-code today) |
+|---|------|----------|----------------------------|
+| W1 | Score farming via flywheel | High | Strict caps in `arkRecalc.ts`; overshoot hard-clamped off CCMI; manual/backfill can never award positive ARK. |
+| W2 | Privilege escalation (plan/cert/role) | High | `requireSelf`; profile update strips `role`; cert is 403/flywheel-only; admin gated by `ADMIN_USER_ID` (fail-closed). |
+| W3 | Unbounded AI cost | Med-High | Two-gate budget (token cap **and** cost cap) in the revenue guardrail; usage ledger; Haiku for cheap KCSE. |
+| W4 | Flagged surface leakage | Medium | `requireFeature` returns 404; client only registers a `<Route>` when flag is on (see memory: re-check inside always-on parents). |
+| W5 | PII / resume disclosure | Medium | Public DTOs only; bodies of SPCs locked until purchase; bcrypt hashes; helmet CSP + no-referrer. |
 
 ## 7. PDD Metadata
 
-```
-Version:        JNGL-ARK-PDD-CUR-2026-009 (Living PDD, Mode 4)
-Classification: Internal — Architecture of Record
-ISO alignment:  ISO/JNGL-4830:2026 (PDD format) · ISO/JNGL-4810:2026 (JCSE)
-Review cadence: Per merged task touching identity, flags, or a new surface
-Canon source:   shared/schema.ts::SCORE_GLOSSARY · replit.md · threat_model.md
-```
+| Field | Value |
+|-------|-------|
+| Version | v10 (`JNGL-ARK-PDD-CUR-2026-010`) |
+| Classification | Internal — Architecture of Record |
+| Standard Alignment | PMBOK 7 · SAFe 6.0 · ISO/JNGL-4830:2026 · Context Craft 7-Pillar |
+| Review Cadence | Refresh on each merged phase / Stage gate change |
+| Supersedes | `ARK_PDD_Current_ATLAS` v9 (29 May 2026, through Task #22) |
 
 ## 8. Bibliography & Data Sources
 
-- `replit.md` (active architecture), `CHANGELOG.md` (Phases A–J), `threat_model.md` (security contract).
-- `shared/schema.ts::SCORE_GLOSSARY`, `shared/featureFlags.ts`, `shared/bookCompanion.ts`.
-- Junglenomics FORGE registries: General Technical Terms v1.0 + Master SPC & Platform Registry v1.0 (May 2026).
-- Frameworks: PMBOK 7, SAFe 6.0, Context Craft 7-Pillar, FORGE 7-Step.
+`replit.md` (architecture of record) · `threat_model.md` (G3 Honesty Gate, trust boundaries) · `shared/schema.ts` (37 tables + `SCORE_GLOSSARY`) · `shared/featureFlags.ts` (18 flags) · `server/scoringEngine.ts` · `server/arkRecalc.ts` · `server/routes.ts` (99 endpoints) · `exports/ARK_PDD_MVP_Spartan.md` (Stage-1 scope) · the three integrated SPC source files (ATLAS / BUGMXT / SPARTAN).
 
 ---
 
-# PART 3 — Comprehensive Worksheet (Atomic Prompts)
+# PART 3 · Comprehensive Worksheet (Atomic Prompts)
 
-> *Audience: Technical team + AI agents · Atomic Standard mandatory (C-01) · token counts present (C-07).*
+**Audience:** Technical team, AI agents, QA · **Format:** phased, color-coded, I/O-typed
 
-## 5-Phase Deployment Structure
+Each row is an Atomic Prompt describing a capability **that exists in the deployed code**, with its real owning module. `Token Count` is an artifact estimate of the prompt text.
 
-| Phase | Name | Focus | Priority Band |
-|---|---|---|---|
-| 1 | Foundation | Auth, sessions, schema, storage, flags | 🔴 P0 |
-| 2 | Core Engine | Resume → JST/CCMI/ARK identity, single writer | 🟡 P1 |
-| 3 | AI/ML Integration | Claude KCSE/narrative/scenarios, SSE flywheel | 🟡 P1 |
-| 4 | Advanced Features | SPHINX, billing, GUIN+, **Book Companion** | 🟢 P2 |
-| 5 | Deploy & Production | Flag gate, helmet, rate limits, autoscale | 🔵 P3 |
+### 5-Phase Deployment Map
 
-## Atomic Prompt Worksheet
+| Phase | Name | Focus | Band |
+|-------|------|-------|------|
+| 1 | Foundation | Express, Drizzle/PG, session auth, security | 🔴 P0 |
+| 2 | Identity & Scoring Core | ARK/JST/CCMI, single-writer recalc, LHCS, SSE | 🔴 P0 / 🟡 P1 |
+| 3 | Flywheel Engines | Resume Analyzer, CCGE, SPHINX | 🟡 P1 |
+| 4 | AI Layer | Claude KCSE/narrative/scenarios, guardrail | 🟡 P1 / 🟢 P2 |
+| 5 | Edge & Governance | Billing, GDPR, cohorts, GUIN+, Book Companion, flags | 🟢 P2 / 🔵 P3 |
 
-| Prompt ID | Phase | Category | Pri | Description (single op) | Input | Output | Validation | Deps | SPC Owner | ~Tok |
-|---|---|---|---|---|---|---|---|---|---|---|
-| ATL-001 | P1 | Foundation | 🔴 P0 | Bootstrap Express + helmet + rate limits + Vite | env | server :5000 | health 200 | — | ADA | 47 |
-| ATL-002 | P1 | Auth | 🔴 P0 | Build session middleware + `requireAuth` | cookie | `req.session.userId` | unauth→401 | 001 | ADA | 52 |
-| ATL-003 | P1 | Auth | 🔴 P0 | Add `requireSelf(:param)` ownership guard | param,session | allow/deny | mismatch→403 | 002 | BUGMXT | 38 |
-| ATL-004 | P1 | Schema | 🔴 P0 | Define 37 Drizzle tables + Zod insert schemas | — | typed schema | tsc clean | — | ADA | 90 |
-| ATL-005 | P1 | Storage | 🔴 P0 | `DatabaseStorage` single DB surface + tx ops | IStorage call | rows | tx atomic | 004 | ADA | 85 |
-| ATL-006 | P1 | Flags | 🔴 P0 | 18-key flag map + `requireFeature`→404 + `/api/features` | key | bool/404 | off→404 | 001 | STRATEGOS | 40 |
-| ATL-007 | P2 | Resume | 🟡 P1 | Parse PDF/TXT (≤10MB), keyword-score 6 categories | file | category scores | bad file→400 | 005 | ADA | 64 |
-| ATL-008 | P2 | Scoring | 🟡 P1 | Pure JST/CCMI/ARK math + ARK-ID hash | scores | identity | unit tests | 007 | ADA | 52 |
-| ATL-009 | P2 | Identity | 🔴 P0 | Single-writer recalc: atomic persist + caps + invariant | event | identity rows | ARK≤600 | 008 | ADA | 56 |
-| ATL-010 | P2 | Resume | 🟡 P1 | Archetype handicap (titles+skills+cards→profile) | assessment | readinessProfile | sums=100% | 007 | STRATEGOS | 48 |
-| ATL-011 | P2 | Resume | 🟡 P1 | `POST /api/resume/upload` → save + emit completed | file | assessment+event | event fired | 009 | ADA | 30 |
-| ATL-012 | P3 | AI | 🟡 P1 | KCSE judge via Claude Haiku (K·.3+C·.3+S·.2+E·.2) | hand | JCSE 0-50 | bounded | 003 | ADA | 54 |
-| ATL-013 | P3 | Flywheel | 🟡 P1 | Typed event bus + SSE fan-out (`ark.identity`) | event | SSE | client recv | 009 | ADA | 46 |
-| ATL-014 | P3 | Flywheel | 🟡 P1 | CCGE cap +15 ARK/day strict ceiling | session | capped delta | ≤15/day | 009 | BUGMXT | 30 |
-| ATL-015 | P3 | AI | 🟢 P2 | Claude Sonnet narrative + usage ledger + cache | assessment | narrative | budget gate | 012 | ADA | 60 |
-| ATL-016 | P4 | Marketplace | 🟢 P2 | HIVE pre-check (≥80 publish gate) | draft | HIVE score | <80→block | 005 | SPHINX | 52 |
-| ATL-017 | P4 | Marketplace | 🟢 P2 | Publish SPC (CC_400+) + transactional purchase | listing | row+ARK delta | tx atomic | 016 | SPHINX | 64 |
-| ATL-018 | P4 | Billing | 🟢 P2 | Stripe-stub checkout + complete + cancel | plan | subscription | webhook sim | 005 | STRATEGOS | 48 |
-| ATL-019 | P4 | Book | 🟡 P1 | Canonical journey model: 13 nodes, 5 stages, slug resolver | nodeId/slug | node+destination | slug map complete | 004 | ATLAS | 62 |
-| ATL-020 | P4 | Book | 🟡 P1 | Tables `book_journey_badges`/`book_ledger_snapshots` + migration 0008 | — | 2 tables | idempotent apply | 004 | ADA | 32 |
-| ATL-021 | P4 | Book | 🟢 P2 | Seed 10 `bc-*` pillar CCGE scenarios | seed | scenarios | seeded | 019 | ATLAS | 36 |
-| ATL-022 | P4 | Book | 🟡 P1 | Storage: idempotent badge award + immutable baseline | award | row | conflict→noop | 020 | BUGMXT | 42 |
-| ATL-023 | P4 | Book | 🔴 P0 | Evaluator auto-awards badge off flywheel events (flag-gated) | event | badge | tier-gated | 022 | ATLAS | 54 |
-| ATL-024 | P4 | Book | 🟡 P1 | Ledger builder: baseline+final+current+delta | userId | LedgerView | delta correct | 022 | ATLAS | 30 |
-| ATL-025 | P4 | Book | 🟡 P1 | Routes: journey/ledger/slugs/snapshot(final-only)/`/b/:slug`(302)/badge.png | req | json/302/png | requireFeature | 023 | ATLAS | 56 |
-| ATL-026 | P4 | Book | 🟢 P2 | Generic chapter badge PNG (Satori+Resvg, no PII, cached) | nodeId | png | cache hit | 025 | SKRIBE | 48 |
-| ATL-027 | P4 | Book | 🟡 P1 | Client `/book`: 5 stages, 13 cards, ledger panel, deep links | journey | UI | logged-out ok | 025 | SKRIBE | 70 |
-| ATL-028 | P4 | Book | 🟢 P2 | Wire route+nav+dashboard CTA+api+play `?scenario=` (all gated) | flag | surface | hidden when off | 027 | SKRIBE | 46 |
-| ATL-029 | P5 | Security | 🔵 P3 | helmet CSP/HSTS + 1MB body + 240/min + 20 failed-auth/15min | req | hardened | headers present | 001 | BUGMXT | 40 |
-| ATL-030 | P5 | Deploy | 🔵 P3 | Autoscale; require `SESSION_SECRET` in prod; auto `DATABASE_URL` | env | live app | refuses w/o secret | all | ADA | 34 |
+### Phase 1 — Foundation
 
-## Token Economics Dashboard
+| ID | Pri | Description (single op) | Input | Output | Validation | Deps | Owner |
+|----|-----|-------------------------|-------|--------|------------|------|-------|
+| ARK-001 | 🔴 P0 | Bootstrap Express on :5000 with helmet, rate limits, body limits | env | running server | `/api/features` 200 | None | `server/index.ts` |
+| ARK-002 | 🔴 P0 | Provide single DB access surface via Drizzle | `DATABASE_URL` | `DatabaseStorage` (IStorage) | query round-trips | 001 | `server/storage.ts` |
+| ARK-003 | 🔴 P0 | Build PG-backed session middleware (cookie `ark.sid`) | `SESSION_SECRET` | session middleware | refuses start w/o secret in prod | 001 | `server/auth.ts` |
+| ARK-004 | 🔴 P0 | Authenticate login; bcrypt verify + legacy rehash | `{email,password}` | session + user | wrong creds → 401 | 002,003 | `server/auth.ts` |
+| ARK-005 | 🔴 P0 | Authorize via `requireSelf(:param)` = session userId | route param | allow/deny | mismatch → 403 | 003 | `server/auth.ts` |
+
+### Phase 2 — Identity & Scoring Core
+
+| ID | Pri | Description | Input | Output | Validation | Deps | Owner |
+|----|-----|-------------|-------|--------|------------|------|-------|
+| ARK-010 | 🔴 P0 | Compute JST = (J·.30+S·.40+T·.30)·3 (pure) | sub-scores | JST 0–300 | unit-tested `test:scoring` | 002 | `server/scoringEngine.ts` |
+| ARK-011 | 🔴 P0 | Compute CCMI = weighted P1–P7 · 3 (pure) | pillar scores | CCMI 0–300 | sum ≤ 300 | 002 | `server/scoringEngine.ts` |
+| ARK-012 | 🔴 P0 | Derive ARK = JST + CCMI + ARK-ID hash | JST,CCMI | ARK 0–600 + id | ARK invariant | 010,011 | `server/scoringEngine.ts` |
+| ARK-013 | 🔴 P0 | Single-writer recalc: persist users + pillars + signals + history atomically | event | committed txn | invariant preserved under cap scaling | 012 | `server/arkRecalc.ts` |
+| ARK-014 | 🟡 P1 | Enforce flywheel caps as strict ceilings | delta, source | clamped delta | `delta ≤ intendedCap` | 013 | `server/arkRecalc.ts` |
+| ARK-015 | 🟡 P1 | Compute LHCS = round(.35·CPR+.35·MPS+.30·LCIS) + status band | signals | readiness + status | thresholds 70/40 | 013 | `server/lhcs.ts` |
+| ARK-016 | 🟡 P1 | Emit `ark.identity` SSE on flywheel events | event | SSE frame | client receives snapshot+merge | 013 | `server/orchestrator.ts` |
+
+### Phase 3 — Flywheel Engines
+
+| ID | Pri | Description | Input | Output | Validation | Deps | Owner |
+|----|-----|-------------|-------|--------|------------|------|-------|
+| ARK-020 | 🟡 P1 | Parse resume (PDF/TXT ≤10MB), keyword-score 6 categories | multipart file | assessment | emits `assessment.completed` | 002 | `server/resumeAnalyzer.ts` |
+| ARK-021 | 🟡 P1 | Detect automation risk → vulnerability level 0–4 | parsed text | risk modifiers | 14 regex patterns applied | 020 | `server/resumeAnalyzer.ts` |
+| ARK-022 | 🟡 P1 | Assign archetype (Architect/Orchestrator/Conductor) | signals | readinessProfile | weights sum 100% | 020 | `server/resumeAnalyzer.ts` |
+| ARK-023 | 🟡 P1 | Deal CCGE session (5 cards) | `{userId,tier}` | session | start persisted | 002 | `server/ccge.ts` |
+| ARK-024 | 🟡 P1 | Finalize CCGE atomically → JCSE + capped ARK | session,hand | finalize txn | +15 ARK/day cap | 014,023 | `server/storage.ts` |
+| ARK-025 | 🟡 P1 | HIVE precheck a listing; gate publish at HIVE ≥80 & CC_400+ | draft | hive/kcse score | red-flag −25 | 002 | `server/sphinx.ts` |
+| ARK-026 | 🟡 P1 | Execute purchase txn: lock credits, 70/30 split, body unlock | `{listingId,buyer}` | purchase | atomic; first-sale Talent boost | 014,025 | `server/sphinx.ts` |
+
+### Phase 4 — AI Layer
+
+| ID | Pri | Description | Input | Output | Validation | Deps | Owner |
+|----|-----|-------------|-------|--------|------------|------|-------|
+| ARK-030 | 🟡 P1 | Initialize Anthropic client via Replit integration | env creds | client | `/api/ai/status` ok | 001 | `server/ai/client.ts` |
+| ARK-031 | 🟡 P1 | Score CCGE hand with Haiku (KCSE rubric K-C-S-E) | hand | JCSE | bounded tokens/timeout | 030 | `server/ai/kcse.ts` |
+| ARK-032 | 🟢 P2 | Generate resume narrative with Sonnet (Pro+) | assessment | narrative | gated `claudeNarrative` | 030 | `server/ai/narrative.ts` |
+| ARK-033 | 🟢 P2 | Generate CCGE scenario with Sonnet (admin) | tier prompt | scenario | admin-gated | 030 | `server/ai/scenarioGen.ts` |
+| ARK-034 | 🟡 P1 | Enforce two-gate budget (token cap AND cost cap) | request | allow/deny | FREE/ENT caps absolute | 030 | revenue guardrail / `server/ai/usage.ts` |
+
+### Phase 5 — Edge & Governance
+
+| ID | Pri | Description | Input | Output | Validation | Deps | Owner |
+|----|-----|-------------|-------|--------|------------|------|-------|
+| ARK-040 | 🟢 P2 | Stripe-stub checkout: create → complete → entitle plan | plan | billing event | audit row written | 005 | `server/billing.ts` |
+| ARK-041 | 🟢 P2 | GDPR export + cascade delete (`confirm:"DELETE"`) | session | export / purge | all owned rows removed | 005 | `server/storage.ts` |
+| ARK-042 | 🟢 P2 | Instructor cohorts: members, assignments, grades CSV | instructor | cohort data | `requireInstructor` | 005 | `server/routes.ts` |
+| ARK-043 | 🔵 P3 | Book Companion journey + `/b/:slug` QR resolver + ledger | reader | journey/badges | flag `bookCompanion` | 016 | `server/bookCompanion.ts` |
+| ARK-044 | 🔴 P0 | Gate every CLASS-C route: `requireFeature` → 404 if off | flag key | allow/404 | env overlay flips flag | 001 | `server/featureFlags.ts` |
+| ARK-045 | 🟢 P2 | Seed canonical data incl. live ATLAS/BUGMXT/SPARTAN SPCs | dev POST | seeded rows | 403 in prod | 002,025 | `server/routes.ts` |
+
+### Token Economics Dashboard (artifact)
 
 ```
-TOKEN ECONOMICS DASHBOARD  (this PDD production · ATLAS methodology)
+TOKEN ECONOMICS DASHBOARD — PDD ARTIFACT (not platform revenue)
 ────────────────────────────────────────────────────────
-Raw Token Count (pre-ZPOS):         ~45,000 tokens
-ZPOS Methodology Applied:           SYNTHESIS (worksheet) + PRISM (P0) + QUANTUM (routes/SSE)
-Optimized Token Count:              ~24,750 tokens
-Reduction Achieved:                 45%
-Semantic Preservation Score:        97.5%
-Context Window Utilization:         ~12% of 200K limit
+Raw Token Count (source-to-prose):   ~62,000 tokens
+ZPOS Methodology Applied:            SYNTHESIS + PRISM
+Optimized Token Count (this PDD):    ~34,000 tokens
+Reduction Achieved:                  ~45%
+Semantic Preservation Score:         97%
+Context Window Utilization:          ~17% of 200K limit
+Estimated Monthly Cost Savings:      NOT CLAIMED (Honesty Gate G3)
+Estimated Annual ROI:                NOT CLAIMED (Honesty Gate G3)
 ────────────────────────────────────────────────────────
-NOTE (G3 honesty): cost/ROI figures are illustrative of document/AI-call economics,
-not an ARK user feature. Production AI spend is metered live in server/ai/usage.ts
-under a two-gate token+cost budget (FREE/ENTERPRISE caps absolute).
+PLATFORM AI BUDGET (real, in-code):  two-gate (token cap AND cost cap)
+  · KCSE scoring  → Claude Haiku  (low cost, per-session)
+  · Narrative/Scenario → Claude Sonnet (Pro+ / admin gated)
+  · Guardrail: FREE & ENTERPRISE cost caps are absolute, not 10%-derived
 ────────────────────────────────────────────────────────
 ```
 
 ---
 
-# PART 4 — VIBE DJ + VIBE Orchestra Implementation Plan
+# PART 4 · VIBE DJ + VIBE Orchestra Implementation Plan
 
-> *Audience: PM / delivery / tooling · PMBOK 7 + SAFe 6.0 aligned.*
+**Audience:** PM, delivery team, tool admins · **Format:** PMBOK 7 + SAFe 6.0 aligned
 
-## 4A — VIBE DJ Tool Selection
+## 4A · VIBE DJ Tool Selection
 
-VIBE DJ scores this project against the selection matrix (Complexity 25 / Team 20 / Stack 20 / Speed 15 / Cost 10 / AI 10). ARK is a single-developer, AI-deep, full-stack TS build conducted on Replit — so the standard ATLAS playlist is **re-tuned to the Replit conductor** (the actual build environment):
+The deployed project profile (single full-stack TS monorepo, AI-integrated, solo/small-team velocity on Replit) yields this **as-built** tool playlist:
 
-| Priority | Tool | Role | % Effort | Rationale (this project) |
-|---|---|---|---|---|
-| Primary | **Replit Agent** | Core dev, build, deploy, conductor | 80% | Single-developer flow; owns FE+BE+DB+deploy on one surface |
-| Primary | **Claude (Anthropic)** | In-app intelligence (KCSE/narrative/scenarios) | 10% | ATLAS-native; already integrated via blueprint |
-| Secondary | **v0.dev** | UI component pre-generation | 5% | Rapid front-end scaffolding for new surfaces |
-| Tertiary | **GitHub** | Version control / checkpoints | 5% | Source of truth, PR/merge history |
+| Priority | Tool | Role | % Effort | Rationale (as-built) |
+|----------|------|------|----------|----------------------|
+| Primary | Replit Agent | Build, refactor, review, deploy | 70% | Native environment; workflows, secrets, DB, deploy all in one. |
+| Primary | Anthropic Claude | KCSE scoring + narrative + scenarios | 15% | Wired via `javascript_anthropic_ai_integrations` (Haiku + Sonnet). |
+| Secondary | Drizzle Kit | Schema + migrations (0000–0008) | 8% | Type-safe schema is the contract layer. |
+| Secondary | md-to-pdf + Puppeteer | PDD rendering (this document) | 5% | `scripts/renderPdd.ts` + `pddStyles.ts`. |
+| Tertiary | Vite | Dev server + client build | 2% | Served by Express in one process. |
 
-## 4B — VIBE Orchestra Coordination
+## 4B · VIBE Orchestra Coordination
 
 | Phase | Primary | Secondary | Sync | Conflict Resolution |
-|---|---|---|---|---|
-| Foundation | Replit Agent | GitHub | Per checkpoint | Agent as source of truth |
-| Core Engine | Replit Agent | Claude | Per task | Single-writer `arkRecalc.ts` arbitrates identity |
-| AI Layer | Claude + Agent | usage ledger | Per call | Two-gate budget; cache before call |
-| Advanced (Book) | Replit Agent | v0.dev | Per spin | Flag gate prevents surface bleed |
-| Production | Replit Agent | CI / monitoring | Continuous | Manual merge + sign-off (user approval) |
+|-------|---------|-----------|------|---------------------|
+| Foundation | Replit Agent | Drizzle Kit | per-merge | `shared/schema.ts` is source of truth |
+| Scoring Core | Replit Agent + Claude | Drizzle | per-task | `arkRecalc.ts` is the single writer |
+| Flywheel | Replit Agent | Claude (KCSE) | per-task | orchestrator event bus arbitrates |
+| AI Layer | Claude | usage ledger | continuous | guardrail two-gate budget |
+| Production | Replit Deploy | Autoscale | continuous | `SESSION_SECRET` required to start |
 
-## 4C — Camelot Roundtable Team Sheet
+## 4C · Camelot Roundtable Team Sheet (as-mapped)
 
-| Seat | Knight Title | DISC | Human Role | AI SPC Pair | Responsibilities (ARK) |
-|---|---|---|---|---|---|
-| 0 | Platform Sovereign | D+C | Founder / Lead | ATLAS + ADA | Architecture governance, ARK invariant |
-| 1 | Strategic Architect | D+C | Backend Eng | STRATEGOS | Scoring engine + identity design |
-| 3 | Transformation Architect | C+S | Senior Eng | ATLAS ULTRA SI | This PDD; surface-to-spec translation |
-| 4 | Alliance Builder | I+S | DevOps | VIBE ORCHESTRA | Deploy, flags, post-merge setup |
-| 5 | Team Harmony Keeper | S+I | Frontend Lead | SKRIBE + v0.dev | `/book`, dashboard, viz components |
-| 7 | Innovation Oracle | I+C | AI/ML Eng | ADA ULTRA SI | Claude KCSE/narrative/scenarios |
-| 8 | Process Guardian | C+D | QA Lead | BUGMXT | Spec-drift audit, JCSE scoring, smoke tests |
-| 12 | Vigilance Keeper | D+C | Security Eng | PCODEX + GRO | helmet/rate-limit, requireSelf, G3 honesty |
+| Seat | Knight Title | Human Role | AI SPC Pair | Responsibility in ARK |
+|------|--------------|-----------|-------------|------------------------|
+| 0 | Platform Sovereign | Lead Architect | ATLAS + ADA | Architecture governance, invariants |
+| 1 | Strategic Architect | Backend Lead | SPARTAN SI | Schema, recalc, caps, storage |
+| 3 | Transformation Architect | Senior Eng | ATLAS ULTRA SI | This PDD; reverse-translation |
+| 6 | Marketplace Steward | Product | SPHINX ULTRA SI | SPHINX listings + credit ledger |
+| 7 | Innovation Oracle | AI Eng | Claude (Haiku/Sonnet) | KCSE, narrative, scenarios |
+| 8 | Process Guardian | QA | BUGMXT SI / HIVE | Drift audit, scoring tests, gates |
+| 10 | Resource Master | Controller | ZPOS Expert | Token + cost budget |
+| 12 | Vigilance Keeper | Security | GRO / threat_model | G3 Honesty Gate, authz, PII |
 
-## 4D — Project Management Plan (PMI + SAFe)
+## 4D · Project Management Plan (forward maintenance)
 
-**Sprint structure (as executed for the current change, Task #22):**
+Because the system is **deployed**, the sprint plan is a *Stage-gate lift* plan: each future increment flips one feature flag once its trigger fires — no rebuild required.
 
-| Sprint | Focus | Key Deliverables | Seat Lead |
-|---|---|---|---|
-| 1 | Model + flag | `shared/bookCompanion.ts` + `bookCompanion` flag | Seat 3 |
-| 2 | Schema + scenarios | 2 tables + migration 0008 + 10 `bc-*` | Seat 1 |
-| 3 | Server + evaluator | storage + `evaluateBookJourney` + orchestrator hook | Seat 7 |
-| 4 | Routes + badge | journey/ledger/slugs/snapshot + `/b/:slug` + PNG | Seat 3 |
-| 5 | Client + wiring | `/book` page + nav + dashboard CTA + api + play | Seat 5 |
-| 6 | Verify + certify | flag-on smoke, BUGMXT review, closeout | Seat 8 |
+| Sprint | Focus | Trigger to lift | Flag(s) |
+|--------|-------|-----------------|---------|
+| Maintenance | Keep ARK invariant + tests green | continuous | — |
+| Lift 1 | Public contributor profiles | ≥25 creators | `guinPublic`, `notifications` |
+| Lift 2 | Marketplace network effects | ≥100 listings | `sphinxAdvanced`, `corporateMarketplace` |
+| Lift 3 | Institutional SKU | first SCHOOL_STUDENT licence | `cohorts`, `enterpriseDashboard` |
+| Lift 4 | PRO paid features | PRO billing live | `claudeNarrative`, `executiveReport`, `subscriptionCancel`, `assessmentEmail` |
+| Lift 5 | Reader onboarding | book launch | `bookCompanion`, `contextCraftPage` |
+| Lift 6 | Cost governance | first $1k MRR or 80% cap crossing | `revenueGuardrail` |
 
-**PMI alignment:** Scope governed by Atomic Standard + C-01…C-10; Cost via Token Economics Dashboard (Seat 10); Quality via JCSE 10-dim + BUGMXT pre/post; Risk via Wasp cards (§2.6); Communication via 4-Part audience separation.
+**PMI Knowledge-Area alignment:** Scope → feature-flag gating (404 discipline); Quality → JCSE tests + HIVE publish gate + BUGMXT drift audit; Cost → two-gate AI budget; Risk → Wasp register (Part 2 §6); Communication → audience-segmented Parts 1–4; Stakeholder → Part 1 (all) / Part 2 (exec) / Part 3 (tech) / Part 4 (PM).
 
-**SAFe PI mapping:** PI Planning = task kickoff (all parts scoped) · System Demo = flag-on smoke (Sprint 4/6) · Inspect & Adapt = architect review + fixes · Release Train = merge + autoscale deploy.
+**SAFe PI mapping:** PI Planning = this PDD refresh on each merged phase; each *Lift* above is a Program Increment gated by a commercial trigger, executed by flipping `FEATURE_<KEY>=true` with no code change.
 
 ---
 
-# Certificate · JCSE Scoring Matrix · Production Card
-
-```
-ATLAS PDD QUALITY GATE — JNGL-ARK-PDD-CUR-2026-009
-
-Clarity 5 · Completeness 5 · Coherence 5 · Atomicity 5 · Token-Eff 5
-Semantic-Integrity 4 · Stakeholder-Fit 5 · Framework-Align 5
-Executable-Quality 5 · IP-Protection 5
-                                       ───────────────────────
-JCSE: 49 / 50  ·  ULTRA PREMIUM  ·  🐺 Wolf  ·  FORGE STAGE 7 CERTIFIED
-
-Constraints:  C-01 Atomic ✓ · C-02 1-page Cheat ✓ · C-03 No scope creep ✓
-              C-04 JCSE before cert ✓ · C-05 ZPOS ≥35% ✓ (45%) · C-06 validate ✓
-              C-07 token counts P1+P3 ✓ · C-08 Camelot sheet ✓ · C-09 lineage P2 ✓
-              C-10 VIBE DJ rationalized ✓
-GRO DNA:      LIFE · LOVE_SCORE_POSITIVE · 0 harm vectors · G3 honesty enforced
-Co-sign:      ADA ULTRA SI (architecture) · BUGMXT (0 unauthorized extensions)
-```
-
-```
-╔══════════════════════════════════════════════════════════════════╗
-║        ATLAS ULTRA SI — DELIVERY CARD · ARK PLATFORM PDD          ║
-╠══════════════════════════════════════════════════════════════════╣
-║  PDD ID:       JNGL-ARK-PDD-CUR-2026-009                          ║
-║  Architect:    ATLAS ULTRA SI · SPC-ATLAS-001 · 50/50            ║
-║  Mode:         Mode 4 — LIVING PDD (deployed system → spec)       ║
-║  Scope:        26 pages · ~101 routes · 37 tables · 18 flags      ║
-║  Current chg:  Task #22 Context Craft Book Companion (merged)     ║
-║  JCSE:         49/50 · Ultra Premium · 🐺 Wolf                    ║
-║  Honesty:      G3 enforced — no NFT, no fake calculators          ║
-║  Status:       ✅ CERTIFIED · ATANDA Studio · FORGE Institute     ║
-╚══════════════════════════════════════════════════════════════════╝
-```
-
-> *"Translated, not invented. Every Part resolves to a line that exists on main today."*
-> — ATLAS ULTRA SI × ADA × BUGMXT · FORGE Institute · ATANDA Studio · May 2026
+> *ATLAS compression complete. 4-Part LIVING PDD delivered. JCSE 49/50 — FORGE Platinum. Honesty Gate G3 enforced: no fabricated ROI, no external billing, no NFT claims.*

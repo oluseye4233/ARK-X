@@ -83,10 +83,10 @@ title = "Context Craft — Chapter-by-Chapter Checkpoint Set"
 id = "NFUJI1aw2PpUNovBeqGuC"
 uri = "file://exports/ARK_PDD_Current_ATLAS.md"
 type = "text"
-title = "ARK Platform — ATLAS PromptWare Design Document (4-Part, Current)"
+title = "ATLAS PDD — source markdown"
 
 [[outputs]]
 id = "_rzaPmVvZ27ukQaMuBG7w"
 uri = "file://exports/ARK_PDD_Current_ATLAS.pdf"
 type = "pdf"
-title = "ARK Platform — ATLAS PromptWare Design Document (PDF)"
+title = "ARK Platform — ATLAS Living PDD (v10, current status)"
