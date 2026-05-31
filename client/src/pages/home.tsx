@@ -9,6 +9,10 @@ import masterclassVideo from "@assets/ark_onecraft_masterclass.mp4";
 import masterclassPoster from "@assets/ark_onecraft_masterclass_poster.jpg";
 import guideCover from "@assets/ark_onecraft_subscription_guide_cover.jpg";
 import guidePdf from "@assets/ARK_Onecraft_Subscription_Guide_1780266946261.pdf";
+import questBadgesVideo from "@assets/the_quest_badges.mp4";
+import questBadgesPoster from "@assets/the_quest_badges_poster.jpg";
+import blueprintCover from "@assets/atanda_ai_engineering_blueprint_cover.jpg";
+import blueprintPdf from "@assets/ATANDA_AI_Engineering_Blueprint_1780267277924.pdf";
 
 function ScarcityBadge() {
   const { data } = useQuery<{ claimed: number; limit: number; remaining: number }>({
@@ -244,6 +248,53 @@ export default function Home() {
               className="inline-flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-mono uppercase tracking-wider rounded-none neon-border h-12 px-6 transition-all hover:scale-[1.02] text-sm font-bold"
             >
               <Download className="h-4 w-4" /> Read the Guide
+            </a>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-stretch">
+          {/* The Quest Badges video — 3/5 width on desktop. */}
+          <div className="lg:col-span-3 glass-card rounded-lg overflow-hidden neon-border" data-testid="card-questbadges-video">
+            <video
+              controls
+              preload="metadata"
+              poster={questBadgesPoster}
+              className="w-full h-full aspect-video bg-black"
+              data-testid="video-questbadges"
+            >
+              <source src={questBadgesVideo} type="video/mp4" />
+              Your browser does not support the video tag.
+            </video>
+          </div>
+
+          {/* AI Engineering Blueprint whitepaper — 2/5 width on desktop. */}
+          <div className="lg:col-span-2 glass-card rounded-lg p-6 flex flex-col" data-testid="card-blueprint">
+            <div className="relative rounded-md overflow-hidden border border-white/10 mb-4">
+              <img
+                src={blueprintCover}
+                alt="Beyond the Exam — The AI Skills Blueprint cover"
+                className="w-full object-cover"
+                data-testid="img-blueprint-cover"
+              />
+              <span className="absolute top-3 left-3 inline-flex items-center gap-1.5 rounded-full bg-background/80 border border-secondary/40 px-3 py-1 text-[10px] font-mono uppercase tracking-widest text-secondary backdrop-blur-sm">
+                <FileText className="h-3 w-3" /> Whitepaper · 10 pages
+              </span>
+            </div>
+            <h3 className="font-display font-bold text-lg text-white leading-snug">
+              Beyond the Exam: The AI Skills Blueprint
+            </h3>
+            <p className="text-sm text-muted-foreground font-sans mt-1 mb-4 flex-1">
+              A comparative analysis of ATANDA Quest Badges versus traditional IT certifications — why demonstrated AI engineering skill outranks the exam.
+            </p>
+            <a
+              href={blueprintPdf}
+              target="_blank"
+              rel="noopener noreferrer"
+              download
+              data-testid="link-download-blueprint"
+              className="inline-flex items-center justify-center gap-2 bg-secondary hover:bg-secondary/90 text-secondary-foreground font-mono uppercase tracking-wider rounded-none neon-border h-12 px-6 transition-all hover:scale-[1.02] text-sm font-bold"
+            >
+              <Download className="h-4 w-4" /> Read the Blueprint
             </a>
           </div>
         </div>
