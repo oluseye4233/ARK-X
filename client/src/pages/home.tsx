@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { SUBSCRIPTION_PLANS } from "@shared/schema";
 import { api } from "@/lib/api";
-import heroBgVideo from "@assets/WEB_LEARNING_SYSTEMS_(1920_x_1280_px)_(2)_1779676596124.mp4";
+import heroBgVideo from "@assets/2_1780261768511.mp4";
 
 function ScarcityBadge() {
   const { data } = useQuery<{ claimed: number; limit: number; remaining: number }>({
@@ -17,14 +17,14 @@ function ScarcityBadge() {
   const soldOut = remaining <= 0;
   return (
     <div
-      className="inline-flex items-center gap-2 rounded-full border border-secondary/50 bg-secondary/10 px-4 py-1.5 text-xs font-mono uppercase tracking-widest text-secondary shadow-[0_0_20px_hsl(var(--secondary)/0.25)]"
+      className="inline-flex items-center gap-2 rounded-full border border-emerald-600/50 bg-emerald-50/80 px-4 py-1.5 text-xs font-mono uppercase tracking-widest text-emerald-700 shadow-[0_0_20px_rgba(16,185,129,0.25)] backdrop-blur-sm"
       data-testid="badge-home-spots"
     >
       <Sparkles className="h-3.5 w-3.5" />
       {soldOut ? (
         <span data-testid="text-home-spots-remaining">All {limit} free spots claimed — still free to try</span>
       ) : (
-        <>First 100 Free · <span className="font-bold text-white" data-testid="text-home-spots-remaining">{remaining}</span>/{limit} spots left</>
+        <>First 100 Free · <span className="font-bold text-emerald-900" data-testid="text-home-spots-remaining">{remaining}</span>/{limit} spots left</>
       )}
     </div>
   );
@@ -33,8 +33,9 @@ function ScarcityBadge() {
 export default function Home() {
   return (
     <>
-      {/* Hero background video — fixed full-bleed, muted/looping, with a dark
-          tint overlay so foreground text stays legible against any frame. */}
+      {/* Hero background video — fixed full-bleed, muted/looping. The clip is a
+          bright/white particle wave, so the overlay is a light veil (not a dark
+          tint) and foreground text is dark to stay legible against it. */}
       <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none" data-testid="hero-bg-video-wrap" aria-hidden="true">
         <video
           autoPlay
@@ -47,10 +48,10 @@ export default function Home() {
         >
           <source src={heroBgVideo} type="video/mp4" />
         </video>
-        {/* Tint for legibility — light enough that motion stays visible,
-            heavier toward the bottom where the pricing grid lives. */}
-        <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/55 to-background/85" />
-        <div className="absolute inset-0 bg-gradient-to-r from-background/30 via-transparent to-background/30" />
+        {/* Light veil for legibility — keeps the motion visible while softening
+            the brightest frames so dark text holds contrast everywhere. */}
+        <div className="absolute inset-0 bg-gradient-to-b from-white/40 via-white/20 to-white/45" />
+        <div className="absolute inset-0 bg-gradient-to-r from-white/25 via-transparent to-white/25" />
       </div>
 
       <div className="relative max-w-5xl mx-auto flex flex-col justify-center min-h-[80vh] space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -58,33 +59,33 @@ export default function Home() {
         {/* Declarative manifesto banner — top-of-page positioning statement. */}
         <div
           data-testid="banner-manifesto"
-          className="relative rounded-lg border border-primary/40 bg-gradient-to-r from-primary/10 via-fuchsia-500/5 to-secondary/10 px-5 py-4 shadow-[0_0_30px_hsl(var(--primary)/0.15)]"
+          className="relative rounded-lg border border-slate-300 bg-white/70 backdrop-blur-sm px-5 py-4 shadow-[0_4px_24px_rgba(15,23,42,0.08)]"
         >
-          <span aria-hidden="true" className="absolute left-0 top-0 bottom-0 w-[3px] bg-gradient-to-b from-primary via-fuchsia-400 to-secondary" />
-          <p className="font-display font-bold text-sm sm:text-base md:text-lg tracking-wide leading-snug text-white uppercase">
+          <span aria-hidden="true" className="absolute left-0 top-0 bottom-0 w-[3px] bg-gradient-to-b from-cyan-600 via-fuchsia-500 to-emerald-600 rounded-l-lg" />
+          <p className="font-display font-bold text-sm sm:text-base md:text-lg tracking-wide leading-snug text-slate-900 uppercase">
             We don't build AI agents.{" "}
-            <span className="text-primary neon-text">We engineer the DNA that governs them</span>
+            <span className="text-cyan-700">We engineer the DNA that governs them</span>
             {" "}— powered by your cognition,{" "}
-            <span className="text-secondary">owned by you.</span>
+            <span className="text-emerald-700">owned by you.</span>
           </p>
         </div>
 
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-primary/30 bg-primary/5 text-primary text-xs font-mono uppercase tracking-widest">
-          <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-cyan-600/40 bg-white/70 text-cyan-700 text-xs font-mono uppercase tracking-widest backdrop-blur-sm">
+          <span className="w-2 h-2 rounded-full bg-cyan-600 animate-pulse" />
           System Initialization Complete
         </div>
         
-        <h1 className="font-display font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-white/50 tracking-tight leading-[1.05] space-y-1">
+        <h1 className="font-display font-black text-transparent bg-clip-text bg-gradient-to-br from-slate-900 to-slate-600 tracking-tight leading-[1.05] space-y-1">
           <span className="block text-xl sm:text-2xl md:text-3xl lg:text-4xl whitespace-nowrap">
-            KNOW YOUR <span className="text-primary neon-text">WORTH.</span>{" "}
-            KNOW YOUR <span className="text-destructive">RISK.</span>
+            KNOW YOUR <span className="text-cyan-700">WORTH.</span>{" "}
+            KNOW YOUR <span className="text-rose-600">RISK.</span>
           </span>
           <span className="block text-2xl sm:text-3xl md:text-4xl lg:text-5xl whitespace-nowrap">
-            KNOW YOUR <span className="text-secondary">NEXT MOVE.</span>
+            KNOW YOUR <span className="text-emerald-700">NEXT MOVE.</span>
           </span>
         </h1>
         
-        <p className="text-xl text-muted-foreground font-sans max-w-2xl leading-relaxed">
+        <p className="text-xl text-slate-700 font-sans max-w-2xl leading-relaxed">
           Upload your CV and, in under 60 seconds, see how marketable you are today, where AI puts you at risk, and the smartest next move you can make.
         </p>
 
@@ -94,16 +95,16 @@ export default function Home() {
             { step: "2", icon: BarChart3, title: "Get your JST score", body: "Your career capital, benchmarked vs the live market." },
             { step: "3", icon: Compass, title: "See your next move", body: "Pivot paths and skills ranked by ROI." },
           ].map(({ step, icon: Icon, title, body }) => (
-            <div key={step} className="flex items-start gap-3 p-3 rounded-lg border border-white/10 bg-white/[0.02]" data-testid={`landing-step-${step}`}>
-              <div className="flex-shrink-0 mt-0.5 flex items-center justify-center h-7 w-7 rounded-full bg-primary/15 text-primary font-display text-sm font-bold border border-primary/30">
+            <div key={step} className="flex items-start gap-3 p-3 rounded-lg border border-slate-200 bg-white/70 backdrop-blur-sm shadow-sm" data-testid={`landing-step-${step}`}>
+              <div className="flex-shrink-0 mt-0.5 flex items-center justify-center h-7 w-7 rounded-full bg-cyan-100 text-cyan-700 font-display text-sm font-bold border border-cyan-300">
                 {step}
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <Icon className="h-3.5 w-3.5 text-primary/80" />
-                  <h3 className="font-display font-bold text-sm text-white tracking-wide">{title}</h3>
+                  <Icon className="h-3.5 w-3.5 text-cyan-600" />
+                  <h3 className="font-display font-bold text-sm text-slate-900 tracking-wide">{title}</h3>
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{body}</p>
+                <p className="text-xs text-slate-600 mt-0.5 leading-snug">{body}</p>
               </div>
             </div>
           ))}
@@ -143,7 +144,7 @@ export default function Home() {
             <Link
               href="/demo-tour"
               data-testid="button-view-demo-tour"
-              className="relative inline-flex items-center justify-center bg-background/60 hover:bg-fuchsia-500/10 text-fuchsia-300 hover:text-fuchsia-200 font-mono uppercase tracking-wider rounded-none h-12 px-8 transition-all hover:scale-[1.03] text-sm font-semibold border-2 border-fuchsia-400/60 animate-throb-glow-magenta"
+              className="relative inline-flex items-center justify-center bg-white/70 hover:bg-fuchsia-50 text-fuchsia-700 hover:text-fuchsia-800 font-mono uppercase tracking-wider rounded-none h-12 px-8 transition-all hover:scale-[1.03] text-sm font-semibold border-2 border-fuchsia-500/60 backdrop-blur-sm animate-throb-glow-magenta"
             >
               <PlayCircle className="mr-2 h-5 w-5" /> See the Demo Tour
             </Link>
@@ -152,45 +153,45 @@ export default function Home() {
           <Link
             href="/login"
             data-testid="button-view-demo"
-            className="text-xs font-mono uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
+            className="text-xs font-mono uppercase tracking-widest text-slate-600 hover:text-cyan-700 transition-colors"
           >
             Or use enterprise login →
           </Link>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-12 border-t border-white/10">
-        <div className="glass-card p-6 rounded-lg space-y-4">
-          <Zap className="h-8 w-8 text-primary" />
-          <h3 className="font-display font-bold text-lg">JST Index Valuation</h3>
-          <p className="text-sm text-muted-foreground font-sans">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-12 border-t border-slate-300/70">
+        <div className="rounded-lg border border-slate-200 bg-white/75 backdrop-blur-sm shadow-sm p-6 space-y-4">
+          <Zap className="h-8 w-8 text-cyan-600" />
+          <h3 className="font-display font-bold text-lg text-slate-900">JST Index Valuation</h3>
+          <p className="text-sm text-slate-600 font-sans">
             Computes a tri-dimensional career capital score calibrated against live labor market data.
           </p>
         </div>
         
-        <div className="glass-card p-6 rounded-lg space-y-4">
-          <ShieldAlert className="h-8 w-8 text-destructive" />
-          <h3 className="font-display font-bold text-lg">AI Vulnerability</h3>
-          <p className="text-sm text-muted-foreground font-sans">
+        <div className="rounded-lg border border-slate-200 bg-white/75 backdrop-blur-sm shadow-sm p-6 space-y-4">
+          <ShieldAlert className="h-8 w-8 text-rose-600" />
+          <h3 className="font-display font-bold text-lg text-slate-900">AI Vulnerability</h3>
+          <p className="text-sm text-slate-600 font-sans">
             5-level vulnerability classification with task-level automation risk scoring.
           </p>
         </div>
         
-        <div className="glass-card p-6 rounded-lg space-y-4">
-          <Target className="h-8 w-8 text-secondary" />
-          <h3 className="font-display font-bold text-lg">12-Vector Mobility</h3>
-          <p className="text-sm text-muted-foreground font-sans">
+        <div className="rounded-lg border border-slate-200 bg-white/75 backdrop-blur-sm shadow-sm p-6 space-y-4">
+          <Target className="h-8 w-8 text-emerald-600" />
+          <h3 className="font-display font-bold text-lg text-slate-900">12-Vector Mobility</h3>
+          <p className="text-sm text-slate-600 font-sans">
             Maps career mobility across 12 orthogonal dimensions to generate optimal pivot pathways.
           </p>
         </div>
       </div>
 
-      <div className="space-y-8 pt-12 border-t border-white/10">
+      <div className="space-y-8 pt-12 border-t border-slate-300/70">
         <div className="text-center space-y-3">
-          <h2 className="text-3xl font-display font-bold text-white tracking-tight">
-            Access <span className="text-primary neon-text">Tiers</span>
+          <h2 className="text-3xl font-display font-bold text-slate-900 tracking-tight">
+            Access <span className="text-cyan-700">Tiers</span>
           </h2>
-          <p className="text-sm text-muted-foreground font-mono uppercase tracking-widest">
+          <p className="text-sm text-slate-600 font-mono uppercase tracking-widest">
             Individual & School Plans Available
           </p>
         </div>
@@ -207,7 +208,7 @@ export default function Home() {
             return (
               <div
                 key={key}
-                className={`glass-card p-5 rounded-lg flex flex-col relative ${isPopular ? "ring-1 ring-primary/40" : ""}`}
+                className={`rounded-lg border bg-white/80 backdrop-blur-sm shadow-sm p-5 flex flex-col relative ${isPopular ? "border-cyan-400 ring-1 ring-cyan-400/50" : "border-slate-200"}`}
                 data-testid={`card-home-plan-${key.toLowerCase()}`}
               >
                 {isPopular && (
@@ -217,16 +218,16 @@ export default function Home() {
                 )}
                 <div className="flex items-center gap-2 mb-3">
                   <Icon className="h-5 w-5" style={{ color: plan.color }} />
-                  <span className="font-display font-bold text-sm text-white uppercase">{plan.label}</span>
+                  <span className="font-display font-bold text-sm text-slate-900 uppercase">{plan.label}</span>
                 </div>
                 <div className="mb-3">
                   {plan.price === 0 ? (
-                    <span className="text-2xl font-display font-black text-white">
+                    <span className="text-2xl font-display font-black text-slate-900">
                       {key === "ENTERPRISE" ? "Custom" : "Free"}
                     </span>
                   ) : (
-                    <span className="text-2xl font-display font-black text-white">
-                      ${plan.price}<span className="text-sm text-muted-foreground font-mono">/{plan.period}</span>
+                    <span className="text-2xl font-display font-black text-slate-900">
+                      ${plan.price}<span className="text-sm text-slate-500 font-mono">/{plan.period}</span>
                     </span>
                   )}
                 </div>
@@ -234,11 +235,11 @@ export default function Home() {
                   {plan.features.slice(0, 4).map((f, i) => (
                     <div key={i} className="flex items-center gap-1.5">
                       <Check className="h-3 w-3" style={{ color: plan.color }} />
-                      <span className="text-xs text-muted-foreground">{f}</span>
+                      <span className="text-xs text-slate-600">{f}</span>
                     </div>
                   ))}
                   {plan.features.length > 4 && (
-                    <span className="text-xs text-muted-foreground/50 font-mono">
+                    <span className="text-xs text-slate-400 font-mono">
                       +{plan.features.length - 4} more
                     </span>
                   )}
@@ -252,7 +253,7 @@ export default function Home() {
           <Link
             href="/subscription"
             data-testid="link-view-plans"
-            className="inline-flex items-center gap-2 text-primary font-mono text-sm uppercase tracking-wider hover:text-primary/80 transition-colors"
+            className="inline-flex items-center gap-2 text-cyan-700 font-mono text-sm uppercase tracking-wider hover:text-cyan-800 transition-colors"
           >
             View All Plans & Features <ArrowRight className="h-4 w-4" />
           </Link>
