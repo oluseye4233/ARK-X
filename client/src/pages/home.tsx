@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { SUBSCRIPTION_PLANS } from "@shared/schema";
 import { api } from "@/lib/api";
-import heroBgVideo from "@assets/WEB_LEARNING_SYSTEMS_(1920_x_1280_px)_(3)_1780263409190.mp4";
+import heroBgVideo from "@assets/hero_wave_dark_compressed.mp4";
 
 function ScarcityBadge() {
   const { data } = useQuery<{ claimed: number; limit: number; remaining: number }>({
