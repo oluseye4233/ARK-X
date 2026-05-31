@@ -1,10 +1,14 @@
 import { Link } from "wouter";
-import { ArrowRight, ShieldAlert, Target, Zap, Crown, GraduationCap, User, Building2, Check, Upload, BarChart3, Compass, PlayCircle, Sparkles } from "lucide-react";
+import { ArrowRight, ShieldAlert, Target, Zap, Crown, GraduationCap, User, Building2, Check, Upload, BarChart3, Compass, PlayCircle, Sparkles, FileText, Download } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { SUBSCRIPTION_PLANS } from "@shared/schema";
 import { api } from "@/lib/api";
 import heroBgVideo from "@assets/hero_wave_dark_compressed.mp4";
+import masterclassVideo from "@assets/ark_onecraft_masterclass.mp4";
+import masterclassPoster from "@assets/ark_onecraft_masterclass_poster.jpg";
+import guideCover from "@assets/ark_onecraft_subscription_guide_cover.jpg";
+import guidePdf from "@assets/ARK_Onecraft_Subscription_Guide_1780266946261.pdf";
 
 function ScarcityBadge() {
   const { data } = useQuery<{ claimed: number; limit: number; remaining: number }>({
@@ -182,6 +186,66 @@ export default function Home() {
           <p className="text-sm text-muted-foreground font-sans">
             Maps career mobility across 12 orthogonal dimensions to generate optimal pivot pathways.
           </p>
+        </div>
+      </div>
+
+      {/* Masterclass video + subscriber-plans whitepaper — content section
+          placed directly above the Access Tiers pricing grid. */}
+      <div className="space-y-8 pt-12 border-t border-white/10" data-testid="section-masterclass">
+        <div className="text-center space-y-3">
+          <h2 className="text-3xl font-display font-bold text-white tracking-tight">
+            Watch the <span className="text-primary neon-text">Masterclass</span>
+          </h2>
+          <p className="text-sm text-muted-foreground font-mono uppercase tracking-widest">
+            See ARK Onecraft in action — then read the plans guide
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-stretch">
+          {/* Video player — 3/5 width on desktop. */}
+          <div className="lg:col-span-3 glass-card rounded-lg overflow-hidden neon-border" data-testid="card-masterclass-video">
+            <video
+              controls
+              preload="metadata"
+              poster={masterclassPoster}
+              className="w-full h-full aspect-video bg-black"
+              data-testid="video-masterclass"
+            >
+              <source src={masterclassVideo} type="video/mp4" />
+              Your browser does not support the video tag.
+            </video>
+          </div>
+
+          {/* Whitepaper card — 2/5 width on desktop. */}
+          <div className="lg:col-span-2 glass-card rounded-lg p-6 flex flex-col" data-testid="card-whitepaper">
+            <div className="relative rounded-md overflow-hidden border border-white/10 mb-4">
+              <img
+                src={guideCover}
+                alt="ARK Onecraft — Subscriber Plans Guide cover"
+                className="w-full object-cover"
+                data-testid="img-whitepaper-cover"
+              />
+              <span className="absolute top-3 left-3 inline-flex items-center gap-1.5 rounded-full bg-background/80 border border-primary/40 px-3 py-1 text-[10px] font-mono uppercase tracking-widest text-primary backdrop-blur-sm">
+                <FileText className="h-3 w-3" /> Whitepaper · 19 pages
+              </span>
+            </div>
+            <h3 className="font-display font-bold text-lg text-white leading-snug">
+              Navigating the AI Era
+            </h3>
+            <p className="text-sm text-muted-foreground font-sans mt-1 mb-4 flex-1">
+              The ARK Onecraft subscriber plans guide — how each tier maps to your career-intelligence journey, and how to get the most from your subscription.
+            </p>
+            <a
+              href={guidePdf}
+              target="_blank"
+              rel="noopener noreferrer"
+              download
+              data-testid="link-download-whitepaper"
+              className="inline-flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-mono uppercase tracking-wider rounded-none neon-border h-12 px-6 transition-all hover:scale-[1.02] text-sm font-bold"
+            >
+              <Download className="h-4 w-4" /> Read the Guide
+            </a>
+          </div>
         </div>
       </div>
 
