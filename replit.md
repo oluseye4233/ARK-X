@@ -30,9 +30,9 @@ Per `exports/ARK_PDD_MVP_Spartan.md`, the deployed surface is the 7 CLASS A feat
 - **Client gate**: `client/src/App.tsx` only registers a `<Route>` when its flag is on; `AppLayout` filters `NAV_GROUPS` / `SECONDARY_LINKS` and gates `NotificationBell` + `useNotificationStream`.
 - **Introspection**: `GET /api/features` returns `{ stage, features }` for ops checks.
 
-**Currently flagged ON (Stage 1)**: `investorDemo` — the public, no-auth `/demo` (Sarah Chen persona) + `/demo-tour` (6-step guided walkthrough) marketing surfaces. The home page CTAs link straight to `/demo-tour`, so this flag must stay on for those buttons to resolve.
+**Currently flagged ON (Stage 1)**: `investorDemo` — the public, no-auth `/demo` (Sarah Chen persona) + `/demo-tour` (6-step guided walkthrough) marketing surfaces. The home page CTAs link straight to `/demo-tour`, so this flag must stay on for those buttons to resolve. `executiveReport` — the one-page **ARK REPORT** (`/report`): ATANDA-branded executive summary of the full ARK assessment (ARK/JST/CCMI/LHCS/vulnerability/archetype/12-vector radar), each metric with a plain-language one-liner; exports to PDF + PNG + JPEG via html2canvas/jsPDF. Pro+ gated via `useSubscription().canAccessReport`. Dashboard surfaces a `/report` CTA when this flag is on.
 
-**Currently flagged OFF (Stage 1)**: `cohorts`, `guinPublic`, `notifications`, `claudeNarrative`, `executiveReport`, `subscriptionCancel`, `assessmentEmail`, `enterpriseDashboard`, `corporateMarketplace`, `revenueGuardrail`, `bookCompanion`, `forgeLabDocx`, `drm`, `customScenarios`, `adminCcgeImport`, `contextCraftPage`, `sphinxAdvanced`. Phase J implementation code is preserved verbatim — no deletion.
+**Currently flagged OFF (Stage 1)**: `cohorts`, `guinPublic`, `notifications`, `claudeNarrative`, `subscriptionCancel`, `assessmentEmail`, `enterpriseDashboard`, `corporateMarketplace`, `revenueGuardrail`, `bookCompanion`, `forgeLabDocx`, `drm`, `customScenarios`, `adminCcgeImport`, `contextCraftPage`, `sphinxAdvanced`. Phase J implementation code is preserved verbatim — no deletion.
 
 ---
 

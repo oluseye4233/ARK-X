@@ -63,7 +63,7 @@ export const MVP_FEATURES: Readonly<Record<FeatureKey, boolean>> = Object.freeze
   guinPublic: false,
   notifications: false,
   claudeNarrative: false,
-  executiveReport: false,
+  executiveReport: true,
   subscriptionCancel: false,
   assessmentEmail: false,
   cohorts: false,
