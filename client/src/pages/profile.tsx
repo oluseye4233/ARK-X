@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { JnomicsCardList } from "@/components/dashboard/JnomicsCardList";
+import { ArkReportDownloadButton } from "@/components/ArkReportDownloadButton";
 
 export default function ProfilePage() {
   const { user, updateUser } = useAuth();
@@ -105,13 +106,16 @@ export default function ProfilePage() {
             ACCOUNT CONFIGURATION // {user.username}
           </p>
         </div>
-        {FEATURES.guinPublic && (
-          <Link href={`/u/${user.username}`} data-testid="link-view-public-profile">
-            <a className="px-3 py-1.5 rounded-lg font-mono text-[11px] uppercase tracking-wider border border-purple-300/30 bg-purple-300/10 text-purple-200 hover:bg-purple-300/20 transition-colors">
-              View Public Profile →
-            </a>
-          </Link>
-        )}
+        <div className="flex items-center gap-3 flex-wrap">
+          <ArkReportDownloadButton />
+          {FEATURES.guinPublic && (
+            <Link href={`/u/${user.username}`} data-testid="link-view-public-profile">
+              <a className="px-3 py-1.5 rounded-lg font-mono text-[11px] uppercase tracking-wider border border-purple-300/30 bg-purple-300/10 text-purple-200 hover:bg-purple-300/20 transition-colors">
+                View Public Profile →
+              </a>
+            </Link>
+          )}
+        </div>
       </div>
 
       {saveError && (

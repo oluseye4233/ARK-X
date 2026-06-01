@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/useAuth";
 import { api } from "@/lib/api";
 import { useSubscription } from "@/lib/useSubscription";
 import UpgradeGate from "@/components/UpgradeGate";
+import { reportFileStamp, exportReportImage, exportReportPdf } from "@/lib/arkReportExport";
 import atandaLogo from "@assets/WEB_LEARNING_SYSTEMS_(1920_x_1280_px)_(2)_1779729580194.png";
 
 /* ATANDA brand palette (explicit hex for export fidelity) */
@@ -385,33 +386,11 @@ export default function ReportPage() {
       .finally(() => setLoading(false));
   }, [user]);
 
-  const fileStamp = () => {
-    const name = (user?.name || "ARK").replace(/[^a-z0-9]+/gi, "_");
-    return `ARK_Report_${name}_${new Date().toISOString().slice(0, 10)}`;
-  };
-
-  const captureCanvas = async () => {
-    const html2canvas = (await import("html2canvas")).default;
-    return html2canvas(reportRef.current as HTMLElement, {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: "#ffffff",
-    });
-  };
-
   const handleExportImage = async (type: "png" | "jpeg") => {
     if (!reportRef.current) return;
     setExporting(type);
     try {
-      const canvas = await captureCanvas();
-      const mime = type === "png" ? "image/png" : "image/jpeg";
-      const data = canvas.toDataURL(mime, 0.95);
-      const a = document.createElement("a");
-      a.href = data;
-      a.download = `${fileStamp()}.${type === "jpeg" ? "jpg" : "png"}`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      await exportReportImage(reportRef.current, type, reportFileStamp(user?.name));
     } catch (err) {
       console.error("Image export failed:", err);
     } finally {
@@ -423,20 +402,7 @@ export default function ReportPage() {
     if (!reportRef.current) return;
     setExporting("pdf");
     try {
-      const { jsPDF } = await import("jspdf");
-      const canvas = await captureCanvas();
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF("p", "mm", "a4");
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      // Scale to fit a single page (the report is designed to be one page).
-      const renderHeight = Math.min(imgHeight, pageHeight);
-      const renderWidth = (canvas.width * renderHeight) / canvas.height;
-      const x = (pageWidth - renderWidth) / 2;
-      pdf.addImage(imgData, "PNG", x, 0, renderWidth, renderHeight);
-      pdf.save(`${fileStamp()}.pdf`);
+      await exportReportPdf(reportRef.current, reportFileStamp(user?.name));
     } catch (err) {
       console.error("PDF export failed:", err);
       window.print();
