@@ -12,7 +12,7 @@ import {
   Plug,
   RefreshCw,
   ShieldCheck,
-  Loader2,
+  Lock,
 } from "lucide-react";
 import { useAuth } from "@/lib/useAuth";
 import commandCentreBg from "@assets/1_1780428420784.mp4";
@@ -122,14 +122,22 @@ export function CommandCentrePage() {
                 Launch Command Centre <ArrowUpRight className="h-4 w-4" />
               </a>
             ) : (
-              <button
-                type="button"
-                disabled
-                data-testid="button-launch-command-centre"
-                className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-5 py-3 font-mono text-xs uppercase tracking-wider text-primary/70 cursor-not-allowed"
-              >
-                <Loader2 className="h-4 w-4 animate-spin" /> Launching soon
-              </button>
+              <div className="relative inline-block">
+                <button
+                  type="button"
+                  disabled
+                  data-testid="button-launch-command-centre"
+                  className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-black/60 px-5 py-3 font-mono text-xs uppercase tracking-wider text-white/35 cursor-not-allowed select-none"
+                >
+                  <Lock className="h-4 w-4" /> Launch Command Centre
+                </button>
+                <span
+                  className="absolute -top-2.5 -right-2.5 rounded-full bg-amber-400 px-2.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-widest text-background animate-flash shadow-[0_0_14px_rgba(251,191,36,0.85)] pointer-events-none"
+                  data-testid="banner-coming-soon"
+                >
+                  Coming Soon
+                </span>
+              </div>
             )}
 
             <span

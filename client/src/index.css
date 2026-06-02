@@ -202,4 +202,14 @@
   .animate-ping-slow {
     animation: ping-slow 2.8s cubic-bezier(0, 0, 0.2, 1) infinite;
   }
+
+  /* "Coming Soon" badge — attention-grabbing blink + soft pulse so a deactivated
+     future feature reads as intentionally pending, not broken. */
+  @keyframes flash {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.25; transform: scale(0.94); }
+  }
+  .animate-flash {
+    animation: flash 1.1s ease-in-out infinite;
+  }
 }
