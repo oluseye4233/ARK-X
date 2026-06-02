@@ -1922,3 +1922,24 @@ export const insertGuestAssessmentSchema = createInsertSchema(guestAssessments).
 });
 export type InsertGuestAssessment = z.infer<typeof insertGuestAssessmentSchema>;
 export type GuestAssessment = typeof guestAssessments.$inferSelect;
+
+// ── Shareable ARK Report links ──
+// A subscriber can mint an unguessable token that renders their ARK Report +
+// Career Adviser Sheet at a public URL (/r/:token) with NO login, so it can be
+// shared by link. The link reflects the user's CURRENT data (resolved live by
+// userId at read time), and can be revoked. One active (non-revoked) row per
+// user is reused so re-sharing returns a stable URL.
+export const reportShares = pgTable("report_shares", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  token: varchar("token").notNull().unique(),
+  userId: varchar("user_id").notNull(),
+  revoked: boolean("revoked").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => ({
+  tokenUnique: uniqueIndex("report_shares_token_uniq").on(t.token),
+}));
+export const insertReportShareSchema = createInsertSchema(reportShares).omit({
+  id: true, revoked: true, createdAt: true,
+});
+export type InsertReportShare = z.infer<typeof insertReportShareSchema>;
+export type ReportShare = typeof reportShares.$inferSelect;

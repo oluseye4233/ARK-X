@@ -213,3 +213,28 @@
     animation: flash 1.1s ease-in-out infinite;
   }
 }
+
+/* ── ARK Report print artifact ───────────────────────────────
+   /report and the public /r/:token page render a `.ark-print-surface`
+   containing BOTH the ARK Report and the Career Adviser sheet. Native
+   window.print() then produces a true vector PDF (selectable text)
+   instead of an html2canvas screenshot. */
+@media print {
+  @page { size: A4; margin: 8mm; }
+  html, body { background: #ffffff !important; }
+  body * { visibility: hidden !important; }
+  .ark-print-surface,
+  .ark-print-surface * { visibility: visible !important; }
+  .ark-print-surface {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    zoom: 0.88;
+  }
+  /* Each sheet sits on its own page; the report's vertical flow may still
+     break naturally if it exceeds one A4 page. */
+  .ark-print-page + .ark-print-page { break-before: page; }
+  .ark-print-surface img { max-width: 100%; }
+}

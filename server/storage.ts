@@ -1,6 +1,8 @@
+import { randomBytes } from "crypto";
 import { db } from "./db";
 import { eq, sql, desc, and, inArray, isNull } from "drizzle-orm";
 import { guestAssessments, type InsertGuestAssessment, type GuestAssessment } from "@shared/schema";
+import { reportShares, type ReportShare } from "@shared/schema";
 import {
   users, type User, type InsertUser, type UpdateUser,
   assessments, type Assessment, type InsertAssessment,
@@ -91,6 +93,11 @@ export interface IStorage {
   countGuestAssessments(): Promise<number>;
   getLatestAssessment(userId: string): Promise<Assessment | undefined>;
   updateAssessmentScore(id: string, data: Partial<Pick<Assessment, "jstTotal" | "jstJobs" | "jstSkills" | "jstTalent">>): Promise<Assessment | undefined>;
+
+  createReportShare(userId: string): Promise<ReportShare>;
+  getActiveReportShareByUser(userId: string): Promise<ReportShare | undefined>;
+  getReportShareByToken(token: string): Promise<ReportShare | undefined>;
+  revokeReportShare(userId: string): Promise<void>;
 
   createUpskillingPlans(plans: InsertUpskillingPlan[]): Promise<UpskillingPlan[]>;
   getUpskillingPlansByAssessment(assessmentId: string): Promise<UpskillingPlan[]>;
@@ -417,6 +424,37 @@ export class DatabaseStorage implements IStorage {
       .orderBy(sql`${assessments.createdAt} DESC`)
       .limit(1);
     return results[0];
+  }
+
+  async getActiveReportShareByUser(userId: string): Promise<ReportShare | undefined> {
+    const rows = await db
+      .select()
+      .from(reportShares)
+      .where(and(eq(reportShares.userId, userId), eq(reportShares.revoked, false)))
+      .orderBy(sql`${reportShares.createdAt} DESC`)
+      .limit(1);
+    return rows[0];
+  }
+
+  async createReportShare(userId: string): Promise<ReportShare> {
+    // Reuse the user's existing active share so re-sharing yields a stable URL.
+    const existing = await this.getActiveReportShareByUser(userId);
+    if (existing) return existing;
+    const token = randomBytes(24).toString("base64url");
+    const [row] = await db.insert(reportShares).values({ token, userId }).returning();
+    return row;
+  }
+
+  async getReportShareByToken(token: string): Promise<ReportShare | undefined> {
+    const rows = await db.select().from(reportShares).where(eq(reportShares.token, token)).limit(1);
+    return rows[0];
+  }
+
+  async revokeReportShare(userId: string): Promise<void> {
+    await db
+      .update(reportShares)
+      .set({ revoked: true })
+      .where(and(eq(reportShares.userId, userId), eq(reportShares.revoked, false)));
   }
 
   async updateAssessmentScore(

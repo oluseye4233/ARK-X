@@ -1651,6 +1651,97 @@ export async function registerRoutes(
     }
   });
 
+  // ── Shareable ARK Report links ───────────────────────────────
+  // Mint (or reuse) a public share token for the current user's ARK Report so
+  // it can be opened at /r/:token with NO login. Pro+ only, to match report
+  // access. Returns a relative path; the client builds the absolute URL.
+  app.post("/api/report/share", requireFeature("executiveReport"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const user = await storage.getUser(userId);
+      const plan = (user?.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
+      if (!SUBSCRIPTION_PLANS[plan]?.limits?.reportAccess) {
+        return res.status(403).json({ message: "ARK Report sharing requires Individual Pro or higher." });
+      }
+      const share = await storage.createReportShare(userId);
+      return res.json({ token: share.token, path: `/r/${share.token}` });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Revoke ALL active share links for the current user (kills the public URL).
+  app.delete("/api/report/share", requireFeature("executiveReport"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      await storage.revokeReportShare(userId);
+      return res.json({ ok: true });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Public, NO-auth read of a shared report by token. Resolves the owner's data
+  // LIVE so a shared link always reflects current scores. Returns only the
+  // report-relevant fields (deliberately public DTO — never the full user row).
+  app.get("/api/report/shared/:token", requireFeature("executiveReport"), async (req, res) => {
+    try {
+      const share = await storage.getReportShareByToken(String(req.params.token));
+      if (!share || share.revoked) {
+        return res.status(404).json({ message: "This report link is no longer available." });
+      }
+      const userId = share.userId;
+      const [user, pillars, lhcsRow, lhcsLive, assessment] = await Promise.all([
+        storage.getUser(userId),
+        storage.getCcmiPillars(userId),
+        storage.getLhcsSignals(userId),
+        computeLhcsForUser(userId).catch(() => null),
+        storage.getLatestAssessment(userId),
+      ]);
+      if (!user) {
+        return res.status(404).json({ message: "This report link is no longer available." });
+      }
+      const identity = {
+        userId,
+        arkScore: user.arkScore,
+        jstIndex: user.jstIndex,
+        ccmi: user.ccmi,
+        ccmiTier: user.ccmiTier,
+        vmstLevel: user.vmstLevel,
+        typology: user.typology,
+        arkIdString: user.arkIdString,
+        cprScore: user.cprScore,
+        mpsScore: user.mpsScore,
+        lcisScore: user.lcisScore,
+        lhcsStatus: user.lhcsStatus,
+        resumeReplacementPct: user.resumeReplacementPct,
+        pillars: pillars
+          ? {
+              P1: pillars.p1, P2: pillars.p2, P3: pillars.p3, P4: pillars.p4,
+              P5: pillars.p5, P6: pillars.p6, P7: pillars.p7,
+              composite: pillars.composite, tier: pillars.tier, multiplier: pillars.multiplier,
+            }
+          : null,
+        lhcs: lhcsRow
+          ? {
+              cprScore: lhcsRow.cprScore, mpsScore: lhcsRow.mpsScore, lcisScore: lhcsRow.lcisScore,
+              cprLight: lhcsRow.cprLight, mpsLight: lhcsRow.mpsLight, lcisLight: lhcsRow.lcisLight,
+              status: lhcsRow.status, readinessPct: lhcsRow.readinessPct,
+            }
+          : null,
+      };
+      return res.json({
+        name: user.name,
+        role: user.role,
+        identity,
+        lhcs: lhcsLive || identity.lhcs,
+        assessment: assessment ?? null,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
   // Admin-only backfill endpoint (kept simple; ADMIN_USER_ID gate).
   app.post("/api/admin/ark/backfill", requireAuth, async (req, res) => {
     try {

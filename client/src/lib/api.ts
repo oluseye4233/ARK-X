@@ -466,4 +466,11 @@ export const api = {
     }
     return res.json();
   },
+
+  // ── Shareable ARK Report links ──
+  createReportShare: (): Promise<{ token: string; path: string }> =>
+    apiRequest("/api/report/share", { method: "POST" }),
+  revokeReportShare: (): Promise<{ ok: boolean }> =>
+    apiRequest("/api/report/share", { method: "DELETE" }),
+  getSharedReport: (token: string) => apiRequest(`/api/report/shared/${token}`),
 };

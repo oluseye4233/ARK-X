@@ -32,6 +32,7 @@ import DemoTourPage from "@/pages/demo-tour";
 import AdminCcgeImportPage from "@/pages/admin-ccge-import";
 import BookCompanionPage from "@/pages/book-companion";
 import WorkforcePage from "@/pages/workforce";
+import SharedReportPage from "@/pages/shared-report";
 
 function Router() {
   return (
@@ -88,7 +89,11 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <Toaster />
-          <Router />
+          <Switch>
+            {/* Public, no-login shared ARK Report — rendered OUTSIDE app chrome. */}
+            <Route path="/r/:token" component={SharedReportPage} />
+            <Route component={Router} />
+          </Switch>
         </TooltipProvider>
       </QueryClientProvider>
     </ErrorBoundary>
