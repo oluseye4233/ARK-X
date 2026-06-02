@@ -1245,6 +1245,29 @@ export const insertHrImportBatchSchema = createInsertSchema(hrImportBatches).omi
 export type InsertHrImportBatch = z.infer<typeof insertHrImportBatchSchema>;
 export type HrImportBatch = typeof hrImportBatches.$inferSelect;
 
+// Most-recent connection-test outcome per (institution, adapter). Test runs are
+// read-only (they never write staff_records) so this is the only durable trace
+// of whether a live connector is healthy — surfaced on the workforce page so an
+// admin sees connector health on load without re-running the test. Upserted on
+// each test (success OR failure) keyed on the unique (institution, adapter).
+export const hrConnectorTests = pgTable("hr_connector_tests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  institution: text("institution").notNull(),
+  adapter: text("adapter").notNull(), // HrConnectorAdapterKey
+  ok: boolean("ok").notNull(),
+  totalRows: integer("total_rows"),
+  validRows: integer("valid_rows"),
+  errorRows: integer("error_rows"),
+  message: text("message"),
+  testedBy: varchar("tested_by").notNull(),
+  testedAt: timestamp("tested_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("hr_connector_tests_institution_adapter_uniq").on(t.institution, t.adapter),
+]);
+export const insertHrConnectorTestSchema = createInsertSchema(hrConnectorTests).omit({ id: true, testedAt: true });
+export type InsertHrConnectorTest = z.infer<typeof insertHrConnectorTestSchema>;
+export type HrConnectorTest = typeof hrConnectorTests.$inferSelect;
+
 /** A normalized HR record produced by any connector adapter. */
 export type NormalizedHrRecord = Partial<Record<HrFieldKey, string>> & { fullName: string };
 

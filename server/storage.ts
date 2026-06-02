@@ -33,6 +33,7 @@ import {
   cohortAssignments, type CohortAssignment, type InsertCohortAssignment,
   staffRecords, type StaffRecord, type StaffRecordWithArk,
   hrImportBatches, type HrImportBatch, type InsertHrImportBatch,
+  hrConnectorTests, type HrConnectorTest, type InsertHrConnectorTest,
   type NormalizedHrRecord, type StaffAssessmentStatus,
   tenureBandFromHireDate,
   bookJourneyBadges, type BookJourneyBadge, type InsertBookJourneyBadge,
@@ -254,6 +255,11 @@ export interface IStorage {
    *  (across institutions) when they register/log in. Returns rows linked. */
   reconcileStaffInvitesForUser(userId: string, email: string): Promise<number>;
   getWorkforceIntelligence(institution: string): Promise<WorkforceIntelligence>;
+  /** Persist the most-recent connection-test outcome for a connector, upserted
+   *  on (institution, adapter) so each connector keeps only its latest result. */
+  recordConnectorTest(test: InsertHrConnectorTest): Promise<HrConnectorTest>;
+  /** Last connection-test result per connector for an institution. */
+  getConnectorTests(institution: string): Promise<HrConnectorTest[]>;
 
   // ── Book Companion (Task #22) ──
   getBookBadges(userId: string): Promise<BookJourneyBadge[]>;
@@ -1705,6 +1711,33 @@ export class DatabaseStorage implements IStorage {
       byManager: aggregate((s) => s.manager),
       byLocation: aggregate((s) => s.location),
     };
+  }
+
+  async recordConnectorTest(test: InsertHrConnectorTest): Promise<HrConnectorTest> {
+    const [row] = await db
+      .insert(hrConnectorTests)
+      .values(test)
+      .onConflictDoUpdate({
+        target: [hrConnectorTests.institution, hrConnectorTests.adapter],
+        set: {
+          ok: test.ok,
+          totalRows: test.totalRows ?? null,
+          validRows: test.validRows ?? null,
+          errorRows: test.errorRows ?? null,
+          message: test.message ?? null,
+          testedBy: test.testedBy,
+          testedAt: new Date(),
+        },
+      })
+      .returning();
+    return row;
+  }
+
+  async getConnectorTests(institution: string): Promise<HrConnectorTest[]> {
+    return db
+      .select()
+      .from(hrConnectorTests)
+      .where(eq(hrConnectorTests.institution, institution));
   }
 
   // ── Book Companion (Task #22) ──

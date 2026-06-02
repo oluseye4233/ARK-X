@@ -1630,20 +1630,36 @@ export async function registerRoutes(
 
   // List the registered HR-connector adapters + the normalized field set so the
   // mapping UI can render its source-picker + field dropdowns.
-  app.get("/api/workforce/connectors", ...workforceGate, async (_req, res) => {
+  app.get("/api/workforce/connectors", ...workforceGate, async (req, res) => {
     try {
+      // Most-recent connection-test outcome per adapter for this institution, so
+      // each card can show connector health on load without re-running the test.
+      const tests = await storage.getConnectorTests(req.institutionScope!);
+      const lastTestByAdapter = new Map(tests.map((t) => [t.adapter, t]));
       return res.json({
-        connectors: listHrConnectors().map((a) => ({
-          key: a.key,
-          label: a.label,
-          acceptsFile: a.acceptsFile,
-          // Live API adapters report whether their server-side credentials are
-          // present so the UI can enable/disable the sync button. File adapters
-          // (and any adapter without required secrets) are always "configured".
-          isApi: !a.acceptsFile,
-          requiredSecrets: a.requiredSecrets ?? [],
-          configured: a.isConfigured ? a.isConfigured() : true,
-        })),
+        connectors: listHrConnectors().map((a) => {
+          const lastTest = lastTestByAdapter.get(a.key);
+          return {
+            key: a.key,
+            label: a.label,
+            acceptsFile: a.acceptsFile,
+            // Live API adapters report whether their server-side credentials are
+            // present so the UI can enable/disable the sync button. File adapters
+            // (and any adapter without required secrets) are always "configured".
+            isApi: !a.acceptsFile,
+            requiredSecrets: a.requiredSecrets ?? [],
+            configured: a.isConfigured ? a.isConfigured() : true,
+            lastTest: lastTest
+              ? {
+                  ok: lastTest.ok,
+                  testedAt: lastTest.testedAt,
+                  validRows: lastTest.validRows,
+                  errorRows: lastTest.errorRows,
+                  message: lastTest.message,
+                }
+              : null,
+          };
+        }),
         fields: HR_FIELD_KEYS.map((key) => ({ key, label: HR_FIELD_LABELS[key] })),
       });
     } catch (err: any) {
@@ -1894,6 +1910,9 @@ export async function registerRoutes(
         });
       }
 
+      const institution = req.institutionScope!;
+      const testedBy = currentUserId(req)!;
+
       // Pull + normalize from the live API to confirm credentials + reachability.
       // fetchRecords throws on auth/network failure; surface as 502 (upstream).
       let result;
@@ -1901,20 +1920,37 @@ export async function registerRoutes(
         result = await adapter.fetchRecords();
       } catch (err: any) {
         console.error(`[/api/workforce/test-connection] ${adapterKey} fetch failed:`, err);
-        return res.status(502).json({
+        const message = err?.message ?? `${adapter.label} connection test failed.`;
+        // Persist the failure so the card reflects connector health on next load.
+        await storage.recordConnectorTest({
+          institution,
+          adapter: adapterKey,
           ok: false,
-          message: err?.message ?? `${adapter.label} connection test failed.`,
+          message,
+          testedBy,
         });
+        return res.status(502).json({ ok: false, message });
       }
 
       // Read-only: deliberately no createImportBatch / upsertStaffRecords here.
+      const validRows = result.records.length;
+      const errorRows = result.errors.length;
+      await storage.recordConnectorTest({
+        institution,
+        adapter: adapterKey,
+        ok: true,
+        totalRows: result.totalRows,
+        validRows,
+        errorRows,
+        testedBy,
+      });
       return res.json({
         ok: true,
         adapter: result.adapter,
         label: adapter.label,
         totalRows: result.totalRows,
-        validRows: result.records.length,
-        errorRows: result.errors.length,
+        validRows,
+        errorRows,
       });
     } catch (err: any) {
       console.error("[/api/workforce/test-connection] error:", err);

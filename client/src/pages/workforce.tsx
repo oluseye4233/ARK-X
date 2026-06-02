@@ -51,7 +51,55 @@ type Connector = {
   isApi: boolean;
   requiredSecrets: string[];
   configured: boolean;
+  // Most-recent connection-test result persisted server-side (null if never
+  // tested). Lets the card show connector health on load, pre-refresh.
+  lastTest: {
+    ok: boolean;
+    testedAt: string;
+    validRows: number | null;
+    errorRows: number | null;
+    message: string | null;
+  } | null;
 };
+
+// Render a persisted last-test result into the same {ok, message} shape used for
+// in-session results, with a relative "tested ..." suffix so an admin can see
+// connector health on load. Returns null when the connector was never tested.
+function formatPersistedTest(
+  lastTest: Connector["lastTest"],
+): { ok: boolean; message: string } | null {
+  if (!lastTest) return null;
+  const when = formatRelativeTime(lastTest.testedAt);
+  if (lastTest.ok) {
+    const valid = lastTest.validRows ?? 0;
+    const skipped = lastTest.errorRows ?? 0;
+    return {
+      ok: true,
+      message: `Connected — ${valid} record${valid === 1 ? "" : "s"} found${
+        skipped > 0 ? `, ${skipped} skipped` : ""
+      } (last tested ${when}).`,
+    };
+  }
+  return {
+    ok: false,
+    message: `${lastTest.message || "Connection test failed."} (last tested ${when}).`,
+  };
+}
+
+// Lightweight relative-time formatter — avoids pulling in a date library.
+function formatRelativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "recently";
+  const diffSec = Math.round((Date.now() - then) / 1000);
+  if (diffSec < 60) return "just now";
+  const diffMin = Math.round(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} min ago`;
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return `${diffHr} hr ago`;
+  const diffDay = Math.round(diffHr / 24);
+  if (diffDay < 30) return `${diffDay} day${diffDay === 1 ? "" : "s"} ago`;
+  return new Date(iso).toLocaleDateString();
+}
 
 type StaffRow = {
   id: string;
@@ -434,12 +482,15 @@ export default function WorkforcePage() {
           }.`,
         },
       }));
+      // Refresh the persisted last-test result so the card stays accurate on reload.
+      qc.invalidateQueries({ queryKey: ["/api/workforce/connectors"] });
     },
     onError: (err: Error, adapter: string) => {
       setTestResults((prev) => ({
         ...prev,
         [adapter]: { ok: false, message: err.message || "Connection test failed." },
       }));
+      qc.invalidateQueries({ queryKey: ["/api/workforce/connectors"] });
     },
   });
 
@@ -589,16 +640,24 @@ export default function WorkforcePage() {
                       Sync now
                     </button>
                   </div>
-                  {testResults[c.key] && (
-                    <p
-                      className={`text-[11px] ${
-                        testResults[c.key].ok ? "text-emerald-300" : "text-destructive"
-                      }`}
-                      data-testid={`text-test-result-${c.key}`}
-                    >
-                      {testResults[c.key].message}
-                    </p>
-                  )}
+                  {(() => {
+                    // Prefer the just-run result from this session; otherwise fall
+                    // back to the persisted last-test outcome so the card shows
+                    // connector health on load without re-running the test.
+                    const live = testResults[c.key];
+                    const display = live ?? formatPersistedTest(c.lastTest);
+                    if (!display) return null;
+                    return (
+                      <p
+                        className={`text-[11px] ${
+                          display.ok ? "text-emerald-300" : "text-destructive"
+                        }`}
+                        data-testid={`text-test-result-${c.key}`}
+                      >
+                        {display.message}
+                      </p>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
