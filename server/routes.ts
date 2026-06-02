@@ -19,6 +19,7 @@ import { HR_FIELD_KEYS, HR_FIELD_LABELS } from "@shared/schema";
 import { requireFeature, getResolvedFeatures, isFeatureEnabled } from "./featureFlags";
 import { STAGE } from "@shared/featureFlags";
 import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, type SubscriptionPlan, CCGE_TIERS, type CcgeTier, jcseToTier, ALL_CARD_PILLARS, SPC_MIN_CERT_TO_PUBLISH, SPC_PRICE_MIN, SPC_PRICE_MAX, SPC_STATUSES, SPC_SCOPES, CERT_LEVEL_RANK, ARK_SCORE_DELTAS, type CardPillar, type SpcStatus, ASSESSMENT_SOURCES, PRIMARY_ASSESSMENT_SOURCES, ASSESSMENT_SOURCE_LABELS, type AssessmentSourceKey } from "@shared/schema";
+import { computeCompleteness, canonicalSourcesUsed, buildCombinedText } from "@shared/assessmentMerge";
 import { dealHand, scoreSession } from "./ccge";
 import { orchestrator } from "./orchestrator";
 import { recalcArkForUser } from "./arkRecalc";
@@ -1010,21 +1011,13 @@ export async function registerRoutes(
       return res.json({
         sources,
         completeness,
-        sourcesUsed: ASSESSMENT_SOURCES.filter((k) => present.has(k)),
+        sourcesUsed: canonicalSourcesUsed(present),
       });
     } catch (err: any) {
       console.error("[/api/assessment/sources] error:", err);
       return res.status(500).json({ message: err.message });
     }
   });
-
-  // Completeness/confidence meter: share of the three PRIMARY intake sources
-  // (resume / self / linkedin) the user has contributed, as a 0-100 percentage.
-  // The archetype quiz refines the profile but doesn't count toward the meter.
-  function computeCompleteness(present: Set<string>): number {
-    const primaryPresent = PRIMARY_ASSESSMENT_SOURCES.filter((k) => present.has(k)).length;
-    return Math.round((primaryPresent / PRIMARY_ASSESSMENT_SOURCES.length) * 100);
-  }
 
   // Persist one source's raw text then rebuild the user's single evolving ARK
   // profile from EVERY source they've contributed. This is what makes the three
@@ -1056,19 +1049,11 @@ export async function registerRoutes(
       const present = new Set(sourceRows.map((r) => r.source));
       // Canonical order so the combined document and sourcesUsed list are stable
       // regardless of the order sources were contributed in.
-      const sourcesUsed = ASSESSMENT_SOURCES.filter((k) => present.has(k));
+      const sourcesUsed = canonicalSourcesUsed(present);
       const completeness = computeCompleteness(present);
       const sourceTag = `cumulative:${primarySource}`;
 
-      const combinedText = sourcesUsed
-        .map((key) => {
-          const row = sourceRows.find((r) => r.source === key);
-          const body = (row?.content ?? "").trim();
-          if (!body) return "";
-          return `=== ${ASSESSMENT_SOURCE_LABELS[key]} ===\n${body}`;
-        })
-        .filter(Boolean)
-        .join("\n\n");
+      const combinedText = buildCombinedText(sourceRows);
 
       const resumeText = combinedText;
       const analysis = analyzeResume(resumeText, certLevel);
