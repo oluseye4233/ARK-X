@@ -12,7 +12,17 @@ export const SUBSCRIPTION_PLANS = {
     period: "forever",
     color: "#888888",
     features: ["1 resume upload", "Basic JST Score", "Vulnerability Level"],
-    limits: { uploadsPerMonth: 1, dashboardAccess: true, pathwaysAccess: false, enterpriseAccess: false, reportAccess: false, forgeCards: false },
+    limits: { uploadsPerMonth: 1, dashboardAccess: true, pathwaysAccess: false, enterpriseAccess: false, reportAccess: false, forgeCards: false, trainingProviderAccess: false },
+  },
+  INDIVIDUAL_EXPLORER: {
+    key: "INDIVIDUAL_EXPLORER",
+    label: "Explorer",
+    type: "individual",
+    price: 0,
+    period: "forever",
+    color: "#22C55E",
+    features: ["1 resume upload", "Basic JST Score", "Vulnerability Level", "Suggested Training Providers", "JST-matched upskilling path"],
+    limits: { uploadsPerMonth: 1, dashboardAccess: true, pathwaysAccess: false, enterpriseAccess: false, reportAccess: false, forgeCards: false, trainingProviderAccess: true },
   },
   INDIVIDUAL_PRO: {
     key: "INDIVIDUAL_PRO",
@@ -21,8 +31,8 @@ export const SUBSCRIPTION_PLANS = {
     price: 29,
     period: "month",
     color: "#00B4D8",
-    features: ["Unlimited uploads", "Full JST Dashboard", "12-Vector Radar", "Career Pathways", "FORGE Cards", "Executive Report", "Context Craft Integration"],
-    limits: { uploadsPerMonth: -1, dashboardAccess: true, pathwaysAccess: true, enterpriseAccess: false, reportAccess: true, forgeCards: true },
+    features: ["Unlimited uploads", "Full JST Dashboard", "12-Vector Radar", "Career Pathways", "FORGE Cards", "Executive Report", "Context Craft Integration", "Suggested Training Providers"],
+    limits: { uploadsPerMonth: -1, dashboardAccess: true, pathwaysAccess: true, enterpriseAccess: false, reportAccess: true, forgeCards: true, trainingProviderAccess: true },
   },
   SCHOOL_STUDENT: {
     key: "SCHOOL_STUDENT",
@@ -31,8 +41,8 @@ export const SUBSCRIPTION_PLANS = {
     price: 9,
     period: "month",
     color: "#AA44FF",
-    features: ["Unlimited uploads", "Full JST Dashboard", "12-Vector Radar", "Career Pathways", "FORGE Cards", "Executive Report", "Context Craft Integration", "Institution Dashboard"],
-    limits: { uploadsPerMonth: -1, dashboardAccess: true, pathwaysAccess: true, enterpriseAccess: false, reportAccess: true, forgeCards: true },
+    features: ["Unlimited uploads", "Full JST Dashboard", "12-Vector Radar", "Career Pathways", "FORGE Cards", "Executive Report", "Context Craft Integration", "Institution Dashboard", "Suggested Training Providers"],
+    limits: { uploadsPerMonth: -1, dashboardAccess: true, pathwaysAccess: true, enterpriseAccess: false, reportAccess: true, forgeCards: true, trainingProviderAccess: true },
   },
   ENTERPRISE: {
     key: "ENTERPRISE",
@@ -42,7 +52,7 @@ export const SUBSCRIPTION_PLANS = {
     period: "custom",
     color: "#44AA44",
     features: ["Everything in Pro", "Workforce Intelligence", "Department Analytics", "Bulk Assessment", "Custom Integrations", "Priority Support"],
-    limits: { uploadsPerMonth: -1, dashboardAccess: true, pathwaysAccess: true, enterpriseAccess: true, reportAccess: true, forgeCards: true },
+    limits: { uploadsPerMonth: -1, dashboardAccess: true, pathwaysAccess: true, enterpriseAccess: true, reportAccess: true, forgeCards: true, trainingProviderAccess: true },
   },
 } as const;
 
@@ -1943,3 +1953,94 @@ export const insertReportShareSchema = createInsertSchema(reportShares).omit({
 });
 export type InsertReportShare = z.infer<typeof insertReportShareSchema>;
 export type ReportShare = typeof reportShares.$inferSelect;
+
+// ── Suggested Training Providers (freemium · Explorer tier) ──
+// Admin-curated + self-serve registered training organizations whose courses are
+// ranked against the JST engine's suggested upskilling path. Monetized via
+// sponsored placement (`sponsored` + `sponsoredWeight`) and affiliate click
+// tracking (`trainingClicks`). Everything is gated behind login/subscription.
+export const TRAINING_PROVIDER_STATUSES = ["pending", "approved", "rejected"] as const;
+export type TrainingProviderStatus = (typeof TRAINING_PROVIDER_STATUSES)[number];
+
+// JST-aligned course categories — mirror resumeAnalyzer `categoryScores` keys so
+// course offerings can be matched to a user's suggested upskilling path.
+export const TRAINING_CATEGORIES = [
+  "technical", "leadership", "analytical", "communication", "innovation", "ai_adjacent",
+] as const;
+export type TrainingCategory = (typeof TRAINING_CATEGORIES)[number];
+
+export const TRAINING_CATEGORY_LABELS: Record<TrainingCategory, string> = {
+  technical: "Technical",
+  leadership: "Leadership",
+  analytical: "Analytical",
+  communication: "Communication",
+  innovation: "Innovation",
+  ai_adjacent: "AI-Adjacent",
+};
+
+export const TRAINING_DELIVERY_MODES = ["online", "in_person", "hybrid"] as const;
+export type TrainingDeliveryMode = (typeof TRAINING_DELIVERY_MODES)[number];
+
+export const trainingProviders = pgTable("training_providers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  slug: varchar("slug").notNull().unique(),
+  description: text("description").notNull().default(""),
+  website: text("website"),
+  logoUrl: text("logo_url"),
+  regions: text("regions").array(),
+  deliveryModes: text("delivery_modes").array(),
+  accreditations: text("accreditations").array(),
+  // Self-serve registrations carry the registering user's id; admin-seeded rows
+  // have a null owner. Owners may edit only their own providers.
+  ownerUserId: varchar("owner_user_id"),
+  status: text("status").notNull().default("pending"),
+  // Revenue — sponsored placement bumps a provider up the ranking. `sponsoredWeight`
+  // is an admin-set 0-100 boost added to the JST match score before sorting.
+  sponsored: boolean("sponsored").notNull().default(false),
+  sponsoredWeight: integer("sponsored_weight").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => ({
+  slugUnique: uniqueIndex("training_providers_slug_uniq").on(t.slug),
+}));
+export const insertTrainingProviderSchema = createInsertSchema(trainingProviders).omit({
+  id: true, createdAt: true, status: true, sponsored: true, sponsoredWeight: true, ownerUserId: true,
+});
+export type InsertTrainingProvider = z.infer<typeof insertTrainingProviderSchema>;
+export type TrainingProvider = typeof trainingProviders.$inferSelect;
+
+export const trainingCourses = pgTable("training_courses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  providerId: varchar("provider_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull().default(""),
+  category: text("category").notNull().default("technical"),
+  skills: text("skills").array(),
+  level: text("level"),
+  durationLabel: text("duration_label"),
+  priceLabel: text("price_label"),
+  certification: text("certification"),
+  url: text("url"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export const insertTrainingCourseSchema = createInsertSchema(trainingCourses).omit({
+  id: true, createdAt: true,
+});
+export type InsertTrainingCourse = z.infer<typeof insertTrainingCourseSchema>;
+export type TrainingCourse = typeof trainingCourses.$inferSelect;
+
+// Affiliate / analytics ledger — one row per provider view or outbound click so
+// referral revenue and engagement can be reconciled per provider.
+export const trainingClicks = pgTable("training_clicks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  providerId: varchar("provider_id").notNull(),
+  courseId: varchar("course_id"),
+  userId: varchar("user_id"),
+  kind: text("kind").notNull().default("click"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export const insertTrainingClickSchema = createInsertSchema(trainingClicks).omit({
+  id: true, createdAt: true,
+});
+export type InsertTrainingClick = z.infer<typeof insertTrainingClickSchema>;
+export type TrainingClick = typeof trainingClicks.$inferSelect;

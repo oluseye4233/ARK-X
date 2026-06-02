@@ -43,6 +43,9 @@ import {
   bookLedgerSnapshots, type BookLedgerSnapshot, type InsertBookLedgerSnapshot,
   cardVerifications, type CardVerification, type VerificationSubmission,
   verificationArkDelta,
+  trainingProviders, type TrainingProvider, type InsertTrainingProvider, type TrainingProviderStatus,
+  trainingCourses, type TrainingCourse, type InsertTrainingCourse,
+  trainingClicks, type TrainingClick, type InsertTrainingClick,
 } from "@shared/schema";
 import { or } from "drizzle-orm";
 
@@ -320,6 +323,23 @@ export interface IStorage {
   getLedgerSnapshots(userId: string): Promise<BookLedgerSnapshot[]>;
   /** Baseline is immutable (insert-once); final upserts on each capture. */
   upsertLedgerSnapshot(snap: InsertBookLedgerSnapshot): Promise<BookLedgerSnapshot>;
+
+  // ── Suggested Training Providers (freemium · Explorer tier) ──
+  createTrainingProvider(input: InsertTrainingProvider & { ownerUserId?: string | null; status?: TrainingProviderStatus }): Promise<TrainingProvider>;
+  getTrainingProviderById(id: string): Promise<TrainingProvider | undefined>;
+  getTrainingProviderBySlug(slug: string): Promise<TrainingProvider | undefined>;
+  listTrainingProviders(filter?: { status?: TrainingProviderStatus; region?: string; deliveryMode?: string; q?: string }): Promise<TrainingProvider[]>;
+  listTrainingProvidersByOwner(ownerUserId: string): Promise<TrainingProvider[]>;
+  updateTrainingProvider(id: string, ownerUserId: string, patch: Partial<InsertTrainingProvider>): Promise<TrainingProvider | undefined>;
+  setTrainingProviderStatus(id: string, status: TrainingProviderStatus): Promise<TrainingProvider | undefined>;
+  setTrainingProviderSponsorship(id: string, sponsored: boolean, sponsoredWeight: number): Promise<TrainingProvider | undefined>;
+  createTrainingCourse(input: InsertTrainingCourse): Promise<TrainingCourse>;
+  getTrainingCourseById(id: string): Promise<TrainingCourse | undefined>;
+  listTrainingCoursesByProvider(providerId: string): Promise<TrainingCourse[]>;
+  listTrainingCoursesForProviders(providerIds: string[]): Promise<TrainingCourse[]>;
+  deleteTrainingCourse(id: string): Promise<void>;
+  recordTrainingClick(input: InsertTrainingClick): Promise<TrainingClick>;
+  getTrainingClickStats(): Promise<Record<string, { views: number; clicks: number }>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2098,6 +2118,134 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return row;
+  }
+
+  // ── Suggested Training Providers (freemium · Explorer tier) ──
+  async createTrainingProvider(
+    input: InsertTrainingProvider & { ownerUserId?: string | null; status?: TrainingProviderStatus },
+  ): Promise<TrainingProvider> {
+    const [row] = await db.insert(trainingProviders).values(input).returning();
+    return row;
+  }
+
+  async getTrainingProviderById(id: string): Promise<TrainingProvider | undefined> {
+    const [row] = await db.select().from(trainingProviders).where(eq(trainingProviders.id, id));
+    return row;
+  }
+
+  async getTrainingProviderBySlug(slug: string): Promise<TrainingProvider | undefined> {
+    const [row] = await db.select().from(trainingProviders).where(eq(trainingProviders.slug, slug));
+    return row;
+  }
+
+  async listTrainingProviders(filter?: {
+    status?: TrainingProviderStatus; region?: string; deliveryMode?: string; q?: string;
+  }): Promise<TrainingProvider[]> {
+    const conds = [];
+    if (filter?.status) conds.push(eq(trainingProviders.status, filter.status));
+    if (filter?.region) conds.push(sql`${filter.region} = ANY(${trainingProviders.regions})`);
+    if (filter?.deliveryMode) conds.push(sql`${filter.deliveryMode} = ANY(${trainingProviders.deliveryModes})`);
+    if (filter?.q) {
+      const needle = `%${filter.q.toLowerCase()}%`;
+      conds.push(sql`(lower(${trainingProviders.name}) LIKE ${needle} OR lower(${trainingProviders.description}) LIKE ${needle})`);
+    }
+    const where = conds.length ? and(...conds) : undefined;
+    return db
+      .select()
+      .from(trainingProviders)
+      .where(where as any)
+      .orderBy(desc(trainingProviders.sponsored), desc(trainingProviders.sponsoredWeight), desc(trainingProviders.createdAt));
+  }
+
+  async listTrainingProvidersByOwner(ownerUserId: string): Promise<TrainingProvider[]> {
+    return db
+      .select()
+      .from(trainingProviders)
+      .where(eq(trainingProviders.ownerUserId, ownerUserId))
+      .orderBy(desc(trainingProviders.createdAt));
+  }
+
+  async updateTrainingProvider(
+    id: string, ownerUserId: string, patch: Partial<InsertTrainingProvider>,
+  ): Promise<TrainingProvider | undefined> {
+    // Owner-scoped edit; any content change resets the provider to `pending`
+    // so admins re-approve before it re-enters the public directory.
+    const [row] = await db
+      .update(trainingProviders)
+      .set({ ...patch, status: "pending" })
+      .where(and(eq(trainingProviders.id, id), eq(trainingProviders.ownerUserId, ownerUserId)))
+      .returning();
+    return row;
+  }
+
+  async setTrainingProviderStatus(id: string, status: TrainingProviderStatus): Promise<TrainingProvider | undefined> {
+    const [row] = await db
+      .update(trainingProviders)
+      .set({ status })
+      .where(eq(trainingProviders.id, id))
+      .returning();
+    return row;
+  }
+
+  async setTrainingProviderSponsorship(
+    id: string, sponsored: boolean, sponsoredWeight: number,
+  ): Promise<TrainingProvider | undefined> {
+    const [row] = await db
+      .update(trainingProviders)
+      .set({ sponsored, sponsoredWeight })
+      .where(eq(trainingProviders.id, id))
+      .returning();
+    return row;
+  }
+
+  async createTrainingCourse(input: InsertTrainingCourse): Promise<TrainingCourse> {
+    const [row] = await db.insert(trainingCourses).values(input).returning();
+    return row;
+  }
+
+  async getTrainingCourseById(id: string): Promise<TrainingCourse | undefined> {
+    const [row] = await db.select().from(trainingCourses).where(eq(trainingCourses.id, id));
+    return row;
+  }
+
+  async listTrainingCoursesByProvider(providerId: string): Promise<TrainingCourse[]> {
+    return db
+      .select()
+      .from(trainingCourses)
+      .where(eq(trainingCourses.providerId, providerId))
+      .orderBy(desc(trainingCourses.createdAt));
+  }
+
+  async listTrainingCoursesForProviders(providerIds: string[]): Promise<TrainingCourse[]> {
+    if (providerIds.length === 0) return [];
+    return db.select().from(trainingCourses).where(inArray(trainingCourses.providerId, providerIds));
+  }
+
+  async deleteTrainingCourse(id: string): Promise<void> {
+    await db.delete(trainingCourses).where(eq(trainingCourses.id, id));
+  }
+
+  async recordTrainingClick(input: InsertTrainingClick): Promise<TrainingClick> {
+    const [row] = await db.insert(trainingClicks).values(input).returning();
+    return row;
+  }
+
+  async getTrainingClickStats(): Promise<Record<string, { views: number; clicks: number }>> {
+    const rows = await db
+      .select({
+        providerId: trainingClicks.providerId,
+        kind: trainingClicks.kind,
+        n: sql<number>`count(*)::int`,
+      })
+      .from(trainingClicks)
+      .groupBy(trainingClicks.providerId, trainingClicks.kind);
+    const out: Record<string, { views: number; clicks: number }> = {};
+    for (const r of rows) {
+      const bucket = (out[r.providerId] ??= { views: 0, clicks: 0 });
+      if (r.kind === "view") bucket.views += r.n;
+      else bucket.clicks += r.n;
+    }
+    return out;
   }
 }
 

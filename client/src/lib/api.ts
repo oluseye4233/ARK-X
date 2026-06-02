@@ -467,6 +467,67 @@ export const api = {
     return res.json();
   },
 
+  // ── Suggested Training Providers ──
+  getTrainingProviders: (filters?: { region?: string; deliveryMode?: string; q?: string }) => {
+    const params = new URLSearchParams();
+    if (filters?.region && filters.region !== "All") params.set("region", filters.region);
+    if (filters?.deliveryMode && filters.deliveryMode !== "All") params.set("deliveryMode", filters.deliveryMode);
+    if (filters?.q && filters.q.trim()) params.set("q", filters.q.trim());
+    const qs = params.toString();
+    return apiRequest(`/api/training/providers${qs ? `?${qs}` : ""}`);
+  },
+  getSuggestedTraining: () => apiRequest("/api/training/suggested"),
+  getTrainingProvider: (slug: string) =>
+    apiRequest(`/api/training/providers/${encodeURIComponent(slug)}`),
+  registerTrainingProvider: (data: {
+    name: string;
+    description?: string;
+    website?: string;
+    logoUrl?: string;
+    regions?: string[];
+    deliveryModes?: string[];
+    accreditations?: string[];
+  }) =>
+    apiRequest("/api/training/providers", { method: "POST", body: JSON.stringify(data) }),
+  updateTrainingProvider: (id: string, data: any) =>
+    apiRequest(`/api/training/providers/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  getMyTrainingProviders: () => apiRequest("/api/training/my-providers"),
+  addTrainingCourse: (
+    providerId: string,
+    data: {
+      title: string;
+      description?: string;
+      category: string;
+      skills?: string[];
+      level?: string;
+      durationLabel?: string;
+      priceLabel?: string;
+      certification?: string;
+      url?: string;
+    },
+  ) =>
+    apiRequest(`/api/training/providers/${providerId}/courses`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteTrainingCourse: (id: string) =>
+    apiRequest(`/api/training/courses/${id}`, { method: "DELETE" }),
+  trackTrainingClick: (providerId: string, courseId?: string): Promise<{ url: string | null }> =>
+    apiRequest("/api/training/click", {
+      method: "POST",
+      body: JSON.stringify({ providerId, courseId }),
+    }),
+  getAdminTrainingProviders: (status?: string) =>
+    apiRequest(`/api/admin/training/providers${status ? `?status=${encodeURIComponent(status)}` : ""}`),
+  setTrainingProviderStatus: (
+    id: string,
+    body: { status?: string; sponsored?: boolean; sponsoredWeight?: number },
+  ) =>
+    apiRequest(`/api/admin/training/providers/${id}/status`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
   // ── Shareable ARK Report links ──
   createReportShare: (): Promise<{ token: string; path: string }> =>
     apiRequest("/api/report/share", { method: "POST" }),

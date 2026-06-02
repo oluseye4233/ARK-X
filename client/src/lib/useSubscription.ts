@@ -16,6 +16,7 @@ export function useSubscription() {
     canAccessEnterprise: limits.enterpriseAccess,
     canAccessReport: limits.reportAccess,
     canAccessForgeCards: limits.forgeCards,
+    canAccessTraining: (limits as any).trainingProviderAccess === true,
     hasUnlimitedUploads: limits.uploadsPerMonth === -1,
   };
 }

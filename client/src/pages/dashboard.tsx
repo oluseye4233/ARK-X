@@ -6,7 +6,7 @@ import { JnomicsCardList } from "@/components/dashboard/JnomicsCardList";
 import { ArchetypeHandicap } from "@/components/dashboard/ArchetypeHandicap";
 import { TaskHeatmap } from "@/components/dashboard/TaskHeatmap";
 import { VulnerabilityTimeline } from "@/components/dashboard/VulnerabilityTimeline";
-import { Cpu, FileText, Loader2, TrendingUp, Mail, CheckCircle2, Activity, Zap, History, Info, ArrowUpRight, Upload as UploadIcon, BookOpen } from "lucide-react";
+import { Cpu, FileText, Loader2, TrendingUp, Mail, CheckCircle2, Activity, Zap, History, Info, ArrowUpRight, Upload as UploadIcon, BookOpen, GraduationCap } from "lucide-react";
 import { useArkStream, describeEvent } from "@/lib/useArkStream";
 import { Link } from "wouter";
 import { useAuth } from "@/lib/useAuth";
@@ -559,6 +559,29 @@ export default function Dashboard() {
             <LhcsSignal data={lhcs} />
             <FlywheelCard top={cta.top} ranked={cta.ranked} />
           </div>
+
+          {FEATURES.trainingProviders && (
+            <Link
+              href="/training"
+              data-testid="link-training-providers"
+              className="group flex flex-col sm:flex-row sm:items-center justify-between gap-4 glass-card p-6 rounded-xl border border-secondary/30 hover:border-secondary/60 transition-colors"
+            >
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-lg bg-secondary/10 border border-secondary/30">
+                  <GraduationCap className="h-6 w-6 text-secondary" />
+                </div>
+                <div>
+                  <h3 className="font-display font-bold text-base text-secondary uppercase tracking-widest">Suggested Training Providers</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Certifications ranked against your JST-matched upskilling path — close the gaps the engine surfaced.
+                  </p>
+                </div>
+              </div>
+              <span className="inline-flex items-center gap-1.5 text-xs font-mono uppercase tracking-widest text-secondary group-hover:text-secondary/80 transition-colors whitespace-nowrap">
+                Explore providers <ArrowUpRight className="h-3.5 w-3.5" />
+              </span>
+            </Link>
+          )}
 
           {historyData.length > 1 && (
             <div className="glass-card p-6 rounded-xl" data-testid="card-assessment-history">

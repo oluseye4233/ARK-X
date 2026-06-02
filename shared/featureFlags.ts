@@ -57,7 +57,11 @@ export type FeatureKey =
   // ── Primitive Card Verification (Task #55) — subscribers verify the CODEC
   //    primitives on their assessment via a Context-Craft Verification Quest
   //    (trigger: first paid subscriber cohort / verification GA) ──
-  | "cardVerification"; // /api/verification/* + VERIFY button + per-card badge
+  | "cardVerification" // /api/verification/* + VERIFY button + per-card badge
+  // ── Suggested Training Providers (freemium · Explorer tier) — JST-matched
+  //    provider directory + self-serve registration + sponsored/affiliate
+  //    revenue. Launched live as an Explorer-tier freemium feature. ──
+  | "trainingProviders"; // /training + /api/training/* + provider portal
 
 /**
  * MVP defaults — every CLASS C surface is OFF.
@@ -84,6 +88,7 @@ export const MVP_FEATURES: Readonly<Record<FeatureKey, boolean>> = Object.freeze
   revenueGuardrail: false,
   bookCompanion: false,
   cardVerification: true,
+  trainingProviders: true,
 });
 
 /**

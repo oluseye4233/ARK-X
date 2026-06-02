@@ -33,6 +33,9 @@ import AdminCcgeImportPage from "@/pages/admin-ccge-import";
 import BookCompanionPage from "@/pages/book-companion";
 import WorkforcePage from "@/pages/workforce";
 import SharedReportPage from "@/pages/shared-report";
+import TrainingPage from "@/pages/training";
+import TrainingProviderDetailPage from "@/pages/training-provider-detail";
+import TrainingRegisterPage from "@/pages/training-register";
 
 function Router() {
   return (
@@ -75,6 +78,9 @@ function Router() {
         {FEATURES.adminCcgeImport && <Route path="/admin/ccge-import" component={AdminCcgeImportPage} />}
         {FEATURES.bookCompanion && <Route path="/book" component={BookCompanionPage} />}
         {FEATURES.institutionWorkforce && <Route path="/workforce" component={WorkforcePage} />}
+        {FEATURES.trainingProviders && <Route path="/training/register" component={TrainingRegisterPage} />}
+        {FEATURES.trainingProviders && <Route path="/training/p/:slug" component={TrainingProviderDetailPage} />}
+        {FEATURES.trainingProviders && <Route path="/training" component={TrainingPage} />}
 
         {/* Fallback to 404 */}
         <Route component={NotFound} />

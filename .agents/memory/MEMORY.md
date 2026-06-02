@@ -1,7 +1,7 @@
 - [Feature flag layering](feature-flags.md) — flagged-off surfaces must be re-checked inside any always-on parent route (e.g. `/marketplace/:id` swallows reserved CLASS C slugs even when their own `Route` isn't registered).
 - [Route patcher pitfalls](route-patcher.md) — when curl-smoke-testing flagged routes, send the correct HTTP verb; POSTing a GET-only path returns 404 from Express regardless of the flag, masking real coverage gaps.
 - [Revenue guardrail two-gate budget](revenue-guardrail.md) — AI calls need both token-cap AND cost-cap gates; FREE and ENTERPRISE cost caps are absolute, not 10%-derived.
-- [Flywheel cap models](flywheel-cap-models.md) — two distinct cap mechanisms (CCGE assessment-mutation daily-throttle vs SPHINX stateless hard-cap); mirror the sibling the task references, and lock the user row in finalize tx.
+- [Flywheel cap models](flywheel-cap-models.md) — two distinct cap mechanisms (CCGE daily-throttle vs SPHINX hard-cap); mirror the sibling the task references.
 - [Dev DB migration drift](dev-db-migration-drift.md) — merged migrations aren't auto-applied to dev DB; run `psql "$DATABASE_URL" -f migrations/<file>.sql`. Use unique monotonic prefixes; `current_role` is a reserved word.
 - [PDD PDF rendering](pdd-rendering.md) — renderPdd.ts needs PUPPETEER_EXECUTABLE_PATH set to nix chromium; puppeteer can't auto-resolve the browser.
 - [Background procs die between bash calls](bash-background-procs.md) — a `&` server from one bash call is dead in the next; start+test+kill in ONE call, never pkill the workflow.

@@ -67,6 +67,12 @@ import { analyzeSpcListing, SpcAnalysisProTierRequiredError } from "./ai/spcAnal
 import { categoryToPillars, MARKETPLACE_CATEGORIES, type MarketplaceCategory, hiveToTierBadge } from "@shared/schema";
 import { buildGuinProfile, validateEndorsement } from "./guin";
 import { ENDORSEMENT_MAX_LEN } from "@shared/schema";
+import {
+  insertTrainingProviderSchema, insertTrainingCourseSchema,
+  TRAINING_PROVIDER_STATUSES, TRAINING_CATEGORIES, TRAINING_DELIVERY_MODES,
+  type TrainingProviderStatus, type TrainingProvider, type TrainingCourse,
+} from "@shared/schema";
+import { rankTrainingCourses, type PathSignals, type MatchableCourse } from "./trainingMatch";
 import { registerBadgeRoutes } from "./badge/routes";
 import { renderChapterBadgePng } from "./badge/chapter";
 import {
@@ -3751,6 +3757,258 @@ export async function registerRoutes(
     res.json(list);
   });
 
+  // ── Suggested Training Providers (freemium · Explorer tier) ───────────────
+  // Every route is flag-gated (404 when off) AND login-gated. The consumer
+  // surfaces (directory, detail, suggested) additionally require a plan whose
+  // `trainingProviderAccess` limit is true (Explorer / Pro / School / Enterprise).
+  const trainingFeature = requireFeature("trainingProviders");
+
+  function slugifyProvider(name: string): string {
+    return (
+      name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 56) || "provider"
+    );
+  }
+
+  async function isAdminReq(req: any): Promise<boolean> {
+    const adminId = process.env.ADMIN_USER_ID;
+    const uid = currentUserId(req);
+    return !!adminId && !!uid && uid === adminId;
+  }
+
+  // Returns true if the session user's plan unlocks the consumer-facing feature.
+  async function hasTrainingAccess(req: any, res: any): Promise<boolean> {
+    const uid = currentUserId(req);
+    const user = uid ? await storage.getUser(uid) : undefined;
+    const plan = user ? (SUBSCRIPTION_PLANS as any)[user.subscriptionPlan as SubscriptionPlan] : undefined;
+    if (!plan || !plan.limits.trainingProviderAccess) {
+      res.status(403).json({
+        message: "Suggested Training Providers is an Explorer-tier feature.",
+        upgrade: "INDIVIDUAL_EXPLORER",
+      });
+      return false;
+    }
+    return true;
+  }
+
+  // Public DTO — never leak owner ids / internal sponsorship weight to clients.
+  function providerDto(p: TrainingProvider) {
+    return {
+      id: p.id, name: p.name, slug: p.slug, description: p.description,
+      website: p.website, logoUrl: p.logoUrl, regions: p.regions ?? [],
+      deliveryModes: p.deliveryModes ?? [], accreditations: p.accreditations ?? [],
+      sponsored: p.sponsored,
+    };
+  }
+
+  // Browse the approved provider directory (sponsored first, then by recency).
+  app.get("/api/training/providers", trainingFeature, requireAuth, async (req, res) => {
+    if (!(await hasTrainingAccess(req, res))) return;
+    const { region, deliveryMode, q } = req.query as Record<string, string | undefined>;
+    const providers = await storage.listTrainingProviders({ status: "approved", region, deliveryMode, q });
+    const courses = await storage.listTrainingCoursesForProviders(providers.map((p) => p.id));
+    const byProvider = new Map<string, number>();
+    for (const c of courses) byProvider.set(c.providerId, (byProvider.get(c.providerId) ?? 0) + 1);
+    return res.json(
+      providers.map((p) => ({ ...providerDto(p), courseCount: byProvider.get(p.id) ?? 0 })),
+    );
+  });
+
+  // JST-ranked suggestions from the user's latest assessment.
+  app.get("/api/training/suggested", trainingFeature, requireAuth, async (req, res) => {
+    if (!(await hasTrainingAccess(req, res))) return;
+    const uid = currentUserId(req)!;
+    const assessment = await storage.getLatestAssessment(uid);
+    if (!assessment) {
+      return res.status(404).json({ message: "Upload a resume to generate JST-matched training suggestions." });
+    }
+    const [plans, pivots, vectors, providers] = await Promise.all([
+      storage.getUpskillingPlansByAssessment(assessment.id),
+      storage.getPivotsByAssessment(assessment.id),
+      storage.getVectorsByAssessment(assessment.id),
+      storage.listTrainingProviders({ status: "approved" }),
+    ]);
+    const courses = await storage.listTrainingCoursesForProviders(providers.map((p) => p.id));
+    const providerById = new Map(providers.map((p) => [p.id, p]));
+    const matchable: MatchableCourse[] = courses
+      .map((c) => ({ course: c, provider: providerById.get(c.providerId)! }))
+      .filter((m) => !!m.provider);
+    const signals: PathSignals = {
+      upskilling: plans.map((p) => ({ phase: p.phase, type: p.type, title: p.title, description: p.description })),
+      pivots: pivots.map((p) => ({ role: p.role })),
+      vectors: vectors.map((v) => ({ subject: v.subject, score: v.score })),
+      vulnerabilityLevel: assessment.vulnerabilityLevel,
+    };
+    const ranked = rankTrainingCourses(signals, matchable).slice(0, 24);
+    return res.json({
+      assessmentId: assessment.id,
+      results: ranked.map((r) => ({
+        matchScore: r.matchScore,
+        sponsored: r.sponsored,
+        reasons: r.reasons,
+        course: {
+          id: r.course.id, title: r.course.title, description: r.course.description,
+          category: r.course.category, skills: r.course.skills ?? [], level: r.course.level,
+          durationLabel: r.course.durationLabel, priceLabel: r.course.priceLabel,
+          certification: r.course.certification, url: r.course.url,
+        },
+        provider: providerDto(r.provider),
+      })),
+    });
+  });
+
+  // Provider detail + its courses (approved-only for non-owners/non-admins).
+  app.get("/api/training/providers/:slug", trainingFeature, requireAuth, async (req, res) => {
+    if (!(await hasTrainingAccess(req, res))) return;
+    const provider = await storage.getTrainingProviderBySlug(String(req.params.slug));
+    if (!provider) return res.status(404).json({ message: "Provider not found" });
+    const uid = currentUserId(req);
+    const isOwner = !!provider.ownerUserId && provider.ownerUserId === uid;
+    if (provider.status !== "approved" && !isOwner && !(await isAdminReq(req))) {
+      return res.status(404).json({ message: "Provider not found" });
+    }
+    const courses = await storage.listTrainingCoursesByProvider(provider.id);
+    // Best-effort directory view event for affiliate analytics.
+    storage.recordTrainingClick({ providerId: provider.id, userId: uid ?? null, kind: "view" }).catch(() => {});
+    return res.json({ provider: providerDto(provider), courses });
+  });
+
+  // Self-serve provider registration (Explorer-tier+). Lands as `pending`.
+  app.post("/api/training/providers", trainingFeature, requireAuth, async (req, res) => {
+    if (!(await hasTrainingAccess(req, res))) return;
+    const parsed = insertTrainingProviderSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid provider details", errors: parsed.error.flatten() });
+    }
+    const uid = currentUserId(req)!;
+    // Ensure a unique slug derived from the name.
+    let slug = slugifyProvider(parsed.data.name);
+    if (await storage.getTrainingProviderBySlug(slug)) slug = `${slug}-${Date.now().toString(36).slice(-4)}`;
+    const created = await storage.createTrainingProvider({
+      ...parsed.data,
+      slug,
+      ownerUserId: uid,
+      status: "pending",
+    });
+    return res.status(201).json(created);
+  });
+
+  // Owner-scoped edit (resets to pending for re-approval).
+  app.put("/api/training/providers/:id", trainingFeature, requireAuth, async (req, res) => {
+    if (!(await hasTrainingAccess(req, res))) return;
+    const parsed = insertTrainingProviderSchema.partial().safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid provider details", errors: parsed.error.flatten() });
+    }
+    const uid = currentUserId(req)!;
+    const updated = await storage.updateTrainingProvider(String(req.params.id), uid, parsed.data);
+    if (!updated) return res.status(404).json({ message: "Provider not found or not yours" });
+    return res.json(updated);
+  });
+
+  // Providers owned by the session user (for the registration portal dashboard).
+  app.get("/api/training/my-providers", trainingFeature, requireAuth, async (req, res) => {
+    if (!(await hasTrainingAccess(req, res))) return;
+    const uid = currentUserId(req)!;
+    const providers = await storage.listTrainingProvidersByOwner(uid);
+    const courses = await storage.listTrainingCoursesForProviders(providers.map((p) => p.id));
+    const byProvider = new Map<string, TrainingCourse[]>();
+    for (const c of courses) (byProvider.get(c.providerId) ?? byProvider.set(c.providerId, []).get(c.providerId)!).push(c);
+    return res.json(providers.map((p) => ({ ...p, courses: byProvider.get(p.id) ?? [] })));
+  });
+
+  // Add a course to a provider the user owns.
+  app.post("/api/training/providers/:id/courses", trainingFeature, requireAuth, async (req, res) => {
+    if (!(await hasTrainingAccess(req, res))) return;
+    const uid = currentUserId(req)!;
+    const provider = await storage.getTrainingProviderById(String(req.params.id));
+    if (!provider || provider.ownerUserId !== uid) {
+      return res.status(404).json({ message: "Provider not found or not yours" });
+    }
+    const parsed = insertTrainingCourseSchema.omit({ providerId: true }).safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid course details", errors: parsed.error.flatten() });
+    }
+    const created = await storage.createTrainingCourse({ ...parsed.data, providerId: provider.id });
+    return res.status(201).json(created);
+  });
+
+  // Delete a course on a provider the user owns.
+  app.delete("/api/training/courses/:id", trainingFeature, requireAuth, async (req, res) => {
+    if (!(await hasTrainingAccess(req, res))) return;
+    const uid = currentUserId(req)!;
+    const course = await storage.getTrainingCourseById(String(req.params.id));
+    if (!course) return res.status(404).json({ message: "Course not found" });
+    const provider = await storage.getTrainingProviderById(course.providerId);
+    if (!provider || provider.ownerUserId !== uid) {
+      return res.status(404).json({ message: "Course not found or not yours" });
+    }
+    await storage.deleteTrainingCourse(course.id);
+    return res.json({ ok: true });
+  });
+
+  // Affiliate click — records the referral, returns the outbound URL to open.
+  app.post("/api/training/click", trainingFeature, requireAuth, async (req, res) => {
+    if (!(await hasTrainingAccess(req, res))) return;
+    const { providerId, courseId } = req.body ?? {};
+    if (!providerId || typeof providerId !== "string") {
+      return res.status(400).json({ message: "providerId is required" });
+    }
+    const provider = await storage.getTrainingProviderById(providerId);
+    if (!provider || provider.status !== "approved") {
+      return res.status(404).json({ message: "Provider not found" });
+    }
+    let target = provider.website ?? null;
+    if (courseId && typeof courseId === "string") {
+      const course = await storage.getTrainingCourseById(courseId);
+      if (course && course.providerId === provider.id && course.url) target = course.url;
+    }
+    // Only ever hand back http(s) outbound URLs — never `javascript:`/`data:` etc.
+    const safeTarget = (() => {
+      if (!target) return null;
+      try {
+        const u = new URL(target);
+        return u.protocol === "http:" || u.protocol === "https:" ? u.toString() : null;
+      } catch {
+        return null;
+      }
+    })();
+    await storage.recordTrainingClick({
+      providerId: provider.id,
+      courseId: courseId && typeof courseId === "string" ? courseId : null,
+      userId: currentUserId(req) ?? null,
+      kind: "click",
+    });
+    return res.json({ url: safeTarget });
+  });
+
+  // ── Admin: moderate + monetize the directory ──
+  app.get("/api/admin/training/providers", trainingFeature, requireAuth, async (req, res) => {
+    if (!(await isAdminReq(req))) return res.status(403).json({ message: "Forbidden" });
+    const status = (req.query.status as TrainingProviderStatus | undefined) || undefined;
+    const providers = await storage.listTrainingProviders(status ? { status } : {});
+    const stats = await storage.getTrainingClickStats();
+    return res.json(providers.map((p) => ({ ...p, stats: stats[p.id] ?? { views: 0, clicks: 0 } })));
+  });
+
+  app.put("/api/admin/training/providers/:id/status", trainingFeature, requireAuth, async (req, res) => {
+    if (!(await isAdminReq(req))) return res.status(403).json({ message: "Forbidden" });
+    const { status, sponsored, sponsoredWeight } = req.body ?? {};
+    const id = String(req.params.id);
+    let row: TrainingProvider | undefined;
+    if (status) {
+      if (!TRAINING_PROVIDER_STATUSES.includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+      row = await storage.setTrainingProviderStatus(id, status);
+    }
+    if (typeof sponsored === "boolean") {
+      const weight = Math.max(0, Math.min(100, Number(sponsoredWeight ?? 0)));
+      row = await storage.setTrainingProviderSponsorship(id, sponsored, weight);
+    }
+    if (!row) return res.status(404).json({ message: "Provider not found" });
+    return res.json(row);
+  });
+
   app.post("/api/seed", async (_req, res) => {
     if (process.env.NODE_ENV === "production") {
       return res.status(403).json({ message: "Forbidden" });
@@ -4140,6 +4398,79 @@ export async function registerRoutes(
       const jng = await seedJnomicsExpansion();
       const rt = await recomputeRoundtable();
 
+      // ── Suggested Training Providers — admin-curated sample directory ──
+      // Idempotent on slug: skip any provider that already exists.
+      let trainingProvidersSeeded = 0;
+      const providerSeeds: Array<{
+        provider: { name: string; slug: string; description: string; website: string; regions: string[]; deliveryModes: string[]; accreditations: string[]; sponsored: boolean; sponsoredWeight: number };
+        courses: Array<{ title: string; description: string; category: string; skills: string[]; level: string; durationLabel: string; priceLabel: string; certification: string; url: string }>;
+      }> = [
+        {
+          provider: {
+            name: "ForgeWorks AI Academy", slug: "forgeworks-ai-academy",
+            description: "Applied AI & automation certifications for professionals future-proofing against task automation.",
+            website: "https://example.com/forgeworks", regions: ["NA", "Global"],
+            deliveryModes: ["online", "hybrid"], accreditations: ["IEEE", "Junglenomics FORGE"],
+            sponsored: true, sponsoredWeight: 80,
+          },
+          courses: [
+            { title: "Applied Generative AI for Knowledge Workers", description: "Hands-on prompt engineering, LLM workflows and automation design.", category: "ai_adjacent", skills: ["prompt engineering", "llm", "automation", "genai"], level: "Intermediate", durationLabel: "6 weeks", priceLabel: "$1,200", certification: "Certified Applied AI Practitioner", url: "https://example.com/forgeworks/applied-genai" },
+            { title: "Machine Learning Foundations", description: "Core ML modeling, data pipelines and evaluation for non-engineers.", category: "ai_adjacent", skills: ["machine learning", "data", "modeling", "python"], level: "Beginner", durationLabel: "8 weeks", priceLabel: "$1,600", certification: "ML Foundations Certificate", url: "https://example.com/forgeworks/ml-foundations" },
+          ],
+        },
+        {
+          provider: {
+            name: "Meridian Leadership Institute", slug: "meridian-leadership-institute",
+            description: "Executive and people-leadership programs for emerging and mid-career managers.",
+            website: "https://example.com/meridian", regions: ["EMEA", "Global"],
+            deliveryModes: ["in_person", "hybrid"], accreditations: ["AACSB"],
+            sponsored: true, sponsoredWeight: 50,
+          },
+          courses: [
+            { title: "Leading High-Performing Teams", description: "Delegation, coaching and stakeholder management for new managers.", category: "leadership", skills: ["leadership", "coaching", "team", "delegation", "stakeholder"], level: "Intermediate", durationLabel: "5 weeks", priceLabel: "£900", certification: "Certified Team Leader", url: "https://example.com/meridian/leading-teams" },
+            { title: "Strategic Decision-Making", description: "Frameworks for executive strategy and prioritization.", category: "leadership", skills: ["strategy", "executive", "decision-making"], level: "Advanced", durationLabel: "4 weeks", priceLabel: "£1,400", certification: "Strategy Leadership Certificate", url: "https://example.com/meridian/strategy" },
+          ],
+        },
+        {
+          provider: {
+            name: "DataBridge Analytics School", slug: "databridge-analytics-school",
+            description: "Data analytics, visualization and storytelling certifications.",
+            website: "https://example.com/databridge", regions: ["APAC", "Global"],
+            deliveryModes: ["online"], accreditations: ["SFIA Aligned"],
+            sponsored: false, sponsoredWeight: 0,
+          },
+          courses: [
+            { title: "Analytics & Data Storytelling", description: "Turn data into decisions with analysis, reporting and narrative.", category: "analytical", skills: ["analytics", "data", "reporting", "storytelling", "insight"], level: "Intermediate", durationLabel: "7 weeks", priceLabel: "$980", certification: "Certified Data Storyteller", url: "https://example.com/databridge/data-storytelling" },
+            { title: "Business Communication Mastery", description: "Persuasive writing, presentation and stakeholder influence.", category: "communication", skills: ["communication", "writing", "presentation", "influence"], level: "Beginner", durationLabel: "4 weeks", priceLabel: "$640", certification: "Professional Communicator", url: "https://example.com/databridge/communication" },
+          ],
+        },
+        {
+          provider: {
+            name: "Helix Technical College", slug: "helix-technical-college",
+            description: "Cloud, software engineering and cybersecurity bootcamps.",
+            website: "https://example.com/helix", regions: ["NA"],
+            deliveryModes: ["online", "in_person"], accreditations: ["CompTIA Partner"],
+            sponsored: false, sponsoredWeight: 0,
+          },
+          courses: [
+            { title: "Cloud Engineering Bootcamp", description: "Cloud infrastructure, DevOps and systems architecture.", category: "technical", skills: ["cloud", "devops", "infrastructure", "architecture", "systems"], level: "Intermediate", durationLabel: "12 weeks", priceLabel: "$3,200", certification: "Certified Cloud Engineer", url: "https://example.com/helix/cloud" },
+            { title: "Product Innovation Sprint", description: "Design thinking and product discovery for transformation leads.", category: "innovation", skills: ["innovation", "design", "product", "discovery"], level: "Intermediate", durationLabel: "3 weeks", priceLabel: "$1,100", certification: "Product Innovation Certificate", url: "https://example.com/helix/innovation" },
+          ],
+        },
+      ];
+      for (const seed of providerSeeds) {
+        const exists = await storage.getTrainingProviderBySlug(seed.provider.slug);
+        if (exists) continue;
+        const created = await storage.createTrainingProvider({
+          ...seed.provider, ownerUserId: null, status: "approved",
+        });
+        await storage.setTrainingProviderSponsorship(created.id, seed.provider.sponsored, seed.provider.sponsoredWeight);
+        for (const c of seed.courses) {
+          await storage.createTrainingCourse({ ...c, providerId: created.id });
+        }
+        trainingProvidersSeeded += 1;
+      }
+
       return res.json({
         message: "Seed complete",
         ccgeCards: ccge.cards,
@@ -4149,6 +4480,7 @@ export async function registerRoutes(
         jnomicsCards: jng.cards,
         cardSynergies: jng.synergies,
         roundtableSeats: rt.seats.length,
+        trainingProviders: trainingProvidersSeeded,
       });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });

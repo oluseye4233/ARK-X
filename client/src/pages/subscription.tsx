@@ -17,10 +17,12 @@ import {
   Sparkles,
   Shield,
   AlertTriangle,
+  Compass,
 } from "lucide-react";
 
 const PLAN_ICONS: Record<string, typeof User> = {
   INDIVIDUAL_FREE: User,
+  INDIVIDUAL_EXPLORER: Compass,
   INDIVIDUAL_PRO: Crown,
   SCHOOL_STUDENT: GraduationCap,
   ENTERPRISE: Building2,
