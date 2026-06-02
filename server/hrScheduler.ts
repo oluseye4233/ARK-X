@@ -101,7 +101,9 @@ export async function syncConfigNow(config: {
   }
 }
 
-async function tick(): Promise<void> {
+/** One scheduler pass: scan enabled configs and sync the ones that are due and
+ *  API-capable. Exported for tests; not part of the public start/stop surface. */
+export async function tick(): Promise<void> {
   if (ticking) return;
   ticking = true;
   try {

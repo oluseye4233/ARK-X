@@ -4,7 +4,7 @@ import type { HrConnectorAdapter } from "../hrConnectors/types";
 import type { HrConnectorParseResult } from "@shared/schema";
 import { registerHrConnector } from "../hrConnectors";
 import { runConnectorSync } from "../hrConnectors/sync";
-import { isDue, syncConfigNow } from "../hrScheduler";
+import { isDue, syncConfigNow, tick } from "../hrScheduler";
 import { storage } from "../storage";
 
 // ─────────────────────────────────────────────────────────────
@@ -376,5 +376,114 @@ test("syncConfigNow: per-config in-flight guard prevents an overlapping double-r
   } finally {
     recordSpy.mock.restore();
     m.restore();
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// tick — the scheduler's selection loop (Task #49)
+//
+// tick() decides WHICH enabled configs get synced each pass. It must:
+//   • sync enabled, configured, API-capable, due configs
+//   • skip file-only adapters (no fetchRecords)
+//   • skip adapters reporting isConfigured() === false
+//   • skip configs that aren't due yet
+//   • never run two passes concurrently (the module-level `ticking` guard)
+// We drive it with fake adapters in the shared registry + a mocked
+// storage.getEnabledConnectorConfigs — no real DB or HR API.
+// ─────────────────────────────────────────────────────────────
+
+test("tick: syncs only enabled, configured, API-capable, due configs and skips the rest", async () => {
+  const now = Date.now();
+  const configs = [
+    // due (never synced) + API + configured → SHOULD sync
+    { id: "cfg-due", institution: "Acme U", adapter: "sched_ok", lastSyncedAt: null, intervalMinutes: 60 },
+    // API + configured but synced 10m ago, interval 60 → NOT due, skip
+    {
+      id: "cfg-not-due",
+      institution: "Acme U",
+      adapter: "sched_ok",
+      lastSyncedAt: new Date(now - 10 * MIN),
+      intervalMinutes: 60,
+    },
+    // file-only adapter has no fetchRecords → skip
+    { id: "cfg-file-only", institution: "Acme U", adapter: "sched_file_only", lastSyncedAt: null, intervalMinutes: 60 },
+    // adapter reports isConfigured() === false → skip
+    {
+      id: "cfg-unconfigured",
+      institution: "Acme U",
+      adapter: "sched_unconfigured",
+      lastSyncedAt: null,
+      intervalMinutes: 60,
+    },
+    // unknown adapter (getHrConnector → undefined) → skip
+    { id: "cfg-unknown", institution: "Acme U", adapter: "does_not_exist", lastSyncedAt: null, intervalMinutes: 60 },
+  ];
+  const getSpy = mock.method(storage, "getEnabledConnectorConfigs", async () => configs as any);
+  const m = mockSyncStorage();
+  const recordSpy = mockRecord();
+  try {
+    await tick();
+    // exactly one config synced: only cfg-due met every gate
+    assert.equal(recordSpy.mock.callCount(), 1, "only the due, configured, API-capable config should sync");
+    assert.equal(recordSpy.mock.calls[0].arguments[0], "cfg-due");
+    const payload = recordSpy.mock.calls[0].arguments[1] as any;
+    assert.equal(payload.status, "success");
+  } finally {
+    recordSpy.mock.restore();
+    m.restore();
+    getSpy.mock.restore();
+  }
+});
+
+test("tick: a no-config pass is a clean no-op (nothing synced)", async () => {
+  const getSpy = mock.method(storage, "getEnabledConnectorConfigs", async () => [] as any);
+  const recordSpy = mockRecord();
+  try {
+    await tick();
+    assert.equal(getSpy.mock.callCount(), 1);
+    assert.equal(recordSpy.mock.callCount(), 0);
+  } finally {
+    recordSpy.mock.restore();
+    getSpy.mock.restore();
+  }
+});
+
+test("tick: overlapping-tick guard makes a second concurrent tick a no-op", async () => {
+  // Gate getEnabledConnectorConfigs so the first tick is still mid-flight (and
+  // has already flipped `ticking` true) when the second tick is invoked.
+  let releaseConfigs: () => void = () => {};
+  const gate = new Promise<void>((res) => {
+    releaseConfigs = res;
+  });
+  const getSpy = mock.method(storage, "getEnabledConnectorConfigs", async () => {
+    await gate;
+    return [] as any;
+  });
+  const recordSpy = mockRecord();
+  try {
+    const first = tick(); // runs to the first await, sets ticking = true
+    const second = tick(); // sees ticking === true → immediate no-op
+    await second;
+    assert.equal(getSpy.mock.callCount(), 1, "second tick must not even reach storage");
+    releaseConfigs();
+    await first;
+    assert.equal(getSpy.mock.callCount(), 1, "still only the first tick queried configs");
+    assert.equal(recordSpy.mock.callCount(), 0);
+  } finally {
+    recordSpy.mock.restore();
+    getSpy.mock.restore();
+  }
+});
+
+test("tick: clears the `ticking` guard so a later pass can run again", async () => {
+  // After the previous tests, ticking must have been reset in `finally`. Run two
+  // sequential passes; both should query storage (proving the guard released).
+  const getSpy = mock.method(storage, "getEnabledConnectorConfigs", async () => [] as any);
+  try {
+    await tick();
+    await tick();
+    assert.equal(getSpy.mock.callCount(), 2, "sequential ticks should each query configs");
+  } finally {
+    getSpy.mock.restore();
   }
 });
