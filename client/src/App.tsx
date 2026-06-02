@@ -41,6 +41,7 @@ function Router() {
         <Route path="/" component={Home} />
         <Route path="/free" component={FreeAssessment} />
         <Route path="/login" component={LoginPage} />
+        <Route path="/signup" component={LoginPage} />
         <Route path="/upload" component={UploadPage} />
         <Route path="/assessment" component={AssessmentPage} />
         <Route path="/dashboard" component={Dashboard} />

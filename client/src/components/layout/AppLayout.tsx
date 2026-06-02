@@ -296,7 +296,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   // otherwise we'd open a doomed EventSource against a flagged-off endpoint.
   useNotificationStream(!!user?.id && FEATURES.notifications, undefined, onSeat);
 
-  if (location === '/login') {
+  if (location === '/login' || location === '/signup') {
     return <main className="min-h-screen bg-background text-foreground font-sans">{children}</main>;
   }
 

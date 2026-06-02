@@ -1,9 +1,10 @@
 import { Link } from "wouter";
-import { ArrowRight, ShieldAlert, Target, Zap, Crown, GraduationCap, User, Building2, Check, Upload, BarChart3, Compass, PlayCircle, Sparkles, FileText, Download } from "lucide-react";
+import { ArrowRight, ShieldAlert, Target, Zap, Crown, GraduationCap, User, Building2, Check, Upload, BarChart3, Compass, PlayCircle, Sparkles, FileText, Download, LogIn, UserPlus } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { SUBSCRIPTION_PLANS } from "@shared/schema";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/useAuth";
 import heroBgVideo from "@assets/hero_wave_dark_compressed.mp4";
 import masterclassVideo from "@assets/ark_onecraft_masterclass.mp4";
 import masterclassPoster from "@assets/ark_onecraft_masterclass_poster.jpg";
@@ -39,8 +40,34 @@ function ScarcityBadge() {
 }
 
 export default function Home() {
+  const { user, isLoading } = useAuth();
   return (
     <>
+      {/* Top-right auth controls — only shown to logged-out visitors so the
+          landing page offers a clear path to Log In / Sign Up. Gated on the
+          auth query settling to avoid a flash for signed-in users. */}
+      {!isLoading && !user && (
+        <div
+          className="absolute top-4 right-4 sm:top-6 sm:right-6 z-30 flex items-center gap-2 sm:gap-3"
+          data-testid="landing-auth-buttons"
+        >
+          <Link
+            href="/login"
+            data-testid="button-landing-login"
+            className="inline-flex items-center gap-2 h-10 px-4 sm:px-5 rounded-none border border-primary/40 bg-background/60 text-primary font-mono uppercase tracking-wider text-xs font-bold backdrop-blur-sm hover:bg-primary/10 hover:border-primary transition-all"
+          >
+            <LogIn className="h-4 w-4" /> Log In
+          </Link>
+          <Link
+            href="/signup"
+            data-testid="button-landing-signup"
+            className="inline-flex items-center gap-2 h-10 px-4 sm:px-5 rounded-none neon-border bg-primary text-primary-foreground font-mono uppercase tracking-wider text-xs font-bold hover:bg-primary/90 hover:scale-[1.03] transition-all shadow-[0_0_20px_hsl(var(--primary)/0.5)]"
+          >
+            <UserPlus className="h-4 w-4" /> Sign Up
+          </Link>
+        </div>
+      )}
+
       {/* Hero background video — fixed full-bleed, muted/looping, with a dark
           tint overlay so foreground text stays legible against any frame. */}
       <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none" data-testid="hero-bg-video-wrap" aria-hidden="true">
