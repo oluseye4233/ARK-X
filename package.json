@@ -13,7 +13,8 @@
     "test:scoring": "tsx --test server/__tests__/scoring.test.ts",
     "test:revenue": "tsx --test server/__tests__/revenueGuardrail.test.ts",
     "test:merge": "tsx --test server/__tests__/cumulativeMerge.test.ts",
-    "test:hr-connectors": "tsx --test server/__tests__/hrConnectors.test.ts"
+    "test:hr-connectors": "tsx --test server/__tests__/hrConnectors.test.ts",
+    "test:hr-test-connection": "tsx --test server/__tests__/workforceTestConnection.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",

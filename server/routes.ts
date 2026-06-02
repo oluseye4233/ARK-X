@@ -15,6 +15,7 @@ import { storage } from "./storage";
 import { analyzeResume } from "./resumeAnalyzer";
 import { requireAuth, requireSelf, requireInstructor, requireInstitutionAdmin, currentUserId, loginSession } from "./auth";
 import { getHrConnector, listHrConnectors } from "./hrConnectors";
+import { runHrConnectionTest } from "./workforceConnectionTest";
 import { HR_FIELD_KEYS, HR_FIELD_LABELS } from "@shared/schema";
 import { requireFeature, getResolvedFeatures, isFeatureEnabled } from "./featureFlags";
 import { STAGE } from "@shared/featureFlags";
@@ -1979,64 +1980,37 @@ export async function registerRoutes(
   app.post("/api/workforce/test-connection", ...workforceGate, async (req, res) => {
     try {
       const adapterKey = (req.body?.adapter as string) || "";
-      const adapter = getHrConnector(adapterKey);
-      if (!adapter) {
-        return res.status(400).json({ message: `Unknown HR connector "${adapterKey}".` });
-      }
-      if (!adapter.fetchRecords) {
-        return res.status(400).json({
-          message: `The "${adapter.label}" connector does not support API sync. Use the file import instead.`,
-        });
-      }
-      if (adapter.isConfigured && !adapter.isConfigured()) {
-        const missing = (adapter.requiredSecrets ?? []).join(", ");
-        return res.status(400).json({
-          message: `The "${adapter.label}" connector is not configured. Ask an admin to set its credentials${missing ? ` (${missing})` : ""}.`,
-        });
-      }
+      // The read-only core (extracted + unit-tested in workforceConnectionTest.ts)
+      // does adapter lookup, validation, and the live fetch. It NEVER writes to
+      // staff_records or creates an import batch — that invariant is locked in by
+      // server/__tests__/workforceTestConnection.test.ts.
+      const { status, body } = await runHrConnectionTest(adapterKey);
 
-      const institution = req.institutionScope!;
-      const testedBy = currentUserId(req)!;
-
-      // Pull + normalize from the live API to confirm credentials + reachability.
-      // fetchRecords throws on auth/network failure; surface as 502 (upstream).
-      let result;
-      try {
-        result = await adapter.fetchRecords();
-      } catch (err: any) {
-        console.error(`[/api/workforce/test-connection] ${adapterKey} fetch failed:`, err);
-        const message = err?.message ?? `${adapter.label} connection test failed.`;
-        // Persist the failure so the card reflects connector health on next load.
+      // Persist connector health for the success (200) and upstream-failure (502)
+      // outcomes so the connector card reflects the last test on next load. The
+      // 400 validation cases (unknown / file-only / unconfigured) are request
+      // errors rather than connector-health signals, so they are not recorded.
+      if (status === 200) {
         await storage.recordConnectorTest({
-          institution,
+          institution: req.institutionScope!,
+          adapter: adapterKey,
+          ok: true,
+          totalRows: body.totalRows as number,
+          validRows: body.validRows as number,
+          errorRows: body.errorRows as number,
+          testedBy: currentUserId(req)!,
+        });
+      } else if (status === 502) {
+        await storage.recordConnectorTest({
+          institution: req.institutionScope!,
           adapter: adapterKey,
           ok: false,
-          message,
-          testedBy,
+          message: body.message as string,
+          testedBy: currentUserId(req)!,
         });
-        return res.status(502).json({ ok: false, message });
       }
 
-      // Read-only: deliberately no createImportBatch / upsertStaffRecords here.
-      const validRows = result.records.length;
-      const errorRows = result.errors.length;
-      await storage.recordConnectorTest({
-        institution,
-        adapter: adapterKey,
-        ok: true,
-        totalRows: result.totalRows,
-        validRows,
-        errorRows,
-        testedBy,
-      });
-      return res.json({
-        ok: true,
-        adapter: result.adapter,
-        label: adapter.label,
-        totalRows: result.totalRows,
-        validRows,
-        errorRows,
-      });
+      return res.status(status).json(body);
     } catch (err: any) {
       console.error("[/api/workforce/test-connection] error:", err);
       return res.status(500).json({ message: err.message });
