@@ -397,7 +397,9 @@ export const ArkReportSheet = forwardRef<HTMLDivElement, ArkReportSheetProps>(fu
           {/* Vulnerability */}
           <MetricCard title="AI Vulnerability" meaning="How exposed your current work is to automation within 24 months." testId="card-report-vuln">
             <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
-              <span style={{ fontSize: 30, fontWeight: 800, color: vInfo.color, textTransform: "uppercase" }}>{vInfo.name}</span>
+              <span style={{ fontSize: 30, fontWeight: 800, color: vInfo.color, textTransform: "uppercase" }}>
+                Level {vuln}: {vInfo.name}
+              </span>
             </div>
             <div style={{ display: "flex", gap: 4 }}>
               {[0, 1, 2, 3, 4].map((i) => (
