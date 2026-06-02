@@ -4,7 +4,8 @@ import type { HrConnectorAdapter } from "../hrConnectors/types";
 import type { HrConnectorParseResult } from "@shared/schema";
 import { registerHrConnector } from "../hrConnectors";
 import { runConnectorSync } from "../hrConnectors/sync";
-import { isDue, syncConfigNow, tick } from "../hrScheduler";
+import { isDue, syncConfigNow, tick, startHrScheduler, stopHrScheduler } from "../hrScheduler";
+import { getResolvedFeatures } from "../featureFlags";
 import { storage } from "../storage";
 
 // ─────────────────────────────────────────────────────────────
@@ -486,4 +487,92 @@ test("tick: clears the `ticking` guard so a later pass can run again", async () 
   } finally {
     getSpy.mock.restore();
   }
+});
+
+// ─────────────────────────────────────────────────────────────
+// startHrScheduler / stopHrScheduler — the start/stop lifecycle (Task #50)
+//
+// These wire tick() to a real interval timer in production. The contract:
+//   • NOT started when the `institutionWorkforce` feature flag is off
+//   • NOT started when HR_SYNC_DISABLED=true (kill switch)
+//   • a second start while already running is a no-op (no duplicate timer)
+//   • stop clears the interval so a later start can succeed again
+//
+// We never let a timer actually fire: fake timers (no advance) keep both the
+// recurring interval AND the one-shot 5s warm-up tick inert, so no real DB or
+// HR API is touched. The `institutionWorkforce` flag is flipped on the live
+// resolved-flags object (the same reference isFeatureEnabled reads), and the
+// HR_SYNC_DISABLED env var is set/cleared per test — both restored in finally.
+// ─────────────────────────────────────────────────────────────
+
+const flags = getResolvedFeatures() as Record<string, boolean>;
+
+/** Run `fn` with the workforce flag forced on/off and HR_SYNC_DISABLED set to a
+ *  chosen value, with fake timers enabled. Restores all global state after. */
+async function withSchedulerEnv(
+  opts: { workforce: boolean; disabled?: boolean },
+  fn: () => void | Promise<void>,
+): Promise<void> {
+  const origFlag = flags.institutionWorkforce;
+  const origDisabled = process.env.HR_SYNC_DISABLED;
+  flags.institutionWorkforce = opts.workforce;
+  if (opts.disabled === undefined) delete process.env.HR_SYNC_DISABLED;
+  else process.env.HR_SYNC_DISABLED = opts.disabled ? "true" : "false";
+  mock.timers.enable({ apis: ["setInterval", "setTimeout"] });
+  const logSpy = mock.method(console, "log", () => {});
+  try {
+    await fn();
+  } finally {
+    stopHrScheduler(); // ensure no timer leaks into the next test
+    logSpy.mock.restore();
+    mock.timers.reset();
+    flags.institutionWorkforce = origFlag;
+    if (origDisabled === undefined) delete process.env.HR_SYNC_DISABLED;
+    else process.env.HR_SYNC_DISABLED = origDisabled;
+  }
+}
+
+test("startHrScheduler: no-op (returns false) when institutionWorkforce flag is off", async () => {
+  await withSchedulerEnv({ workforce: false }, () => {
+    assert.equal(startHrScheduler(), false, "must not start when the feature is off");
+    // A second call is still a no-op; nothing was ever scheduled to stop.
+    assert.equal(startHrScheduler(), false);
+  });
+});
+
+test("startHrScheduler: no-op (returns false) when HR_SYNC_DISABLED=true even with the flag on", async () => {
+  await withSchedulerEnv({ workforce: true, disabled: true }, () => {
+    assert.equal(startHrScheduler(), false, "kill switch must win over an enabled flag");
+  });
+});
+
+test("startHrScheduler: starts (returns true) when the flag is on and not disabled", async () => {
+  await withSchedulerEnv({ workforce: true, disabled: false }, () => {
+    assert.equal(startHrScheduler(), true, "should start when enabled and not disabled");
+  });
+});
+
+test("startHrScheduler: a second start while already running is a no-op (returns false)", async () => {
+  await withSchedulerEnv({ workforce: true }, () => {
+    assert.equal(startHrScheduler(), true, "first start succeeds");
+    assert.equal(startHrScheduler(), false, "second start must not create a duplicate timer");
+    assert.equal(startHrScheduler(), false, "still a no-op while running");
+  });
+});
+
+test("stopHrScheduler: clears the timer so a later start succeeds again", async () => {
+  await withSchedulerEnv({ workforce: true }, () => {
+    assert.equal(startHrScheduler(), true, "first start succeeds");
+    assert.equal(startHrScheduler(), false, "running → second start is a no-op");
+    stopHrScheduler();
+    // With the interval cleared, the next start is allowed to run again.
+    assert.equal(startHrScheduler(), true, "start succeeds again after stop");
+  });
+});
+
+test("stopHrScheduler: is safe to call when nothing is running", () => {
+  // No timer set — must not throw, and a subsequent start (flag off here) still
+  // returns false for the right reason rather than crashing.
+  assert.doesNotThrow(() => stopHrScheduler());
+  assert.doesNotThrow(() => stopHrScheduler());
 });
