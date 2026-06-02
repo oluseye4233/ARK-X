@@ -81,6 +81,7 @@ export interface IStorage {
 
   upsertAssessmentSource(userId: string, source: AssessmentSourceKey, content: string): Promise<AssessmentSource>;
   getAssessmentSources(userId: string): Promise<AssessmentSource[]>;
+  deleteAssessmentSource(userId: string, source: AssessmentSourceKey): Promise<boolean>;
 
   createGuestAssessment(row: InsertGuestAssessment): Promise<GuestAssessment>;
   countGuestAssessments(): Promise<number>;
@@ -339,6 +340,22 @@ export class DatabaseStorage implements IStorage {
 
   async getAssessmentSources(userId: string): Promise<AssessmentSource[]> {
     return db.select().from(assessmentSources).where(eq(assessmentSources.userId, userId));
+  }
+
+  async deleteAssessmentSource(
+    userId: string,
+    source: AssessmentSourceKey,
+  ): Promise<boolean> {
+    const deleted = await db
+      .delete(assessmentSources)
+      .where(
+        and(
+          eq(assessmentSources.userId, userId),
+          eq(assessmentSources.source, source),
+        ),
+      )
+      .returning({ id: assessmentSources.id });
+    return deleted.length > 0;
   }
 
   async getLatestAssessment(userId: string): Promise<Assessment | undefined> {

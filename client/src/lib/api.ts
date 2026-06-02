@@ -361,6 +361,11 @@ export const api = {
     sourcesUsed: string[];
   }> => apiRequest("/api/assessment/sources"),
 
+  // Drop a contributed source; server re-runs the cumulative merge over the
+  // remaining sources, updating sourcesUsed + completeness + ARK.
+  removeAssessmentSource: (source: string) =>
+    apiRequest(`/api/assessment/sources/${source}`, { method: "DELETE" }),
+
   // ── M5 — Matrix Forge Lab (.docx) ──
   runForgeLab: async (
     file: File,

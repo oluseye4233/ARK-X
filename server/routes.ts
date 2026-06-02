@@ -1019,6 +1019,35 @@ export async function registerRoutes(
     }
   });
 
+  // Remove one contributed source then rebuild the user's single evolving ARK
+  // profile from whatever sources remain — the inverse of contributeSource.
+  // Lets a user drop a stale/incorrect input (e.g. an old resume) and have the
+  // report, sourcesUsed attribution, completeness meter, and ARK re-derive
+  // accordingly. Removing the last source re-runs the merge over an empty input
+  // so the profile honestly reflects that no sources feed it anymore.
+  app.delete("/api/assessment/sources/:source", requireAuth, async (req, res) => {
+    try {
+      const source = req.params.source as AssessmentSourceKey;
+      if (!(ASSESSMENT_SOURCES as readonly string[]).includes(source)) {
+        return res.status(400).json({ message: "Invalid assessment source." });
+      }
+      const userId = currentUserId(req)!;
+      const removed = await storage.deleteAssessmentSource(userId, source);
+      if (!removed) {
+        return res.status(404).json({ message: "That source hasn't been contributed." });
+      }
+      const payload = await runCumulativeAssessment(
+        userId,
+        source,
+        `cumulative:remove:${source}`,
+      );
+      return res.json({ ...payload, removed: source });
+    } catch (err: any) {
+      console.error("[/api/assessment/sources DELETE] error:", err);
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
   // Persist one source's raw text then rebuild the user's single evolving ARK
   // profile from EVERY source they've contributed. This is what makes the three
   // intake methods cumulative rather than mutually exclusive: re-submitting one
@@ -1040,6 +1069,7 @@ export async function registerRoutes(
   async function runCumulativeAssessment(
     userId: string,
     primarySource: AssessmentSourceKey,
+    sourceTagOverride?: string,
   ): Promise<any> {
       const user = await storage.getUser(userId);
       const certLevel = (user?.contextCraftCertLevel as ContextCraftLevel) || "NONE";
@@ -1051,7 +1081,7 @@ export async function registerRoutes(
       // regardless of the order sources were contributed in.
       const sourcesUsed = canonicalSourcesUsed(present);
       const completeness = computeCompleteness(present);
-      const sourceTag = `cumulative:${primarySource}`;
+      const sourceTag = sourceTagOverride ?? `cumulative:${primarySource}`;
 
       const combinedText = buildCombinedText(sourceRows);
 

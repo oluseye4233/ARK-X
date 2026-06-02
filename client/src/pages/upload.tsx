@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
-import { FileText, ClipboardList, Linkedin, CheckCircle2, Circle, ArrowRight, Layers } from "lucide-react";
+import { FileText, ClipboardList, Linkedin, CheckCircle2, Circle, ArrowRight, Layers, Sparkles, Trash2, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { ResumeUploader } from "@/components/upload/ResumeUploader";
 import { SelfAssessmentForm } from "@/components/upload/SelfAssessmentForm";
@@ -17,12 +17,38 @@ const MODES: Array<{ key: IntakeMode; label: string; sub: string; icon: React.El
   { key: "linkedin", label: "LinkedIn", sub: "Paste Profile", icon: Linkedin },
 ];
 
+// Icons keyed by source so the status grid can render the archetype quiz card
+// (contributed elsewhere) alongside the three primary intake modes.
+const SOURCE_ICONS: Record<string, React.ElementType> = {
+  resume: FileText,
+  self: ClipboardList,
+  linkedin: Linkedin,
+  quiz: Sparkles,
+};
+
 interface SourceStatus {
   source: string;
   label: string;
   present: boolean;
   primary: boolean;
   updatedAt: string | null;
+}
+
+// Human-friendly "last contributed" label. Recent times read as relative
+// ("just now", "3h ago"); older ones fall back to an absolute date.
+function formatUpdated(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const diffMs = Date.now() - d.getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 export default function UploadPage() {
@@ -32,6 +58,7 @@ export default function UploadPage() {
   const [sources, setSources] = useState<SourceStatus[]>([]);
   const [completeness, setCompleteness] = useState(0);
   const [loaded, setLoaded] = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
 
   const refreshSources = useCallback(async () => {
     if (!user) return;
@@ -57,10 +84,31 @@ export default function UploadPage() {
     refreshSources();
   }, [refreshSources]);
 
+  // Drop a source the user no longer wants. The server re-runs the cumulative
+  // merge over the remaining sources, so we just refresh the meter afterwards.
+  const handleRemove = useCallback(
+    async (key: string) => {
+      setRemoving(key);
+      try {
+        await api.removeAssessmentSource(key);
+        await refreshSources();
+      } catch {
+        // Non-fatal — leave the card as-is if removal fails.
+      } finally {
+        setRemoving(null);
+      }
+    },
+    [refreshSources],
+  );
+
   const statusFor = (key: IntakeMode): SourceStatus | undefined =>
     sources.find((s) => s.source === key);
 
   const anyContributed = sources.some((s) => s.primary && s.present);
+
+  // Primary intake cards always show; the archetype quiz card only appears once
+  // it's been contributed (it's added from the Context Craft flow, not here).
+  const statusCards = sources.filter((s) => s.primary || s.present);
 
   return (
     <div className="w-full max-w-4xl mx-auto min-h-[80vh] flex flex-col justify-center py-8">
@@ -106,34 +154,56 @@ export default function UploadPage() {
         </div>
 
         <div className="grid grid-cols-3 gap-2">
-          {MODES.map((m) => {
-            const st = statusFor(m.key);
-            const done = !!st?.present;
-            const Icon = m.icon;
+          {statusCards.map((st) => {
+            const done = st.present;
+            const Icon = SOURCE_ICONS[st.source] ?? FileText;
+            const updated = formatUpdated(st.updatedAt);
+            const isRemoving = removing === st.source;
             return (
               <div
-                key={m.key}
-                data-testid={`source-status-${m.key}`}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left ${
+                key={st.source}
+                data-testid={`source-status-${st.source}`}
+                className={`flex items-start gap-2 px-3 py-2 rounded-lg border text-left ${
                   done
                     ? "border-primary/40 bg-primary/5"
                     : "border-white/10 bg-white/[0.02]"
                 }`}
               >
                 {done ? (
-                  <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />
+                  <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                 ) : (
-                  <Circle className="w-4 h-4 text-muted-foreground/50 flex-shrink-0" />
+                  <Circle className="w-4 h-4 text-muted-foreground/50 flex-shrink-0 mt-0.5" />
                 )}
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className={`font-display text-[11px] font-semibold uppercase tracking-wider truncate ${done ? "text-white" : "text-muted-foreground"}`}>
-                    {m.label}
+                    {st.label}
                   </p>
-                  <p className="font-mono text-[9px] uppercase tracking-widest opacity-70 truncate">
-                    {done ? "Added" : "Not added"}
+                  <p
+                    className="font-mono text-[9px] uppercase tracking-widest opacity-70 truncate"
+                    data-testid={`text-source-updated-${st.source}`}
+                  >
+                    {done ? (updated ? `Updated ${updated}` : "Added") : "Not added"}
                   </p>
                 </div>
-                <Icon className={`w-4 h-4 ml-auto flex-shrink-0 ${done ? "text-primary/70" : "text-muted-foreground/40"}`} />
+                {done ? (
+                  <button
+                    type="button"
+                    onClick={() => handleRemove(st.source)}
+                    disabled={isRemoving}
+                    aria-label={`Remove ${st.label}`}
+                    title={`Remove ${st.label}`}
+                    data-testid={`button-remove-source-${st.source}`}
+                    className="flex-shrink-0 mt-0.5 text-muted-foreground/60 hover:text-destructive transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isRemoving ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
+                  </button>
+                ) : (
+                  <Icon className="w-4 h-4 flex-shrink-0 mt-0.5 text-muted-foreground/40" />
+                )}
               </div>
             );
           })}
