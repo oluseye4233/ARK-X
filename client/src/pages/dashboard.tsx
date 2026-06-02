@@ -112,6 +112,7 @@ export default function Dashboard() {
   const [pillars, setPillars] = useState<CcmiPillarData | null>(null);
   const [lhcs, setLhcs] = useState<LhcsData | null>(null);
   const [cta, setCta] = useState<{ top: FlywheelCta | null; ranked: FlywheelCta[] }>({ top: null, ranked: [] });
+  const [activeTab, setActiveTab] = useState("profile");
   const { snapshot, events, pulse, lastIdentity } = useArkStream(!!user);
 
   const loadIdentity = () => {
@@ -317,6 +318,58 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Everything below the title is one set of explorable tabs. The tab bar
+          sits at the very top so subscribers can't miss it; unexplored tabs
+          throb in their accent hue until clicked, and each one explains itself
+          on hover. Hero + live strip stay visible across all three tabs. */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-8">
+        <TabsList className="w-full grid grid-cols-3 gap-2 bg-transparent border-0 h-auto p-0" data-testid="tabs-dashboard">
+          <Tooltip delayDuration={150}>
+            <TooltipTrigger asChild>
+              <TabsTrigger
+                value="profile"
+                data-testid="tab-profile"
+                className={`font-mono text-xs sm:text-sm uppercase tracking-widest py-3 rounded-md border transition-colors data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:border-primary/50 data-[state=inactive]:text-muted-foreground ${activeTab !== "profile" ? "animate-throb-glow !text-primary bg-primary/10 border-primary/50" : ""}`}
+              >
+                1. Your Profile
+              </TabsTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-xs bg-card text-foreground border border-primary/30 leading-snug">
+              Your ARK identity at a glance — score breakdown (JST + CCMI pillars), your archetype handicap, and the FORGE primitive cards matched to you.
+            </TooltipContent>
+          </Tooltip>
+
+          <Tooltip delayDuration={150}>
+            <TooltipTrigger asChild>
+              <TabsTrigger
+                value="risk"
+                data-testid="tab-risk"
+                className={`font-mono text-xs sm:text-sm uppercase tracking-widest py-3 rounded-md border transition-colors data-[state=active]:bg-destructive/15 data-[state=active]:text-destructive data-[state=active]:border-destructive/50 data-[state=inactive]:text-muted-foreground ${activeTab !== "risk" ? "animate-throb-glow-crimson !text-destructive bg-destructive/10 border-destructive/50" : ""}`}
+              >
+                2. Your Risk
+              </TabsTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-xs bg-card text-foreground border border-destructive/30 leading-snug">
+              Your AI-automation exposure — vulnerability level, a task-by-task automation heatmap, and the timeline of when your role is most at risk.
+            </TooltipContent>
+          </Tooltip>
+
+          <Tooltip delayDuration={150}>
+            <TooltipTrigger asChild>
+              <TabsTrigger
+                value="path"
+                data-testid="tab-path"
+                className={`font-mono text-xs sm:text-sm uppercase tracking-widest py-3 rounded-md border transition-colors data-[state=active]:bg-secondary/15 data-[state=active]:text-secondary data-[state=active]:border-secondary/50 data-[state=inactive]:text-muted-foreground ${activeTab !== "path" ? "animate-throb-glow-emerald !text-secondary bg-secondary/10 border-secondary/50" : ""}`}
+              >
+                3. Your Path
+              </TabsTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-xs bg-card text-foreground border border-secondary/30 leading-snug">
+              Your forward plan — readiness signal, your highest-leverage next move, suggested training providers, and your score history.
+            </TooltipContent>
+          </Tooltip>
+        </TabsList>
+
       {/* Hero: the single answer */}
       <div className="glass-card p-6 md:p-8 rounded-xl border border-primary/40" data-testid="card-hero-summary">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
@@ -470,32 +523,6 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-
-      {/* Tabbed content: progressively disclose the supporting visuals */}
-      <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="w-full grid grid-cols-3 bg-card/60 border border-white/10 h-auto p-1" data-testid="tabs-dashboard">
-          <TabsTrigger
-            value="profile"
-            data-testid="tab-profile"
-            className="font-mono text-xs uppercase tracking-widest py-2.5 data-[state=active]:bg-primary/15 data-[state=active]:text-primary"
-          >
-            Your Profile
-          </TabsTrigger>
-          <TabsTrigger
-            value="risk"
-            data-testid="tab-risk"
-            className="font-mono text-xs uppercase tracking-widest py-2.5 data-[state=active]:bg-destructive/15 data-[state=active]:text-destructive"
-          >
-            Your Risk
-          </TabsTrigger>
-          <TabsTrigger
-            value="path"
-            data-testid="tab-path"
-            className="font-mono text-xs uppercase tracking-widest py-2.5 data-[state=active]:bg-secondary/15 data-[state=active]:text-secondary"
-          >
-            Your Path
-          </TabsTrigger>
-        </TabsList>
 
         {/* PROFILE — who you are: identity, scores breakdown, archetype, primitives */}
         <TabsContent value="profile" className="mt-6 space-y-8 focus-visible:outline-none" data-testid="tab-content-profile">

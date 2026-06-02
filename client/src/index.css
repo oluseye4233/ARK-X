@@ -194,6 +194,39 @@
     animation: throb-glow-emerald 2.4s ease-in-out infinite;
   }
 
+  /* Crimson variant for the "Your Risk" dashboard tab — same throb rhythm in the
+     destructive hue so an unexplored risk tab pulses for attention. */
+  @keyframes throb-glow-crimson {
+    0%, 100% {
+      transform: scale(1);
+      box-shadow:
+        0 0 14px hsl(346 87% 43% / 0.45),
+        0 0 28px hsl(346 87% 43% / 0.20),
+        inset 0 0 8px hsl(346 87% 43% / 0.25);
+    }
+    50% {
+      transform: scale(1.03);
+      box-shadow:
+        0 0 26px hsl(346 87% 43% / 0.80),
+        0 0 52px hsl(346 87% 43% / 0.40),
+        inset 0 0 14px hsl(346 87% 43% / 0.40);
+    }
+  }
+  .animate-throb-glow-crimson {
+    animation: throb-glow-crimson 2.5s ease-in-out infinite;
+  }
+
+  /* Respect users who opt out of motion: drop the continuous throb pulses but
+     keep the accent border/tint so the tabs still read as explorable. */
+  @media (prefers-reduced-motion: reduce) {
+    .animate-throb-glow,
+    .animate-throb-glow-magenta,
+    .animate-throb-glow-emerald,
+    .animate-throb-glow-crimson {
+      animation: none;
+    }
+  }
+
   /* Slower, softer outer ping for the surrounding aura halo. */
   @keyframes ping-slow {
     0% { transform: scale(1); opacity: 0.55; }
