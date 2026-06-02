@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, forwardRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
@@ -15,8 +15,32 @@ import {
   Layers,
   TrendingUp,
   Download,
+  FileText,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { exportReportPdf } from "@/lib/arkReportExport";
+import atandaLogo from "@assets/WEB_LEARNING_SYSTEMS_(1920_x_1280_px)_(2)_1779729580194.png";
+
+/* ATANDA brand palette (explicit hex for export fidelity) — mirrors /report. */
+const ATANDA = {
+  ink: "#0B1B33",
+  sub: "#5B6B82",
+  line: "#E4E8EF",
+  panel: "#F6F8FB",
+  blue: "#1B6FB5",
+  yellow: "#F2C230",
+  red: "#E2231A",
+  teal: "#00A3C4",
+  green: "#2BB673",
+  purple: "#8E44AD",
+  orange: "#FF6B4A",
+};
+const BRAND_BAR = `linear-gradient(90deg, ${ATANDA.yellow} 0%, ${ATANDA.orange} 20%, ${ATANDA.red} 40%, ${ATANDA.teal} 60%, ${ATANDA.green} 80%, ${ATANDA.purple} 100%)`;
+
+function workforceFileStamp(institution?: string | null) {
+  const n = (institution || "Workforce").replace(/[^a-z0-9]+/gi, "_");
+  return `Workforce_Intelligence_${n}_${new Date().toISOString().slice(0, 10)}`;
+}
 
 type FieldDef = { key: string; label: string };
 
@@ -158,13 +182,178 @@ function BreakdownTable({
   );
 }
 
+/* ── Branded, print-optimized report sheet (off-screen capture target) ──
+   Pure presentation. Inline hex styling so html2canvas/jsPDF render faithfully,
+   mirroring the /report ARK sheet approach. */
+function ReportBreakdown({ title, rows }: { title: string; rows: BreakdownRow[] }) {
+  return (
+    <div style={{ border: `1px solid ${ATANDA.line}`, borderRadius: 10, padding: 14, background: "#fff" }}>
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: 1.2,
+          textTransform: "uppercase",
+          color: ATANDA.blue,
+          marginBottom: 8,
+        }}
+      >
+        {title}
+      </div>
+      {rows.length === 0 ? (
+        <div style={{ fontSize: 11, color: ATANDA.sub }}>No data yet.</div>
+      ) : (
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10 }}>
+          <thead>
+            <tr style={{ color: ATANDA.sub, textAlign: "left" }}>
+              <th style={{ padding: "2px 4px", fontWeight: 600 }}>Segment</th>
+              <th style={{ padding: "2px 4px", fontWeight: 600, textAlign: "right" }}>Staff</th>
+              <th style={{ padding: "2px 4px", fontWeight: 600, textAlign: "right" }}>Assessed</th>
+              <th style={{ padding: "2px 4px", fontWeight: 600, textAlign: "right" }}>ARK</th>
+              <th style={{ padding: "2px 4px", fontWeight: 600, textAlign: "right" }}>JST</th>
+              <th style={{ padding: "2px 4px", fontWeight: 600, textAlign: "right" }}>Vuln</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.key} style={{ borderTop: `1px solid ${ATANDA.line}` }}>
+                <td style={{ padding: "3px 4px", color: ATANDA.ink, fontWeight: 600 }}>{r.key}</td>
+                <td style={{ padding: "3px 4px", textAlign: "right", color: ATANDA.ink }}>{r.count}</td>
+                <td style={{ padding: "3px 4px", textAlign: "right", color: ATANDA.sub }}>{r.assessedCount}</td>
+                <td style={{ padding: "3px 4px", textAlign: "right", color: ATANDA.ink, fontWeight: 700 }}>{r.avgArk}</td>
+                <td style={{ padding: "3px 4px", textAlign: "right", color: ATANDA.sub }}>{r.avgJst}</td>
+                <td style={{ padding: "3px 4px", textAlign: "right", color: ATANDA.sub }}>{r.avgVulnerability}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+const WorkforceReportSheet = forwardRef<HTMLDivElement, { intel: Intelligence }>(
+  function WorkforceReportSheet({ intel }, ref) {
+    const totals = [
+      { l: "Staff", v: intel.totals.staff },
+      { l: "Linked", v: intel.totals.linked },
+      { l: "Assessed", v: intel.totals.assessed },
+      { l: "Avg ARK", v: intel.totals.avgArk },
+      { l: "Avg JST", v: intel.totals.avgJst },
+      { l: "Avg Vuln", v: `${intel.totals.avgVulnerability}%` },
+    ];
+    return (
+      <div
+        ref={ref}
+        data-testid="workforce-report-sheet"
+        style={{
+          width: 820,
+          background: "#ffffff",
+          color: ATANDA.ink,
+          borderRadius: 14,
+          overflow: "hidden",
+          fontFamily: "'Space Grotesk', system-ui, sans-serif",
+        }}
+      >
+        <div style={{ height: 6, background: BRAND_BAR }} />
+        <div style={{ padding: 28 }}>
+          {/* Header */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <img
+                src={atandaLogo}
+                alt="ATANDA"
+                crossOrigin="anonymous"
+                style={{ width: 54, height: 54, objectFit: "contain" }}
+              />
+              <div>
+                <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: 2, color: ATANDA.ink, lineHeight: 1 }}>
+                  WORKFORCE INTELLIGENCE
+                </div>
+                <div style={{ fontSize: 10, letterSpacing: 2, textTransform: "uppercase", color: ATANDA.sub, marginTop: 4 }}>
+                  ARK vs HR Breakdown · Powered by ATANDA
+                </div>
+              </div>
+            </div>
+            <div style={{ textAlign: "right", fontSize: 10, fontFamily: "monospace", color: ATANDA.sub, lineHeight: 1.7 }}>
+              <div>{new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}</div>
+              <div>{intel.institution || "—"}</div>
+            </div>
+          </div>
+
+          {/* Totals strip */}
+          <div
+            style={{
+              marginTop: 18,
+              display: "grid",
+              gridTemplateColumns: "repeat(6, 1fr)",
+              gap: 10,
+            }}
+          >
+            {totals.map((t) => (
+              <div
+                key={t.l}
+                style={{
+                  background: ATANDA.panel,
+                  border: `1px solid ${ATANDA.line}`,
+                  borderRadius: 10,
+                  padding: "10px 12px",
+                }}
+              >
+                <div style={{ fontSize: 9, letterSpacing: 1, textTransform: "uppercase", color: ATANDA.sub }}>{t.l}</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: ATANDA.blue, lineHeight: 1.1, marginTop: 2 }}>
+                  {t.v}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Breakdowns */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 16 }}>
+            <ReportBreakdown title="By Department" rows={intel.byDepartment} />
+            <ReportBreakdown title="By Tenure Band" rows={intel.byTenureBand} />
+            <ReportBreakdown title="By Compensation Band" rows={intel.byCompensationBand} />
+            <ReportBreakdown title="By Manager" rows={intel.byManager} />
+            <ReportBreakdown title="By Location" rows={intel.byLocation} />
+          </div>
+
+          {/* Footer */}
+          <div
+            style={{
+              marginTop: 18,
+              paddingTop: 12,
+              borderTop: `1px solid ${ATANDA.line}`,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <img src={atandaLogo} alt="ATANDA" crossOrigin="anonymous" style={{ width: 22, height: 22, objectFit: "contain" }} />
+              <span style={{ fontSize: 9, fontFamily: "monospace", color: ATANDA.sub, textTransform: "uppercase", letterSpacing: 1.5 }}>
+                Powered by ATANDA · ARK Synthesized Intelligence
+              </span>
+            </div>
+            <span style={{ fontSize: 9, fontFamily: "monospace", color: ATANDA.sub, textTransform: "uppercase", letterSpacing: 1 }}>
+              Confidential
+            </span>
+          </div>
+        </div>
+        <div style={{ height: 6, background: BRAND_BAR }} />
+      </div>
+    );
+  },
+);
+
 export default function WorkforcePage() {
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
+  const reportRef = useRef<HTMLDivElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [importResult, setImportResult] = useState<any>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   const connectorsQ = useQuery<{ connectors: Connector[]; fields: FieldDef[] }>({
     queryKey: ["/api/workforce/connectors"],
@@ -274,6 +463,19 @@ export default function WorkforcePage() {
   }, [preview]);
 
   const intel = intelQ.data;
+
+  async function handleExportPdf() {
+    if (!reportRef.current || !intel) return;
+    setExportingPdf(true);
+    try {
+      await exportReportPdf(reportRef.current, workforceFileStamp(intel.institution));
+    } catch (err) {
+      console.error("Workforce PDF export failed:", err);
+      window.print();
+    } finally {
+      setExportingPdf(false);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-7xl space-y-8 p-6" data-testid="page-workforce">
@@ -555,14 +757,30 @@ export default function WorkforcePage() {
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-[Rajdhani] text-xl font-semibold">Workforce Intelligence</h2>
-            <a
-              href={api.workforceIntelligenceCsvUrl()}
-              className="neon-border flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs uppercase tracking-wider hover:bg-primary/10"
-              data-testid="link-export-intelligence-csv"
-              title="Download all breakdowns as CSV for board/HR reporting"
-            >
-              <Download className="h-3.5 w-3.5" /> Export CSV
-            </a>
+            <div className="flex items-center gap-2">
+              <a
+                href={api.workforceIntelligenceCsvUrl()}
+                className="neon-border flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs uppercase tracking-wider hover:bg-primary/10"
+                data-testid="link-export-intelligence-csv"
+                title="Download all breakdowns as CSV for board/HR reporting"
+              >
+                <Download className="h-3.5 w-3.5" /> Export CSV
+              </a>
+              <button
+                onClick={handleExportPdf}
+                disabled={exportingPdf}
+                className="neon-border flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs uppercase tracking-wider hover:bg-primary/10 disabled:opacity-50"
+                data-testid="button-export-intelligence-pdf"
+                title="Download a branded, presentation-ready PDF of all breakdowns"
+              >
+                {exportingPdf ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <FileText className="h-3.5 w-3.5" />
+                )}
+                Export PDF
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <StatCard label="Staff" value={intel.totals.staff} />
@@ -667,6 +885,16 @@ export default function WorkforcePage() {
           </div>
         )}
       </section>
+
+      {/* Off-screen branded report sheet — capture target for PDF export */}
+      {intel && (
+        <div
+          aria-hidden
+          style={{ position: "fixed", left: -10000, top: 0, pointerEvents: "none" }}
+        >
+          <WorkforceReportSheet ref={reportRef} intel={intel} />
+        </div>
+      )}
     </div>
   );
 }
