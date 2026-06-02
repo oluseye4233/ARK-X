@@ -183,9 +183,9 @@ export default function Home() {
           <Link
             href="/login"
             data-testid="button-view-demo"
-            className="text-xs font-mono uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
+            className="relative inline-flex items-center justify-center bg-background/60 hover:bg-emerald-500/10 text-emerald-300 hover:text-emerald-200 font-mono uppercase tracking-wider rounded-none h-12 px-8 transition-all hover:scale-[1.03] text-sm font-semibold border-2 border-emerald-400/60 animate-throb-glow-emerald"
           >
-            Or use enterprise login →
+            <LogIn className="mr-2 h-5 w-5" /> Login
           </Link>
         </div>
       </div>
