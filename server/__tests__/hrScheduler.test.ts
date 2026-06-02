@@ -576,3 +576,22 @@ test("stopHrScheduler: is safe to call when nothing is running", () => {
   assert.doesNotThrow(() => stopHrScheduler());
   assert.doesNotThrow(() => stopHrScheduler());
 });
+
+test("stopHrScheduler: cancels the one-shot warm-up tick when stopped before it fires", async () => {
+  // start() schedules a warm-up tick() ~5s after boot. Stopping inside that
+  // window must cancel it, otherwise a fast start→stop still hits the sync
+  // pipeline once. We prove no tick ran by spying getEnabledConnectorConfigs
+  // (the first thing tick touches) and advancing fake time past the warm-up.
+  const getSpy = mock.method(storage, "getEnabledConnectorConfigs", async () => [] as any);
+  try {
+    await withSchedulerEnv({ workforce: true, disabled: false }, () => {
+      assert.equal(startHrScheduler(), true, "scheduler should start");
+      stopHrScheduler(); // stop immediately, inside the warm-up window
+      // Advance well past both the 5s warm-up and a full recurring interval.
+      mock.timers.tick(120_000);
+      assert.equal(getSpy.mock.callCount(), 0, "no tick() should fire after an immediate stop");
+    });
+  } finally {
+    getSpy.mock.restore();
+  }
+});

@@ -30,6 +30,9 @@ const TICK_MS = (() => {
 })();
 
 let timer: NodeJS.Timeout | null = null;
+/** Handle for the one-shot warm-up tick scheduled at start, so stop can cancel
+ *  it before it fires (a fast start→stop must not leave a pending tick). */
+let warmupTimer: NodeJS.Timeout | null = null;
 /** Guards against overlapping ticks (a slow upstream API outliving one tick). */
 let ticking = false;
 /** Per-config in-flight guard so a manual sync + a tick can't double-run. */
@@ -137,8 +140,14 @@ export function startHrScheduler(): boolean {
   }, TICK_MS);
   // Don't keep the event loop alive solely for the scheduler.
   if (typeof timer.unref === "function") timer.unref();
-  // Kick an initial pass shortly after boot (after routes/DB are ready).
-  setTimeout(() => void tick(), 5_000).unref?.();
+  // Kick an initial pass shortly after boot (after routes/DB are ready). Keep
+  // the handle so stopHrScheduler can cancel it if we stop within the warm-up
+  // window.
+  warmupTimer = setTimeout(() => {
+    warmupTimer = null;
+    void tick();
+  }, 5_000);
+  warmupTimer.unref?.();
   console.log(`[hrScheduler] started (tick ${TICK_MS}ms)`);
   return true;
 }
@@ -148,5 +157,9 @@ export function stopHrScheduler(): void {
   if (timer) {
     clearInterval(timer);
     timer = null;
+  }
+  if (warmupTimer) {
+    clearTimeout(warmupTimer);
+    warmupTimer = null;
   }
 }
