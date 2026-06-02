@@ -668,3 +668,119 @@ test("stopHrScheduler: after stop, advancing time fires no further ticks", async
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────
+// TICK_MS parsing — proves HR_SYNC_TICK_MS is read, with its floor/fallback,
+// and that a custom cadence actually drives the recurring interval (Task #54).
+//
+// TICK_MS is computed once at module load from process.env.HR_SYNC_TICK_MS, so
+// the constant the top-of-file import captured can't be re-parameterised. To
+// exercise other env values we set process.env and re-import a FRESH copy of
+// the module (cache-busted via a query string on the specifier). Only
+// hrScheduler.ts is re-evaluated — its transitive imports (storage, the
+// resolved-flags object) keep their original URLs, so they remain the same
+// singletons these tests already mock/mutate.
+// ─────────────────────────────────────────────────────────────
+
+let tickModuleCounter = 0;
+
+/** Import a fresh hrScheduler module with HR_SYNC_TICK_MS set to `value`
+ *  (undefined → unset) for the duration of the import. The env var is restored
+ *  immediately after; TICK_MS is already captured by then. */
+async function loadSchedulerWithTickEnv(value: string | undefined) {
+  const orig = process.env.HR_SYNC_TICK_MS;
+  if (value === undefined) delete process.env.HR_SYNC_TICK_MS;
+  else process.env.HR_SYNC_TICK_MS = value;
+  try {
+    const url = new URL("../hrScheduler.ts", import.meta.url).href + `?tick=${tickModuleCounter++}`;
+    return (await import(url)) as typeof import("../hrScheduler");
+  } finally {
+    if (orig === undefined) delete process.env.HR_SYNC_TICK_MS;
+    else process.env.HR_SYNC_TICK_MS = orig;
+  }
+}
+
+test("TICK_MS: a custom HR_SYNC_TICK_MS (>= 1000ms) is read and used verbatim", async () => {
+  const mod = await loadSchedulerWithTickEnv("7000");
+  assert.equal(mod.TICK_MS, 7_000, "custom cadence should be honoured verbatim");
+});
+
+test("TICK_MS: the exact 1000ms floor boundary is honoured (>= 1000)", async () => {
+  const mod = await loadSchedulerWithTickEnv("1000");
+  assert.equal(mod.TICK_MS, 1_000, "exactly 1000ms is at the floor and should be kept");
+});
+
+test("TICK_MS: a value below the 1000ms floor falls back to the 60s default", async () => {
+  const mod = await loadSchedulerWithTickEnv("500");
+  assert.equal(mod.TICK_MS, 60_000, "sub-floor values must fall back to 60s");
+});
+
+test("TICK_MS: a non-numeric value falls back to the 60s default", async () => {
+  const mod = await loadSchedulerWithTickEnv("not-a-number");
+  assert.equal(mod.TICK_MS, 60_000, "NaN env values must fall back to 60s");
+});
+
+test("TICK_MS: an unset HR_SYNC_TICK_MS uses the 60s default", async () => {
+  const mod = await loadSchedulerWithTickEnv(undefined);
+  assert.equal(mod.TICK_MS, 60_000, "unset env should use the default cadence");
+});
+
+test("TICK_MS: the recurring interval fires at the custom cadence (not the default)", async () => {
+  // A custom cadence larger than the 5s warm-up so the warm-up tick is cleanly
+  // isolated from the recurring interval below.
+  const CUSTOM = 7_000;
+  const mod = await loadSchedulerWithTickEnv(String(CUSTOM));
+  assert.equal(mod.TICK_MS, CUSTOM, "precondition: custom cadence captured");
+
+  const origFlag = flags.institutionWorkforce;
+  const origDisabled = process.env.HR_SYNC_DISABLED;
+  flags.institutionWorkforce = true;
+  delete process.env.HR_SYNC_DISABLED;
+  mock.timers.enable({ apis: ["setInterval", "setTimeout"] });
+  const logSpy = mock.method(console, "log", () => {});
+  const getSpy = mock.method(storage, "getEnabledConnectorConfigs", async () => [] as any);
+  try {
+    assert.equal(mod.startHrScheduler(), true, "scheduler should start");
+
+    // Interval boundaries are absolute from start: CUSTOM, 2·CUSTOM, … The
+    // one-shot warm-up tick fires at ~5s, independently. We step fake time and
+    // assert the cumulative tick count at each absolute boundary. (Stepping one
+    // boundary at a time + flushing avoids the in-flight `ticking` guard
+    // collapsing several boundaries crossed in a single jump into one tick.)
+
+    // Consume the one-shot ~5s warm-up tick first (CUSTOM=7000 > 5000, so the
+    // first interval boundary hasn't been reached yet).
+    mock.timers.tick(5_000); // t=5000
+    await flushMicrotasks();
+    assert.equal(getSpy.mock.callCount(), 1, "warm-up pass should run ~5s after start");
+
+    // Reach the first interval boundary (t=CUSTOM): one tick fires.
+    mock.timers.tick(CUSTOM - 5_000); // t=7000
+    await flushMicrotasks();
+    assert.equal(getSpy.mock.callCount(), 2, "first interval tick at t=CUSTOM");
+
+    // Advancing just short of the next boundary fires nothing — this is what
+    // proves the cadence is the custom value, not the 60s default.
+    mock.timers.tick(CUSTOM - 1); // t=2·CUSTOM - 1
+    await flushMicrotasks();
+    assert.equal(getSpy.mock.callCount(), 2, "no tick before a full custom interval elapses");
+
+    // Crossing the boundary fires exactly one more.
+    mock.timers.tick(1); // t=2·CUSTOM
+    await flushMicrotasks();
+    assert.equal(getSpy.mock.callCount(), 3, "second interval tick at t=2·CUSTOM");
+
+    // A further full custom step drives exactly one more.
+    mock.timers.tick(CUSTOM); // t=3·CUSTOM
+    await flushMicrotasks();
+    assert.equal(getSpy.mock.callCount(), 4, "third interval tick at t=3·CUSTOM");
+  } finally {
+    mod.stopHrScheduler();
+    getSpy.mock.restore();
+    logSpy.mock.restore();
+    mock.timers.reset();
+    flags.institutionWorkforce = origFlag;
+    if (origDisabled === undefined) delete process.env.HR_SYNC_DISABLED;
+    else process.env.HR_SYNC_DISABLED = origDisabled;
+  }
+});
