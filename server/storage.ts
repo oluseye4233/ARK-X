@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, sql, desc, and, inArray } from "drizzle-orm";
+import { eq, sql, desc, and, inArray, isNull } from "drizzle-orm";
 import { guestAssessments, type InsertGuestAssessment, type GuestAssessment } from "@shared/schema";
 import {
   users, type User, type InsertUser, type UpdateUser,
@@ -31,10 +31,43 @@ import {
   cohorts, type Cohort, type InsertCohort,
   cohortMemberships, type CohortMembership,
   cohortAssignments, type CohortAssignment, type InsertCohortAssignment,
+  staffRecords, type StaffRecord, type StaffRecordWithArk,
+  hrImportBatches, type HrImportBatch, type InsertHrImportBatch,
+  type NormalizedHrRecord, type StaffAssessmentStatus,
+  tenureBandFromHireDate,
   bookJourneyBadges, type BookJourneyBadge, type InsertBookJourneyBadge,
   bookLedgerSnapshots, type BookLedgerSnapshot, type InsertBookLedgerSnapshot,
 } from "@shared/schema";
 import { or } from "drizzle-orm";
+
+/** One row of a workforce breakdown (per department / tenure band / etc). */
+export type WorkforceBreakdownRow = {
+  key: string;
+  count: number;
+  linkedCount: number;
+  assessedCount: number;
+  avgArk: number;
+  avgJst: number;
+  avgVulnerability: number;
+};
+
+/** Aggregated workforce intelligence joining ARK scores with HR data. */
+export type WorkforceIntelligence = {
+  institution: string;
+  totals: {
+    staff: number;
+    linked: number;
+    assessed: number;
+    avgArk: number;
+    avgJst: number;
+    avgVulnerability: number;
+  };
+  byDepartment: WorkforceBreakdownRow[];
+  byTenureBand: WorkforceBreakdownRow[];
+  byCompensationBand: WorkforceBreakdownRow[];
+  byManager: WorkforceBreakdownRow[];
+  byLocation: WorkforceBreakdownRow[];
+};
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -191,6 +224,35 @@ export interface IStorage {
     avgCcmi: number;
     avgArk: number;
   }>>;
+
+  // ── Institution Workforce / HR Connectors (Task #25) ──
+  createImportBatch(batch: InsertHrImportBatch): Promise<HrImportBatch>;
+  getImportBatches(institution: string): Promise<HrImportBatch[]>;
+  updateImportBatchCounts(
+    id: string,
+    counts: { importedRows: number; updatedRows: number },
+  ): Promise<HrImportBatch | undefined>;
+  /** Upsert a parsed roster into staff_records (matched on (institution,email),
+   *  else externalId), auto-linking each staff member to an existing ARK account
+   *  by email. All-or-nothing in a transaction. */
+  upsertStaffRecords(
+    institution: string,
+    batchId: string,
+    records: NormalizedHrRecord[],
+  ): Promise<{ inserted: number; updated: number; linked: number }>;
+  getStaffRecords(institution: string): Promise<StaffRecordWithArk[]>;
+  getStaffRecord(id: string): Promise<StaffRecord | undefined>;
+  /** Match a staff row to an existing ARK account by email and set arkUserId.
+   *  Returns the updated row, or null if no account matches. Institution-scoped. */
+  linkStaffToArk(id: string, institution: string): Promise<StaffRecordWithArk | null>;
+  /** Invite an unmatched staff member to create their ARK profile: links
+   *  immediately if an account already exists for their email, else records the
+   *  invite (invitedAt) so registration reconciliation links it on signup. */
+  inviteStaff(id: string, institution: string): Promise<StaffRecordWithArk | null>;
+  /** Auto-link any still-unlinked staff records matching this user's email
+   *  (across institutions) when they register/log in. Returns rows linked. */
+  reconcileStaffInvitesForUser(userId: string, email: string): Promise<number>;
+  getWorkforceIntelligence(institution: string): Promise<WorkforceIntelligence>;
 
   // ── Book Companion (Task #22) ──
   getBookBadges(userId: string): Promise<BookJourneyBadge[]>;
@@ -1291,6 +1353,341 @@ export class DatabaseStorage implements IStorage {
       });
     }
     return out;
+  }
+
+  // ── Institution Workforce / HR Connectors (Task #25) ──
+  async createImportBatch(batch: InsertHrImportBatch): Promise<HrImportBatch> {
+    const [row] = await db.insert(hrImportBatches).values(batch).returning();
+    return row;
+  }
+
+  async getImportBatches(institution: string): Promise<HrImportBatch[]> {
+    return await db
+      .select()
+      .from(hrImportBatches)
+      .where(eq(hrImportBatches.institution, institution))
+      .orderBy(desc(hrImportBatches.createdAt));
+  }
+
+  async updateImportBatchCounts(
+    id: string,
+    counts: { importedRows: number; updatedRows: number },
+  ): Promise<HrImportBatch | undefined> {
+    const [row] = await db
+      .update(hrImportBatches)
+      .set({ importedRows: counts.importedRows, updatedRows: counts.updatedRows })
+      .where(eq(hrImportBatches.id, id))
+      .returning();
+    return row;
+  }
+
+  async upsertStaffRecords(
+    institution: string,
+    batchId: string,
+    records: NormalizedHrRecord[],
+  ): Promise<{ inserted: number; updated: number; linked: number }> {
+    return await db.transaction(async (tx) => {
+      let inserted = 0;
+      let updated = 0;
+      let linked = 0;
+
+      for (const rec of records) {
+        const email = rec.email ? rec.email.trim().toLowerCase() : null;
+        const externalId = rec.externalId?.trim() || null;
+
+        // Auto-link to an existing ARK account by email (username == email).
+        let arkUserId: string | null = null;
+        if (email) {
+          const [matched] = await tx
+            .select({ id: users.id })
+            .from(users)
+            .where(sql`lower(${users.username}) = ${email}`);
+          if (matched?.id) {
+            arkUserId = matched.id;
+            linked++;
+          }
+        }
+
+        const values = {
+          institution,
+          importBatchId: batchId,
+          externalId,
+          fullName: rec.fullName,
+          email,
+          jobTitle: rec.jobTitle ?? null,
+          department: rec.department ?? null,
+          team: rec.team ?? null,
+          hireDate: rec.hireDate ?? null,
+          performanceRating: rec.performanceRating ?? null,
+          compensationBand: rec.compensationBand ?? null,
+          manager: rec.manager ?? null,
+          location: rec.location ?? null,
+        };
+
+        // Find an existing row to update: email is the primary key, externalId
+        // the fallback. Email-less + id-less rows always insert.
+        let existing: { id: string; arkUserId: string | null } | undefined;
+        if (email) {
+          [existing] = await tx
+            .select({ id: staffRecords.id, arkUserId: staffRecords.arkUserId })
+            .from(staffRecords)
+            .where(and(eq(staffRecords.institution, institution), eq(staffRecords.email, email)));
+        } else if (externalId) {
+          [existing] = await tx
+            .select({ id: staffRecords.id, arkUserId: staffRecords.arkUserId })
+            .from(staffRecords)
+            .where(and(eq(staffRecords.institution, institution), eq(staffRecords.externalId, externalId)));
+        }
+
+        if (existing) {
+          await tx
+            .update(staffRecords)
+            .set({
+              ...values,
+              // Preserve a prior manual link if the import didn't re-resolve one.
+              arkUserId: arkUserId ?? existing.arkUserId ?? null,
+              updatedAt: new Date(),
+            })
+            .where(eq(staffRecords.id, existing.id));
+          updated++;
+        } else {
+          await tx.insert(staffRecords).values({ ...values, arkUserId });
+          inserted++;
+        }
+      }
+
+      return { inserted, updated, linked };
+    });
+  }
+
+  async getStaffRecords(institution: string): Promise<StaffRecordWithArk[]> {
+    const rows = await db
+      .select({
+        s: staffRecords,
+        u: {
+          id: users.id,
+          arkScore: users.arkScore,
+          jstIndex: users.jstIndex,
+          ccmi: users.ccmi,
+          resumeReplacementPct: users.resumeReplacementPct,
+        },
+      })
+      .from(staffRecords)
+      .leftJoin(users, eq(users.id, staffRecords.arkUserId))
+      .where(eq(staffRecords.institution, institution))
+      .orderBy(desc(staffRecords.updatedAt));
+
+    return rows.map(({ s, u }) => {
+      const linked = !!u?.id;
+      const assessed = linked && (u!.arkScore ?? 0) > 0;
+      const assessmentStatus: StaffAssessmentStatus = !linked
+        ? s.invitedAt
+          ? "invited"
+          : "unlinked"
+        : assessed
+          ? "complete"
+          : "pending";
+      return {
+        ...s,
+        assessmentStatus,
+        tenureBand: tenureBandFromHireDate(s.hireDate),
+        ark: linked
+          ? {
+              arkScore: u!.arkScore ?? 0,
+              jstIndex: u!.jstIndex ?? 0,
+              ccmi: u!.ccmi ?? 0,
+              vulnerabilityPct: u!.resumeReplacementPct ?? 0,
+            }
+          : null,
+      };
+    });
+  }
+
+  async getStaffRecord(id: string): Promise<StaffRecord | undefined> {
+    const [row] = await db.select().from(staffRecords).where(eq(staffRecords.id, id));
+    return row;
+  }
+
+  async linkStaffToArk(id: string, institution: string): Promise<StaffRecordWithArk | null> {
+    return await db.transaction(async (tx) => {
+      const [staff] = await tx
+        .select()
+        .from(staffRecords)
+        .where(and(eq(staffRecords.id, id), eq(staffRecords.institution, institution)));
+      if (!staff) return null;
+      const email = staff.email?.trim().toLowerCase();
+      if (!email) return null;
+      const [matched] = await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(sql`lower(${users.username}) = ${email}`);
+      if (!matched?.id) return null;
+      await tx
+        .update(staffRecords)
+        .set({ arkUserId: matched.id, updatedAt: new Date() })
+        .where(eq(staffRecords.id, id));
+      const [u] = await tx
+        .select({
+          arkScore: users.arkScore,
+          jstIndex: users.jstIndex,
+          ccmi: users.ccmi,
+          resumeReplacementPct: users.resumeReplacementPct,
+        })
+        .from(users)
+        .where(eq(users.id, matched.id));
+      const assessed = (u?.arkScore ?? 0) > 0;
+      return {
+        ...staff,
+        arkUserId: matched.id,
+        assessmentStatus: assessed ? "complete" : "pending",
+        tenureBand: tenureBandFromHireDate(staff.hireDate),
+        ark: {
+          arkScore: u?.arkScore ?? 0,
+          jstIndex: u?.jstIndex ?? 0,
+          ccmi: u?.ccmi ?? 0,
+          vulnerabilityPct: u?.resumeReplacementPct ?? 0,
+        },
+      };
+    });
+  }
+
+  async inviteStaff(id: string, institution: string): Promise<StaffRecordWithArk | null> {
+    return await db.transaction(async (tx) => {
+      const [staff] = await tx
+        .select()
+        .from(staffRecords)
+        .where(and(eq(staffRecords.id, id), eq(staffRecords.institution, institution)));
+      if (!staff) return null;
+      const email = staff.email?.trim().toLowerCase();
+      if (!email) return null;
+
+      // If an ARK account already exists for this email, link immediately so the
+      // invite resolves to a real account in one step. Otherwise record the
+      // invite (invitedAt); registration reconciliation will link it later.
+      const [matched] = await tx
+        .select({
+          id: users.id,
+          arkScore: users.arkScore,
+          jstIndex: users.jstIndex,
+          ccmi: users.ccmi,
+          resumeReplacementPct: users.resumeReplacementPct,
+        })
+        .from(users)
+        .where(sql`lower(${users.username}) = ${email}`);
+
+      const now = new Date();
+      const arkUserId = matched?.id ?? null;
+      await tx
+        .update(staffRecords)
+        .set({ arkUserId, invitedAt: now, updatedAt: now })
+        .where(eq(staffRecords.id, id));
+
+      const linked = !!matched?.id;
+      const assessed = linked && (matched!.arkScore ?? 0) > 0;
+      return {
+        ...staff,
+        arkUserId,
+        invitedAt: now,
+        updatedAt: now,
+        assessmentStatus: !linked ? "invited" : assessed ? "complete" : "pending",
+        tenureBand: tenureBandFromHireDate(staff.hireDate),
+        ark: linked
+          ? {
+              arkScore: matched!.arkScore ?? 0,
+              jstIndex: matched!.jstIndex ?? 0,
+              ccmi: matched!.ccmi ?? 0,
+              vulnerabilityPct: matched!.resumeReplacementPct ?? 0,
+            }
+          : null,
+      };
+    });
+  }
+
+  async reconcileStaffInvitesForUser(userId: string, email: string): Promise<number> {
+    const normalized = email.trim().toLowerCase();
+    if (!normalized) return 0;
+    // Link every still-unlinked staff record (across institutions) whose email
+    // matches this newly-registered/authenticated user. Mirrors the cohort
+    // invite reconciliation so an invited staff member is auto-linked on signup.
+    const linked = await db
+      .update(staffRecords)
+      .set({ arkUserId: userId, updatedAt: new Date() })
+      .where(
+        and(
+          isNull(staffRecords.arkUserId),
+          sql`lower(${staffRecords.email}) = ${normalized}`,
+        ),
+      )
+      .returning({ id: staffRecords.id });
+    return linked.length;
+  }
+
+  async getWorkforceIntelligence(institution: string): Promise<WorkforceIntelligence> {
+    const staff = await this.getStaffRecords(institution);
+
+    const aggregate = (
+      keyOf: (s: StaffRecordWithArk) => string | null | undefined,
+    ): WorkforceBreakdownRow[] => {
+      const groups = new Map<string, StaffRecordWithArk[]>();
+      for (const s of staff) {
+        const k = (keyOf(s) ?? "").trim() || "Unspecified";
+        const arr = groups.get(k) ?? [];
+        arr.push(s);
+        groups.set(k, arr);
+      }
+      const rows = Array.from(groups.entries()).map(([key, members]) => {
+        const assessed = members.filter((m) => m.assessmentStatus === "complete" && m.ark);
+        const n = assessed.length;
+        const sum = assessed.reduce(
+          (acc, m) => {
+            acc.ark += m.ark!.arkScore;
+            acc.jst += m.ark!.jstIndex;
+            acc.vuln += m.ark!.vulnerabilityPct;
+            return acc;
+          },
+          { ark: 0, jst: 0, vuln: 0 },
+        );
+        return {
+          key,
+          count: members.length,
+          linkedCount: members.filter((m) => m.assessmentStatus !== "unlinked").length,
+          assessedCount: n,
+          avgArk: n ? Math.round(sum.ark / n) : 0,
+          avgJst: n ? Math.round(sum.jst / n) : 0,
+          avgVulnerability: n ? Math.round(sum.vuln / n) : 0,
+        };
+      });
+      return rows.sort((a, b) => b.count - a.count);
+    };
+
+    const assessedAll = staff.filter((s) => s.assessmentStatus === "complete" && s.ark);
+    const nAll = assessedAll.length;
+    const sumAll = assessedAll.reduce(
+      (acc, m) => {
+        acc.ark += m.ark!.arkScore;
+        acc.jst += m.ark!.jstIndex;
+        acc.vuln += m.ark!.vulnerabilityPct;
+        return acc;
+      },
+      { ark: 0, jst: 0, vuln: 0 },
+    );
+
+    return {
+      institution,
+      totals: {
+        staff: staff.length,
+        linked: staff.filter((s) => s.assessmentStatus !== "unlinked").length,
+        assessed: nAll,
+        avgArk: nAll ? Math.round(sumAll.ark / nAll) : 0,
+        avgJst: nAll ? Math.round(sumAll.jst / nAll) : 0,
+        avgVulnerability: nAll ? Math.round(sumAll.vuln / nAll) : 0,
+      },
+      byDepartment: aggregate((s) => s.department),
+      byTenureBand: aggregate((s) => s.tenureBand),
+      byCompensationBand: aggregate((s) => s.compensationBand),
+      byManager: aggregate((s) => s.manager),
+      byLocation: aggregate((s) => s.location),
+    };
   }
 
   // ── Book Companion (Task #22) ──

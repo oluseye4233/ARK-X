@@ -77,6 +77,40 @@ export const requireInstructor: RequestHandler = async (req, res, next) => {
   }
 };
 
+// Institution-admin gate for the workforce / HR-connector surface (Task #25).
+// An institution admin is an ENTERPRISE-plan user with a non-empty institution
+// on their profile. Fails CLOSED: missing session → 401; not ENTERPRISE or no
+// institution → 403. On success the resolved institution is stashed on the
+// request so routes derive scope from the session, never from the client.
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Express {
+    interface Request {
+      institutionScope?: string;
+    }
+  }
+}
+
+export const requireInstitutionAdmin: RequestHandler = async (req, res, next) => {
+  const sid = req.session?.userId;
+  if (!sid) return res.status(401).json({ message: "Authentication required." });
+  try {
+    const { storage } = await import("./storage");
+    const u = await storage.getUser(sid);
+    if (!u || u.subscriptionPlan !== "ENTERPRISE") {
+      return res.status(403).json({ message: "Institution admin (ENTERPRISE plan) required." });
+    }
+    const institution = (u.institution ?? "").trim();
+    if (!institution) {
+      return res.status(403).json({ message: "No institution on your profile — workforce tools unavailable." });
+    }
+    req.institutionScope = institution;
+    next();
+  } catch (err) {
+    res.status(500).json({ message: "Institution admin check failed." });
+  }
+};
+
 export function requireSelf(paramName: string): RequestHandler {
   return (req, res, next) => {
     const sid = req.session?.userId;

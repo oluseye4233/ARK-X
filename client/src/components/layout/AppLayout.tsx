@@ -88,6 +88,7 @@ const ALL_NAV_GROUPS: FlaggedNavGroup[] = [
     label: "Manage",
     items: [
       { name: "Workforce", href: "/enterprise", icon: Users, hint: "Org-wide view", flag: "enterpriseDashboard" },
+      { name: "Workforce Intelligence", href: "/workforce", icon: Building2, hint: "Import HR roster + ARK breakdowns", flag: "institutionWorkforce" },
     ],
   },
 ];

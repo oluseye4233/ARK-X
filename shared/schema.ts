@@ -1108,6 +1108,168 @@ export type InsertCohortAssignment = z.infer<typeof insertCohortAssignmentSchema
 export type CohortAssignment = typeof cohortAssignments.$inferSelect;
 
 // ═══════════════════════════════════════════════════════════════════
+// Task #25 — Institution ARK Assessment + HR Connectors
+// ═══════════════════════════════════════════════════════════════════
+// ENTERPRISE / institution admins import their full staff roster + HR fields
+// through a pluggable HR-connector framework (CSV adapter first; live Workday/
+// BambooHR adapters plug into the same interface later) and view a workforce
+// dashboard joining ARK scores with imported HR data. Every connector maps its
+// source columns onto this single normalized HR field set so the data model
+// never has to change when a new adapter is added.
+
+/** Registered HR-connector adapter keys. CSV is the first working adapter;
+ *  future live connectors (workday/bamboohr/sap) register under new keys. */
+export const HR_CONNECTOR_ADAPTERS = ["csv"] as const;
+export type HrConnectorAdapterKey = (typeof HR_CONNECTOR_ADAPTERS)[number];
+
+/** Normalized HR fields every adapter maps its raw columns onto. The set is
+ *  the single source of truth for both the staff_records columns and the
+ *  column-mapping UI. `fullName` is the only required field for a valid row;
+ *  `email` / `externalId` are the linkage keys to ARK accounts + upsert. */
+export const HR_FIELD_KEYS = [
+  "externalId",
+  "fullName",
+  "email",
+  "jobTitle",
+  "department",
+  "team",
+  "hireDate",
+  "performanceRating",
+  "compensationBand",
+  "manager",
+  "location",
+] as const;
+export type HrFieldKey = (typeof HR_FIELD_KEYS)[number];
+
+export const HR_FIELD_LABELS: Record<HrFieldKey, string> = {
+  externalId: "Employee ID",
+  fullName: "Full Name",
+  email: "Email",
+  jobTitle: "Job Title / Role",
+  department: "Department",
+  team: "Team",
+  hireDate: "Hire Date (Tenure)",
+  performanceRating: "Performance Rating",
+  compensationBand: "Compensation Band",
+  manager: "Manager / Reporting Line",
+  location: "Location",
+};
+
+/** Header synonyms used by adapters to auto-detect which CSV column feeds which
+ *  normalized field. Match is case-insensitive on the trimmed header. */
+export const HR_FIELD_SYNONYMS: Record<HrFieldKey, string[]> = {
+  externalId: ["employee id", "emp id", "employee number", "staff id", "external id", "id", "payroll id"],
+  fullName: ["full name", "name", "employee name", "staff name", "fullname"],
+  email: ["email", "work email", "email address", "e-mail", "company email"],
+  jobTitle: ["job title", "title", "role", "position", "job role", "designation"],
+  department: ["department", "dept", "division", "function", "business unit"],
+  team: ["team", "squad", "group", "sub team", "sub-team"],
+  hireDate: ["hire date", "start date", "hired", "hire", "join date", "joined", "date of hire", "tenure start", "employment start"],
+  performanceRating: ["performance rating", "performance", "rating", "perf rating", "review rating", "appraisal"],
+  compensationBand: ["compensation band", "comp band", "salary band", "pay band", "comp grade", "salary grade", "band", "grade", "pay grade"],
+  manager: ["manager", "reports to", "reporting line", "supervisor", "line manager", "manager name", "report to"],
+  location: ["location", "office", "site", "city", "country", "work location", "region"],
+};
+
+/** Tenure bands derived from hire date, used by the workforce dashboard. */
+export const TENURE_BANDS = ["<1y", "1-3y", "3-5y", "5-10y", "10y+", "Unknown"] as const;
+export type TenureBand = (typeof TENURE_BANDS)[number];
+
+export function tenureBandFromHireDate(hireDate: string | null | undefined): TenureBand {
+  if (!hireDate) return "Unknown";
+  const d = new Date(hireDate);
+  if (Number.isNaN(d.getTime())) return "Unknown";
+  const years = (Date.now() - d.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+  if (years < 0) return "Unknown";
+  if (years < 1) return "<1y";
+  if (years < 3) return "1-3y";
+  if (years < 5) return "3-5y";
+  if (years < 10) return "5-10y";
+  return "10y+";
+}
+
+/** Per-staff ARK assessment status surfaced on the roster + dashboard.
+ *  - unlinked: no matching ARK account, not invited yet
+ *  - invited:  invite recorded (invitedAt set) but still no linked ARK account
+ *  - pending:  linked to an ARK account that has not completed an assessment yet
+ *  - complete: linked + assessed (arkScore > 0) */
+export const STAFF_ASSESSMENT_STATUSES = ["unlinked", "invited", "pending", "complete"] as const;
+export type StaffAssessmentStatus = (typeof STAFF_ASSESSMENT_STATUSES)[number];
+
+export const staffRecords = pgTable("staff_records", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  institution: text("institution").notNull(),
+  importBatchId: varchar("import_batch_id"),
+  externalId: text("external_id"),
+  fullName: text("full_name").notNull(),
+  email: text("email"),
+  jobTitle: text("job_title"),
+  department: text("department"),
+  team: text("team"),
+  hireDate: text("hire_date"), // normalized YYYY-MM-DD
+  performanceRating: text("performance_rating"),
+  compensationBand: text("compensation_band"),
+  manager: text("manager"),
+  location: text("location"),
+  // Link to the staff member's ARK account (matched by email on import or via
+  // the invite/link endpoint). Null until matched.
+  arkUserId: varchar("ark_user_id"),
+  // Set when an admin invites an as-yet-unmatched staff member to create their
+  // ARK profile. Reconciled (auto-linked) when that email registers/logs in.
+  invitedAt: timestamp("invited_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("staff_records_institution_email_uniq").on(t.institution, t.email),
+]);
+export const insertStaffRecordSchema = createInsertSchema(staffRecords).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertStaffRecord = z.infer<typeof insertStaffRecordSchema>;
+export type StaffRecord = typeof staffRecords.$inferSelect;
+
+export const hrImportBatches = pgTable("hr_import_batches", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  institution: text("institution").notNull(),
+  adapter: text("adapter").notNull(), // HrConnectorAdapterKey
+  filename: text("filename"),
+  importedBy: varchar("imported_by").notNull(),
+  totalRows: integer("total_rows").notNull().default(0),
+  importedRows: integer("imported_rows").notNull().default(0),
+  updatedRows: integer("updated_rows").notNull().default(0),
+  errorRows: integer("error_rows").notNull().default(0),
+  errors: jsonb("errors").$type<Array<{ row: number; message: string }>>(),
+  columnMapping: jsonb("column_mapping").$type<Record<string, string>>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export const insertHrImportBatchSchema = createInsertSchema(hrImportBatches).omit({ id: true, createdAt: true });
+export type InsertHrImportBatch = z.infer<typeof insertHrImportBatchSchema>;
+export type HrImportBatch = typeof hrImportBatches.$inferSelect;
+
+/** A normalized HR record produced by any connector adapter. */
+export type NormalizedHrRecord = Partial<Record<HrFieldKey, string>> & { fullName: string };
+
+/** Row-level import error captured per source row (1-indexed, header excluded). */
+export type HrImportRowError = { row: number; message: string };
+
+/** Common shape every HR-connector adapter returns from `parse`. */
+export type HrConnectorParseResult = {
+  adapter: HrConnectorAdapterKey;
+  /** Detected source-column → normalized-field mapping (sourceHeader → HrFieldKey). */
+  columnMapping: Record<string, string>;
+  /** Source headers that were not mapped to any normalized field. */
+  unmappedColumns: string[];
+  records: NormalizedHrRecord[];
+  errors: HrImportRowError[];
+  totalRows: number;
+};
+
+/** Staff roster row joined with the linked ARK account's identity surface. */
+export type StaffRecordWithArk = StaffRecord & {
+  assessmentStatus: StaffAssessmentStatus;
+  tenureBand: TenureBand;
+  ark: { arkScore: number; jstIndex: number; ccmi: number; vulnerabilityPct: number } | null;
+};
+
+// ═══════════════════════════════════════════════════════════════════
 // Phase M1 — SPHINX × Matrix Foundation
 // ═══════════════════════════════════════════════════════════════════
 // All Matrix-side feature tables, currency-display helpers, and derived

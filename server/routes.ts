@@ -13,7 +13,9 @@ const _require = createRequire(_filename);
 const { PDFParse } = _require("pdf-parse") as { PDFParse: new (opts: { data: Uint8Array }) => { getText: () => Promise<{ text: string }> } };
 import { storage } from "./storage";
 import { analyzeResume } from "./resumeAnalyzer";
-import { requireAuth, requireSelf, requireInstructor, currentUserId, loginSession } from "./auth";
+import { requireAuth, requireSelf, requireInstructor, requireInstitutionAdmin, currentUserId, loginSession } from "./auth";
+import { getHrConnector, listHrConnectors } from "./hrConnectors";
+import { HR_FIELD_KEYS, HR_FIELD_LABELS } from "@shared/schema";
 import { requireFeature, getResolvedFeatures, isFeatureEnabled } from "./featureFlags";
 import { STAGE } from "@shared/featureFlags";
 import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, type SubscriptionPlan, CCGE_TIERS, type CcgeTier, jcseToTier, ALL_CARD_PILLARS, SPC_MIN_CERT_TO_PUBLISH, SPC_PRICE_MIN, SPC_PRICE_MAX, SPC_STATUSES, SPC_SCOPES, CERT_LEVEL_RANK, ARK_SCORE_DELTAS, type CardPillar, type SpcStatus, ASSESSMENT_SOURCES, PRIMARY_ASSESSMENT_SOURCES, ASSESSMENT_SOURCE_LABELS, type AssessmentSourceKey } from "@shared/schema";
@@ -81,6 +83,24 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = ["application/pdf", "text/plain"];
+    cb(null, allowed.includes(file.mimetype));
+  },
+});
+
+// Dedicated uploader for HR-roster CSV imports (Task #25). Browsers report CSV
+// under several mimetypes (text/csv, application/vnd.ms-excel, octet-stream),
+// so we accept the common set and re-validate the content downstream.
+const csvUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      "text/csv",
+      "text/plain",
+      "application/csv",
+      "application/vnd.ms-excel",
+      "application/octet-stream",
+    ];
     cb(null, allowed.includes(file.mimetype));
   },
 });
@@ -210,6 +230,8 @@ export async function registerRoutes(
       // Phase G: convert any pending `invite:<email>` cohort memberships into
       // real memberships keyed by this user's id, best-effort.
       try { await storage.reconcileCohortInvitesForUser(user.id, user.username); } catch {}
+      // Task #25: auto-link any invited staff records matching this email.
+      try { await storage.reconcileStaffInvitesForUser(user.id, user.username); } catch {}
       // Silently upgrade legacy plaintext rows to bcrypt on first successful
       // login so we drain pre-existing rows without forcing a password reset.
       if (needsRehash) {
@@ -242,6 +264,8 @@ export async function registerRoutes(
       }
       const user = await storage.createUser({ ...parsed, role: "student" });
       try { await storage.reconcileCohortInvitesForUser(user.id, user.username); } catch {}
+      // Task #25: auto-link any invited staff records matching this email.
+      try { await storage.reconcileStaffInvitesForUser(user.id, user.username); } catch {}
       await loginSession(req, user.id);
       const { password: _, ...safeUser } = user;
       return res.status(201).json(safeUser);
@@ -1580,6 +1604,230 @@ export async function registerRoutes(
     }
   });
 
+  // ── Institution Workforce / HR Connectors (Task #25) ──────────────
+  // ENTERPRISE / institution admins import their staff roster + HR fields via a
+  // pluggable HR-connector framework, link staff to ARK accounts, and view a
+  // workforce dashboard joining ARK scores with HR data. Every route is gated by
+  // the `institutionWorkforce` flag (404 when off) AND requireInstitutionAdmin
+  // (ENTERPRISE plan + institution on profile; fails closed). Institution scope
+  // is always derived from the session (`req.institutionScope`), never the body.
+  const workforceGate = [requireFeature("institutionWorkforce"), requireAuth, requireInstitutionAdmin] as const;
+
+  // List the registered HR-connector adapters + the normalized field set so the
+  // mapping UI can render its source-picker + field dropdowns.
+  app.get("/api/workforce/connectors", ...workforceGate, async (_req, res) => {
+    try {
+      return res.json({
+        connectors: listHrConnectors().map((a) => ({
+          key: a.key,
+          label: a.label,
+          acceptsFile: a.acceptsFile,
+        })),
+        fields: HR_FIELD_KEYS.map((key) => ({ key, label: HR_FIELD_LABELS[key] })),
+      });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Parse a column-mapping override sent as a JSON string form field. Returns
+  // undefined on absence/malformed so the adapter falls back to auto-detection.
+  function parseMappingField(raw: unknown): Record<string, string> | undefined {
+    if (typeof raw !== "string" || !raw.trim()) return undefined;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, string>;
+      }
+    } catch {
+      /* ignore — fall back to auto-detect */
+    }
+    return undefined;
+  }
+
+  // Preview an upload: parse + detect column mapping + validate WITHOUT
+  // persisting. Powers the mapping-correction screen before the real import.
+  app.post(
+    "/api/workforce/import/preview",
+    ...workforceGate,
+    csvUpload.single("file"),
+    async (req, res) => {
+      try {
+        const adapterKey = (req.body?.adapter as string) || "csv";
+        const adapter = getHrConnector(adapterKey);
+        if (!adapter) {
+          return res.status(400).json({ message: `Unknown HR connector "${adapterKey}".` });
+        }
+        if (!req.file) {
+          return res.status(400).json({ message: "No file uploaded. Upload a CSV roster." });
+        }
+        const content = req.file.buffer.toString("utf-8");
+        const result = adapter.parse({
+          content,
+          filename: req.file.originalname,
+          columnMapping: parseMappingField(req.body?.columnMapping),
+        });
+        return res.json({
+          adapter: result.adapter,
+          filename: req.file.originalname,
+          columnMapping: result.columnMapping,
+          unmappedColumns: result.unmappedColumns,
+          totalRows: result.totalRows,
+          validRows: result.records.length,
+          errorCount: result.errors.length,
+          sample: result.records.slice(0, 10),
+          errors: result.errors.slice(0, 100),
+          fields: HR_FIELD_KEYS.map((key) => ({ key, label: HR_FIELD_LABELS[key] })),
+        });
+      } catch (err: any) {
+        console.error("[/api/workforce/import/preview] error:", err);
+        return res.status(500).json({ message: err.message });
+      }
+    },
+  );
+
+  // Run the import: parse → upsert staff records (auto-linking to ARK accounts
+  // by email) → record an audit batch with row counts + errors.
+  app.post(
+    "/api/workforce/import",
+    ...workforceGate,
+    csvUpload.single("file"),
+    async (req, res) => {
+      try {
+        const institution = req.institutionScope!;
+        const userId = currentUserId(req)!;
+        const adapterKey = (req.body?.adapter as string) || "csv";
+        const adapter = getHrConnector(adapterKey);
+        if (!adapter) {
+          return res.status(400).json({ message: `Unknown HR connector "${adapterKey}".` });
+        }
+        if (!req.file) {
+          return res.status(400).json({ message: "No file uploaded. Upload a CSV roster." });
+        }
+        const content = req.file.buffer.toString("utf-8");
+        const result = adapter.parse({
+          content,
+          filename: req.file.originalname,
+          columnMapping: parseMappingField(req.body?.columnMapping),
+        });
+
+        if (result.records.length === 0) {
+          return res.status(422).json({
+            message: "No valid rows to import. Check the column mapping and required Full Name column.",
+            errors: result.errors.slice(0, 100),
+          });
+        }
+
+        // Persist the batch audit FIRST so each staff row references it.
+        const batch = await storage.createImportBatch({
+          institution,
+          adapter: result.adapter,
+          filename: req.file.originalname,
+          importedBy: userId,
+          totalRows: result.totalRows,
+          importedRows: 0,
+          updatedRows: 0,
+          errorRows: result.errors.length,
+          errors: result.errors,
+          columnMapping: result.columnMapping,
+        });
+
+        const summary = await storage.upsertStaffRecords(institution, batch.id, result.records);
+
+        // Backfill the resolved insert/update counts onto the audit row.
+        const finalBatch = await storage.updateImportBatchCounts(batch.id, {
+          importedRows: summary.inserted,
+          updatedRows: summary.updated,
+        });
+
+        return res.status(201).json({
+          batchId: batch.id,
+          summary: {
+            ...summary,
+            totalRows: result.totalRows,
+            errorRows: result.errors.length,
+          },
+          columnMapping: result.columnMapping,
+          errors: result.errors.slice(0, 100),
+          batch: finalBatch ?? batch,
+        });
+      } catch (err: any) {
+        console.error("[/api/workforce/import] error:", err);
+        return res.status(500).json({ message: err.message });
+      }
+    },
+  );
+
+  // Staff roster joined with each member's ARK identity + assessment status.
+  app.get("/api/workforce/staff", ...workforceGate, async (req, res) => {
+    try {
+      const staff = await storage.getStaffRecords(req.institutionScope!);
+      return res.json({ institution: req.institutionScope, staff });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Workforce intelligence: ARK scores broken down by department / tenure band /
+  // compensation band / manager / location.
+  app.get("/api/workforce/intelligence", ...workforceGate, async (req, res) => {
+    try {
+      const intel = await storage.getWorkforceIntelligence(req.institutionScope!);
+      return res.json(intel);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Import-batch audit history.
+  app.get("/api/workforce/import-batches", ...workforceGate, async (req, res) => {
+    try {
+      const batches = await storage.getImportBatches(req.institutionScope!);
+      return res.json({ batches });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Manually (re)link a staff member to an ALREADY-EXISTING ARK account by email.
+  app.post("/api/workforce/staff/:id/link", ...workforceGate, async (req, res) => {
+    try {
+      const linked = await storage.linkStaffToArk(String(req.params.id), req.institutionScope!);
+      if (!linked) {
+        return res.status(404).json({
+          message: "No ARK account matches this staff member's email (or no email on record).",
+        });
+      }
+      return res.json(linked);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Invite an as-yet-unmatched staff member to create their ARK profile. If an
+  // account already exists for their email it is linked immediately; otherwise
+  // the invite is recorded and auto-linked when that email registers/logs in.
+  app.post("/api/workforce/staff/:id/invite", ...workforceGate, async (req, res) => {
+    try {
+      const result = await storage.inviteStaff(String(req.params.id), req.institutionScope!);
+      if (!result) {
+        return res.status(422).json({
+          message: "Cannot invite: staff member has no email on record.",
+        });
+      }
+      return res.json({
+        staff: result,
+        linked: result.assessmentStatus !== "invited",
+        message:
+          result.assessmentStatus === "invited"
+            ? "Invite recorded — this staff member will be linked automatically when they create their ARK account."
+            : "An ARK account already existed for this email and was linked.",
+      });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
   // ── Jnomics Cards (CODEC Primitives) ─────────────────
   // Card rows in Postgres carry the canonical id/name/tier/type/emoji/
   // description/basePts. The CODEC catalog enriches each row with persona,
@@ -2860,6 +3108,49 @@ export async function registerRoutes(
           { assessmentId: assessment.id, subject: "Execution Speed", score: 75 },
           { assessmentId: assessment.id, subject: "Strategic Vision", score: 60 },
         ]);
+      }
+
+      // Task #25 — make the demo user an institution (ENTERPRISE) admin so the
+      // workforce / HR-connector surface is reachable when its flag is on, and
+      // seed a small sample staff roster joined to the demo's own ARK account.
+      const WORKFORCE_INSTITUTION = "Vance Industries";
+      const demoForWorkforce = await storage.getUserByUsername("analyst@enterprise.com");
+      if (demoForWorkforce) {
+        await storage.updateUser(demoForWorkforce.id, {
+          subscriptionPlan: "ENTERPRISE",
+          institution: WORKFORCE_INSTITUTION,
+        });
+        const existingStaff = await storage.getStaffRecords(WORKFORCE_INSTITUTION);
+        if (existingStaff.length === 0) {
+          const seedBatch = await storage.createImportBatch({
+            institution: WORKFORCE_INSTITUTION,
+            adapter: "csv",
+            filename: "seed-roster.csv",
+            importedBy: demoForWorkforce.id,
+            totalRows: 8,
+            importedRows: 0,
+            updatedRows: 0,
+            errorRows: 0,
+            errors: [],
+            columnMapping: {},
+          });
+          const today = new Date();
+          const yearsAgo = (y: number) =>
+            new Date(today.getFullYear() - y, today.getMonth(), today.getDate())
+              .toISOString()
+              .slice(0, 10);
+          const seedStaff = [
+            { fullName: "Alex Vance", email: "analyst@enterprise.com", jobTitle: "Senior Systems Analyst", department: "Software Engineering", team: "Platform", hireDate: yearsAgo(6), performanceRating: "Exceeds", compensationBand: "L5", manager: "Dana Reyes", location: "Global" },
+            { fullName: "Priya Patel", email: "priya@vance.example", jobTitle: "Data Engineer", department: "Software Engineering", team: "Data", hireDate: yearsAgo(2), performanceRating: "Meets", compensationBand: "L4", manager: "Dana Reyes", location: "Remote" },
+            { fullName: "Marcus Lee", email: "marcus@vance.example", jobTitle: "Product Manager", department: "Product", team: "Growth", hireDate: yearsAgo(4), performanceRating: "Exceeds", compensationBand: "L5", manager: "Sam Okafor", location: "NA" },
+            { fullName: "Elena Rossi", email: "elena@vance.example", jobTitle: "UX Designer", department: "Product", team: "Design", hireDate: yearsAgo(1), performanceRating: "Meets", compensationBand: "L3", manager: "Sam Okafor", location: "EU" },
+            { fullName: "James Carter", email: "james@vance.example", jobTitle: "Sales Director", department: "Revenue", team: "Enterprise Sales", hireDate: yearsAgo(8), performanceRating: "Exceeds", compensationBand: "L6", manager: "Nina Brooks", location: "NA" },
+            { fullName: "Sofia Garcia", email: "sofia@vance.example", jobTitle: "Account Executive", department: "Revenue", team: "Enterprise Sales", hireDate: yearsAgo(3), performanceRating: "Meets", compensationBand: "L4", manager: "Nina Brooks", location: "NA" },
+            { fullName: "Tom Becker", email: "tom@vance.example", jobTitle: "Operations Lead", department: "Operations", team: "FinOps", hireDate: yearsAgo(11), performanceRating: "Meets", compensationBand: "L5", manager: "Nina Brooks", location: "EU" },
+            { fullName: "Aisha Khan", email: "aisha@vance.example", jobTitle: "ML Researcher", department: "Software Engineering", team: "AI", hireDate: yearsAgo(1), performanceRating: "Exceeds", compensationBand: "L5", manager: "Dana Reyes", location: "Remote" },
+          ];
+          await storage.upsertStaffRecords(WORKFORCE_INSTITUTION, seedBatch.id, seedStaff);
+        }
       }
 
       // Seed CCGE cards + scenarios

@@ -266,6 +266,54 @@ export const api = {
   getCohortComparison: () => apiRequest("/api/cohorts/comparison"),
   cohortGradesCsvUrl: (id: string) => `/api/cohorts/${id}/grades.csv`,
 
+  // ── Task #25 — Institution Workforce / HR Connectors ──
+  getWorkforceConnectors: () => apiRequest("/api/workforce/connectors"),
+  getWorkforceStaff: () => apiRequest("/api/workforce/staff"),
+  getWorkforceIntelligence: () => apiRequest("/api/workforce/intelligence"),
+  getWorkforceImportBatches: () => apiRequest("/api/workforce/import-batches"),
+  linkWorkforceStaff: (id: string) =>
+    apiRequest(`/api/workforce/staff/${id}/link`, { method: "POST" }),
+  inviteWorkforceStaff: (id: string) =>
+    apiRequest(`/api/workforce/staff/${id}/invite`, { method: "POST" }),
+  previewWorkforceImport: async (
+    file: File,
+    opts?: { adapter?: string; columnMapping?: Record<string, string> },
+  ) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("adapter", opts?.adapter ?? "csv");
+    if (opts?.columnMapping) fd.append("columnMapping", JSON.stringify(opts.columnMapping));
+    const res = await fetch("/api/workforce/import/preview", {
+      method: "POST",
+      body: fd,
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({ message: res.statusText }));
+      throw new Error(e.message || "Preview failed");
+    }
+    return res.json();
+  },
+  runWorkforceImport: async (
+    file: File,
+    opts?: { adapter?: string; columnMapping?: Record<string, string> },
+  ) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("adapter", opts?.adapter ?? "csv");
+    if (opts?.columnMapping) fd.append("columnMapping", JSON.stringify(opts.columnMapping));
+    const res = await fetch("/api/workforce/import", {
+      method: "POST",
+      body: fd,
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({ message: res.statusText }));
+      throw new Error(e.message || "Import failed");
+    }
+    return res.json();
+  },
+
   seed: () => apiRequest("/api/seed", { method: "POST" }),
 
   // ── PDD §3.4 — ARK identity surfaces ──

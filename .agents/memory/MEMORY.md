@@ -2,3 +2,4 @@
 - [Route patcher pitfalls](route-patcher.md) — when curl-smoke-testing flagged routes, send the correct HTTP verb; POSTing a GET-only path returns 404 from Express regardless of the flag, masking real coverage gaps.
 - [Revenue guardrail two-gate budget](revenue-guardrail.md) — AI calls need both token-cap AND cost-cap gates; FREE and ENTERPRISE cost caps are absolute, not 10%-derived.
 - [PDD PDF rendering](pdd-rendering.md) — renderPdd.ts needs PUPPETEER_EXECUTABLE_PATH set to nix chromium; puppeteer can't auto-resolve the browser.
+- [Background procs die between bash calls](bash-background-procs.md) — a `&` server from one bash call is dead in the next; start+test+kill in ONE call, never pkill the workflow.

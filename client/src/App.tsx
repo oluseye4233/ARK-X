@@ -31,6 +31,7 @@ import DemoPage from "@/pages/demo";
 import DemoTourPage from "@/pages/demo-tour";
 import AdminCcgeImportPage from "@/pages/admin-ccge-import";
 import BookCompanionPage from "@/pages/book-companion";
+import WorkforcePage from "@/pages/workforce";
 
 function Router() {
   return (
@@ -71,6 +72,7 @@ function Router() {
         {FEATURES.investorDemo && <Route path="/demo-tour" component={DemoTourPage} />}
         {FEATURES.adminCcgeImport && <Route path="/admin/ccge-import" component={AdminCcgeImportPage} />}
         {FEATURES.bookCompanion && <Route path="/book" component={BookCompanionPage} />}
+        {FEATURES.institutionWorkforce && <Route path="/workforce" component={WorkforcePage} />}
 
         {/* Fallback to 404 */}
         <Route component={NotFound} />
