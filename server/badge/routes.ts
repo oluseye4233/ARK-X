@@ -80,7 +80,6 @@ async function loadBadgeData(sessionId: string): Promise<BadgeData | { error: st
 
   return {
     displayName: user.name,
-    username: user.username,
     arkScore: user.arkScore ?? 0,
     jcseScore: session.kcseScore,
     tier,
@@ -100,7 +99,13 @@ export function registerBadgeRoutes(app: Express) {
   app.get("/badge/:sessionId.png", badgePngLimiter, async (req: Request, res: Response) => {
     try {
       const sessionId = String(req.params.sessionId);
-      const cached = cacheGet(sessionId);
+      // Load metadata first (cheap indexed reads) so the cache key can include
+      // the display name — a user editing their profile full name must produce
+      // a fresh badge rather than serving the stale 24h-cached render.
+      const data = await loadBadgeData(sessionId);
+      if ("error" in data) return res.status(data.status).json({ message: data.error });
+      const cacheKey = `${sessionId}:${data.displayName}`;
+      const cached = cacheGet(cacheKey);
       if (cached) {
         res.setHeader("Content-Type", "image/png");
         res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=86400");
@@ -108,10 +113,8 @@ export function registerBadgeRoutes(app: Express) {
         res.setHeader("X-Badge-Cache", "HIT");
         return res.send(cached);
       }
-      const data = await loadBadgeData(sessionId);
-      if ("error" in data) return res.status(data.status).json({ message: data.error });
       const png = await renderBadgePng(data);
-      cacheSet(sessionId, png);
+      cacheSet(cacheKey, png);
       res.setHeader("Content-Type", "image/png");
       res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=86400");
       res.setHeader("X-Robots-Tag", "noindex");

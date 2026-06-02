@@ -3,7 +3,6 @@ import { Resvg } from "@resvg/resvg-js";
 
 export type BadgeData = {
   displayName: string;
-  username: string;
   arkScore: number;
   jcseScore: number;
   tier: "Bronze" | "Silver" | "Gold" | "Platinum";
@@ -233,13 +232,6 @@ function badgeNode(data: BadgeData): any {
                       props: {
                         style: { fontSize: 40, fontWeight: 700, color: "#f0f9ff", marginTop: 4 },
                         children: data.displayName,
-                      },
-                    },
-                    {
-                      type: "div",
-                      props: {
-                        style: { fontSize: 22, color: emerald, marginTop: 4 },
-                        children: `@${data.username}`,
                       },
                     },
                   ],
