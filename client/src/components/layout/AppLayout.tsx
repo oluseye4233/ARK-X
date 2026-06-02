@@ -303,7 +303,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   return (
     <div className="min-h-screen flex flex-col sm:flex-row bg-background">
       {/* Mobile top bar (< md): hamburger drawer */}
-      <header className="sm:hidden sticky top-0 z-30 flex items-center justify-between px-4 py-3 border-b border-primary/20 bg-background/90 backdrop-blur-md">
+      <header className="sm:hidden sticky top-0 z-30 flex items-center justify-between pb-3 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[calc(0.75rem+env(safe-area-inset-top))] border-b border-primary/20 bg-background/90 backdrop-blur-md">
         <div className="flex items-center gap-2">
           <Activity className="h-6 w-6 text-primary animate-pulse" />
           <span className="font-display font-bold text-primary tracking-widest text-sm">ARK</span>

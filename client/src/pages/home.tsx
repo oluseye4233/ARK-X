@@ -106,11 +106,11 @@ export default function Home() {
         </div>
         
         <h1 className="font-display font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-white/50 tracking-tight leading-[1.05] space-y-1">
-          <span className="block text-xl sm:text-2xl md:text-3xl lg:text-4xl whitespace-nowrap">
+          <span className="block text-xl sm:text-2xl md:text-3xl lg:text-4xl sm:whitespace-nowrap">
             KNOW YOUR <span className="text-primary neon-text">WORTH.</span>{" "}
             KNOW YOUR <span className="text-destructive">RISK.</span>
           </span>
-          <span className="block text-2xl sm:text-3xl md:text-4xl lg:text-5xl whitespace-nowrap">
+          <span className="block text-2xl sm:text-3xl md:text-4xl lg:text-5xl sm:whitespace-nowrap">
             KNOW YOUR <span className="text-secondary">NEXT MOVE.</span>
           </span>
         </h1>
@@ -158,7 +158,7 @@ export default function Home() {
             <Link
               href="/free"
               data-testid="button-start-assessment"
-              className="relative inline-flex items-center justify-center bg-primary hover:bg-primary/90 text-primary-foreground font-mono uppercase tracking-wider rounded-none neon-border h-16 px-12 transition-all hover:scale-[1.04] text-base font-bold shadow-[0_0_30px_hsl(var(--primary)/0.6)] animate-throb-glow"
+              className="relative inline-flex items-center justify-center bg-primary hover:bg-primary/90 text-primary-foreground font-mono uppercase tracking-wider rounded-none neon-border h-16 px-6 sm:px-12 transition-all hover:scale-[1.04] text-base font-bold shadow-[0_0_30px_hsl(var(--primary)/0.6)] animate-throb-glow"
             >
               Claim Free JST Assessment <ArrowRight className="ml-3 h-6 w-6" />
             </Link>

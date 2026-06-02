@@ -248,7 +248,7 @@ const StepJst = () => {
           <Stat icon={Crown} label="CCMI" value={`${CCMI.total} / 300`} tone="text-fuchsia-300" />
           <Stat icon={Trophy} label="LHCS" value={`${LHCS_COMPOSITE} · ${LHCS_COMPOSITE >= 70 ? "ACTIVE" : LHCS_COMPOSITE >= 40 ? "DEVELOPING" : "BASELINE"}`} tone="text-emerald-300" />
         </div>
-        <div className="grid grid-cols-7 gap-1.5">
+        <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
           {CCMI.pillars.map((p) => (
             <div key={p.id} className="text-center" data-testid={`tour-ccmi-${p.id}`}>
               <div className="h-12 bg-background/40 border border-border rounded relative overflow-hidden flex items-end">

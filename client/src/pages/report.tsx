@@ -717,25 +717,31 @@ export default function ReportPage() {
         </button>
       </div>
 
-      {view === "report" ? (
-        <ArkReportSheet
-          ref={reportRef}
-          name={user?.name}
-          role={user?.role}
-          identity={identity}
-          lhcs={lhcs}
-          assessment={assessment}
-        />
-      ) : (
-        <ArkAdviserSheet
-          ref={adviserRef}
-          name={user?.name}
-          role={user?.role}
-          identity={identity}
-          lhcs={lhcs}
-          assessment={assessment}
-        />
-      )}
+      {/* The export sheets are a fixed 794px wide (html2canvas needs the full
+          width to render a clean PDF). On phones we let the document scroll
+          horizontally within its own container instead of blowing out the
+          page width. */}
+      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+        {view === "report" ? (
+          <ArkReportSheet
+            ref={reportRef}
+            name={user?.name}
+            role={user?.role}
+            identity={identity}
+            lhcs={lhcs}
+            assessment={assessment}
+          />
+        ) : (
+          <ArkAdviserSheet
+            ref={adviserRef}
+            name={user?.name}
+            role={user?.role}
+            identity={identity}
+            lhcs={lhcs}
+            assessment={assessment}
+          />
+        )}
+      </div>
     </div>
   );
 }

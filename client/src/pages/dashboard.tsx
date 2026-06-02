@@ -330,7 +330,7 @@ export default function Dashboard() {
                 key={heroScore}
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="text-5xl md:text-6xl font-display font-black text-primary neon-text leading-none"
+                className="text-4xl sm:text-5xl md:text-6xl font-display font-black text-primary neon-text leading-none"
                 data-testid="text-hero-score"
               >
                 {heroScore}

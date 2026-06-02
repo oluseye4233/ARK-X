@@ -374,7 +374,7 @@ export default function PlayPage() {
               <Trophy className="h-12 w-12 text-primary" />
               <div>
                 <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono">JCSE Final Score</p>
-                <h1 className="text-5xl font-display font-bold text-primary tabular-nums" data-testid="text-jcse-score">{breakdown.final}</h1>
+                <h1 className="text-4xl sm:text-5xl font-display font-bold text-primary tabular-nums" data-testid="text-jcse-score">{breakdown.final}</h1>
                 <p className="text-sm text-muted-foreground mt-1">out of 50.0</p>
               </div>
             </div>
