@@ -16,6 +16,7 @@ import {
   TrendingUp,
   Download,
   FileText,
+  Clock,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { exportReportPdf } from "@/lib/arkReportExport";
@@ -101,6 +102,19 @@ function formatRelativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
+type ConnectorConfig = {
+  adapter: string;
+  label: string;
+  configured: boolean;
+  requiredSecrets: string[];
+  enabled: boolean;
+  intervalMinutes: number;
+  lastSyncedAt: string | null;
+  lastSyncStatus: "success" | "error" | "skipped" | null;
+  lastSyncMessage: string | null;
+  lastSyncSummary: { inserted: number; updated: number; totalRows: number; errorRows: number } | null;
+};
+
 type StaffRow = {
   id: string;
   fullName: string;
@@ -172,6 +186,34 @@ const STATUS_LABEL: Record<StaffRow["assessmentStatus"], string> = {
   invited: "Invited",
   unlinked: "Unlinked",
 };
+
+function timeAgo(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  if (Number.isNaN(diffMs)) return "unknown";
+  const min = Math.floor(diffMs / 60_000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  return `${Math.floor(hr / 24)}d ago`;
+}
+
+function lastSyncLabel(cfg: ConnectorConfig): string {
+  if (!cfg.lastSyncedAt) return "Never synced automatically yet.";
+  const when = timeAgo(cfg.lastSyncedAt);
+  if (cfg.lastSyncStatus === "success") {
+    const s = cfg.lastSyncSummary;
+    const counts = s ? ` — ${s.inserted} new, ${s.updated} updated` : "";
+    return `Last synced ${when}${counts}.`;
+  }
+  if (cfg.lastSyncStatus === "skipped") {
+    return `Last run ${when}: ${cfg.lastSyncMessage ?? "no records"}.`;
+  }
+  if (cfg.lastSyncStatus === "error") {
+    return `Last run ${when} failed: ${cfg.lastSyncMessage ?? "error"}.`;
+  }
+  return `Last run ${when}.`;
+}
 
 function StatCard({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
   return (
@@ -407,6 +449,10 @@ export default function WorkforcePage() {
     queryKey: ["/api/workforce/connectors"],
     queryFn: () => api.getWorkforceConnectors(),
   });
+  const configsQ = useQuery<{ configs: ConnectorConfig[] }>({
+    queryKey: ["/api/workforce/connector-configs"],
+    queryFn: () => api.getWorkforceConnectorConfigs(),
+  });
   const staffQ = useQuery<{ institution: string; staff: StaffRow[] }>({
     queryKey: ["/api/workforce/staff"],
     queryFn: () => api.getWorkforceStaff(),
@@ -462,6 +508,15 @@ export default function WorkforcePage() {
       setImportResult(res);
       qc.invalidateQueries({ queryKey: ["/api/workforce/staff"] });
       qc.invalidateQueries({ queryKey: ["/api/workforce/intelligence"] });
+      qc.invalidateQueries({ queryKey: ["/api/workforce/connector-configs"] });
+    },
+  });
+
+  const configMut = useMutation({
+    mutationFn: ({ adapter, enabled }: { adapter: string; enabled: boolean }) =>
+      api.setWorkforceConnectorConfig(adapter, { enabled }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/workforce/connector-configs"] });
     },
   });
 
@@ -495,6 +550,7 @@ export default function WorkforcePage() {
   });
 
   const apiConnectors = (connectorsQ.data?.connectors ?? []).filter((c) => c.isApi);
+  const connectorConfigs = configsQ.data?.configs ?? [];
 
   function handleFile(f: File | null) {
     setFile(f);
@@ -666,6 +722,74 @@ export default function WorkforcePage() {
                 {(syncMut.error as Error).message}
               </p>
             )}
+
+            {/* ── Scheduled automatic sync ─────────────────── */}
+            <div className="mt-5 border-t border-border/30 pt-4" data-testid="panel-scheduled-sync">
+              <h4 className="mb-1 font-[Rajdhani] font-semibold">Scheduled Sync</h4>
+              <p className="mb-3 text-xs text-muted-foreground">
+                Keep rosters current automatically. When enabled, ARK refreshes
+                this connector in the background on a schedule — no manual sync
+                needed.
+              </p>
+              <div className="space-y-2">
+                {connectorConfigs.map((cfg) => (
+                  <div
+                    key={cfg.adapter}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/40 bg-background/30 p-3"
+                    data-testid={`row-schedule-${cfg.adapter}`}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-[Rajdhani] font-semibold">{cfg.label}</span>
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wider ${
+                            cfg.enabled
+                              ? "border-primary/40 bg-primary/10 text-primary"
+                              : "border-slate-500/40 bg-slate-500/10 text-slate-300"
+                          }`}
+                          data-testid={`status-schedule-${cfg.adapter}`}
+                        >
+                          {cfg.enabled ? `Every ${cfg.intervalMinutes}m` : "Off"}
+                        </span>
+                      </div>
+                      <p
+                        className="mt-0.5 text-[11px] text-muted-foreground"
+                        data-testid={`text-last-sync-${cfg.adapter}`}
+                      >
+                        {lastSyncLabel(cfg)}
+                      </p>
+                    </div>
+                    <button
+                      disabled={
+                        (!cfg.enabled && !cfg.configured) ||
+                        (configMut.isPending && configMut.variables?.adapter === cfg.adapter)
+                      }
+                      onClick={() =>
+                        configMut.mutate({ adapter: cfg.adapter, enabled: !cfg.enabled })
+                      }
+                      className={`flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${
+                        cfg.enabled
+                          ? "border border-border/60 text-muted-foreground hover:text-foreground"
+                          : "bg-primary text-primary-foreground"
+                      }`}
+                      data-testid={`button-schedule-toggle-${cfg.adapter}`}
+                    >
+                      {configMut.isPending && configMut.variables?.adapter === cfg.adapter ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Clock className="h-3.5 w-3.5" />
+                      )}
+                      {cfg.enabled ? "Disable auto-sync" : "Enable auto-sync"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {configMut.isError && (
+                <p className="mt-3 text-sm text-destructive" data-testid="text-schedule-error">
+                  {(configMut.error as Error).message}
+                </p>
+              )}
+            </div>
           </div>
         )}
 

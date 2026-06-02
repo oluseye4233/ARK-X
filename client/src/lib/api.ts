@@ -288,6 +288,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ adapter }),
     }),
+  // ── Task #35 — Scheduled HR-roster sync ──
+  getWorkforceConnectorConfigs: () => apiRequest("/api/workforce/connector-configs"),
+  setWorkforceConnectorConfig: (
+    adapter: string,
+    body: { enabled: boolean; intervalMinutes?: number },
+  ) =>
+    apiRequest(`/api/workforce/connector-configs/${adapter}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
   previewWorkforceImport: async (
     file: File,
     opts?: { adapter?: string; columnMapping?: Record<string, string> },

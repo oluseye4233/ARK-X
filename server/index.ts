@@ -135,6 +135,9 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      // Start the background HR-roster scheduler once the server is listening
+      // (DB + routes ready). No-op when the workforce feature is off. Task #35.
+      void import("./hrScheduler").then(({ startHrScheduler }) => startHrScheduler());
     },
   );
 })();

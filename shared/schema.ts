@@ -1293,6 +1293,62 @@ export type StaffRecordWithArk = StaffRecord & {
   ark: { arkScore: number; jstIndex: number; ccmi: number; vulnerabilityPct: number } | null;
 };
 
+// ───────────────────────────────────────────────────────────────────
+// Task #35 — Scheduled HR-roster sync
+// ───────────────────────────────────────────────────────────────────
+// On-demand sync (POST /api/workforce/sync) requires an admin to click "Sync
+// now". This per-institution config record gives the background scheduler a
+// concrete tenant → adapter target so it can refresh rosters automatically.
+// Staff records are per-institution while connector credentials are global env
+// secrets, so the scheduler keys off (institution, adapter) rows — one per HR
+// system an institution has opted into.
+
+/** Outcome of the most recent scheduled (or on-demand) sync attempt, surfaced
+ *  in the admin UI's last-sync status line. */
+export const HR_SYNC_STATUSES = ["success", "error", "skipped"] as const;
+export type HrSyncStatus = (typeof HR_SYNC_STATUSES)[number];
+
+/** Default cadence (minutes) between automatic syncs for an enabled config. */
+export const HR_SYNC_DEFAULT_INTERVAL_MINUTES = 60;
+/** Bounds for the configurable per-config sync interval. */
+export const HR_SYNC_MIN_INTERVAL_MINUTES = 15;
+export const HR_SYNC_MAX_INTERVAL_MINUTES = 24 * 60;
+
+export const hrConnectorConfigs = pgTable("hr_connector_configs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  institution: text("institution").notNull(),
+  adapter: text("adapter").notNull(), // HrConnectorAdapterKey (API adapters only)
+  enabled: boolean("enabled").notNull().default(false),
+  intervalMinutes: integer("interval_minutes")
+    .notNull()
+    .default(HR_SYNC_DEFAULT_INTERVAL_MINUTES),
+  lastSyncedAt: timestamp("last_synced_at"),
+  lastSyncStatus: text("last_sync_status").$type<HrSyncStatus>(),
+  lastSyncMessage: text("last_sync_message"),
+  lastSyncSummary: jsonb("last_sync_summary").$type<{
+    inserted: number;
+    updated: number;
+    totalRows: number;
+    errorRows: number;
+  }>(),
+  createdBy: varchar("created_by").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("hr_connector_configs_institution_adapter_uniq").on(t.institution, t.adapter),
+]);
+export const insertHrConnectorConfigSchema = createInsertSchema(hrConnectorConfigs).omit({
+  id: true,
+  lastSyncedAt: true,
+  lastSyncStatus: true,
+  lastSyncMessage: true,
+  lastSyncSummary: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertHrConnectorConfig = z.infer<typeof insertHrConnectorConfigSchema>;
+export type HrConnectorConfig = typeof hrConnectorConfigs.$inferSelect;
+
 // ═══════════════════════════════════════════════════════════════════
 // Phase M1 — SPHINX × Matrix Foundation
 // ═══════════════════════════════════════════════════════════════════

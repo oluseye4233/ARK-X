@@ -34,6 +34,7 @@ import {
   staffRecords, type StaffRecord, type StaffRecordWithArk,
   hrImportBatches, type HrImportBatch, type InsertHrImportBatch,
   hrConnectorTests, type HrConnectorTest, type InsertHrConnectorTest,
+  hrConnectorConfigs, type HrConnectorConfig, type HrSyncStatus,
   type NormalizedHrRecord, type StaffAssessmentStatus,
   tenureBandFromHireDate,
   bookJourneyBadges, type BookJourneyBadge, type InsertBookJourneyBadge,
@@ -260,6 +261,32 @@ export interface IStorage {
   recordConnectorTest(test: InsertHrConnectorTest): Promise<HrConnectorTest>;
   /** Last connection-test result per connector for an institution. */
   getConnectorTests(institution: string): Promise<HrConnectorTest[]>;
+
+  // ── Scheduled HR sync (Task #35) ──
+  /** All connector configs for one institution (admin UI). */
+  getConnectorConfigs(institution: string): Promise<HrConnectorConfig[]>;
+  /** Every enabled config across all institutions (the scheduler's work list). */
+  getEnabledConnectorConfigs(): Promise<HrConnectorConfig[]>;
+  /** Insert-or-update the (institution, adapter) config, setting enabled +
+   *  cadence. `createdBy` only applies on first insert. */
+  upsertConnectorConfig(input: {
+    institution: string;
+    adapter: string;
+    enabled: boolean;
+    intervalMinutes: number;
+    createdBy: string;
+  }): Promise<HrConnectorConfig>;
+  /** Record the outcome of a sync attempt (status + message + summary +
+   *  lastSyncedAt). On success/skip lastSyncedAt advances; on error it does
+   *  too so the cadence doesn't tight-loop a failing adapter. */
+  recordConnectorSyncResult(
+    id: string,
+    result: {
+      status: HrSyncStatus;
+      message: string;
+      summary?: { inserted: number; updated: number; totalRows: number; errorRows: number } | null;
+    },
+  ): Promise<HrConnectorConfig | undefined>;
 
   // ── Book Companion (Task #22) ──
   getBookBadges(userId: string): Promise<BookJourneyBadge[]>;
@@ -1738,6 +1765,72 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(hrConnectorTests)
       .where(eq(hrConnectorTests.institution, institution));
+  }
+
+  // ── Scheduled HR sync (Task #35) ──
+  async getConnectorConfigs(institution: string): Promise<HrConnectorConfig[]> {
+    return await db
+      .select()
+      .from(hrConnectorConfigs)
+      .where(eq(hrConnectorConfigs.institution, institution))
+      .orderBy(hrConnectorConfigs.adapter);
+  }
+
+  async getEnabledConnectorConfigs(): Promise<HrConnectorConfig[]> {
+    return await db
+      .select()
+      .from(hrConnectorConfigs)
+      .where(eq(hrConnectorConfigs.enabled, true));
+  }
+
+  async upsertConnectorConfig(input: {
+    institution: string;
+    adapter: string;
+    enabled: boolean;
+    intervalMinutes: number;
+    createdBy: string;
+  }): Promise<HrConnectorConfig> {
+    const [row] = await db
+      .insert(hrConnectorConfigs)
+      .values({
+        institution: input.institution,
+        adapter: input.adapter,
+        enabled: input.enabled,
+        intervalMinutes: input.intervalMinutes,
+        createdBy: input.createdBy,
+      })
+      .onConflictDoUpdate({
+        target: [hrConnectorConfigs.institution, hrConnectorConfigs.adapter],
+        set: {
+          enabled: input.enabled,
+          intervalMinutes: input.intervalMinutes,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return row;
+  }
+
+  async recordConnectorSyncResult(
+    id: string,
+    result: {
+      status: HrSyncStatus;
+      message: string;
+      summary?: { inserted: number; updated: number; totalRows: number; errorRows: number } | null;
+    },
+  ): Promise<HrConnectorConfig | undefined> {
+    const [row] = await db
+      .update(hrConnectorConfigs)
+      .set({
+        lastSyncedAt: new Date(),
+        lastSyncStatus: result.status,
+        lastSyncMessage: result.message,
+        lastSyncSummary: result.summary ?? null,
+        updatedAt: new Date(),
+      })
+      .where(eq(hrConnectorConfigs.id, id))
+      .returning();
+    return row;
   }
 
   // ── Book Companion (Task #22) ──

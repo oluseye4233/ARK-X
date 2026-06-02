@@ -16,7 +16,14 @@ import { analyzeResume } from "./resumeAnalyzer";
 import { requireAuth, requireSelf, requireInstructor, requireInstitutionAdmin, currentUserId, loginSession } from "./auth";
 import { getHrConnector, listHrConnectors } from "./hrConnectors";
 import { runHrConnectionTest } from "./workforceConnectionTest";
-import { HR_FIELD_KEYS, HR_FIELD_LABELS } from "@shared/schema";
+import { runConnectorSync } from "./hrConnectors/sync";
+import {
+  HR_FIELD_KEYS,
+  HR_FIELD_LABELS,
+  HR_SYNC_DEFAULT_INTERVAL_MINUTES,
+  HR_SYNC_MIN_INTERVAL_MINUTES,
+  HR_SYNC_MAX_INTERVAL_MINUTES,
+} from "@shared/schema";
 import { requireFeature, getResolvedFeatures, isFeatureEnabled } from "./featureFlags";
 import { STAGE } from "@shared/featureFlags";
 import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, type SubscriptionPlan, CCGE_TIERS, type CcgeTier, jcseToTier, ALL_CARD_PILLARS, SPC_MIN_CERT_TO_PUBLISH, SPC_PRICE_MIN, SPC_PRICE_MAX, SPC_STATUSES, SPC_SCOPES, CERT_LEVEL_RANK, ARK_SCORE_DELTAS, type CardPillar, type SpcStatus, ASSESSMENT_SOURCES, PRIMARY_ASSESSMENT_SOURCES, ASSESSMENT_SOURCE_LABELS, type AssessmentSourceKey } from "@shared/schema";
@@ -1902,69 +1909,28 @@ export async function registerRoutes(
       const institution = req.institutionScope!;
       const userId = currentUserId(req)!;
       const adapterKey = (req.body?.adapter as string) || "";
-      const adapter = getHrConnector(adapterKey);
-      if (!adapter) {
-        return res.status(400).json({ message: `Unknown HR connector "${adapterKey}".` });
-      }
-      if (!adapter.fetchRecords) {
-        return res.status(400).json({
-          message: `The "${adapter.label}" connector does not support API sync. Use the file import instead.`,
-        });
-      }
-      if (adapter.isConfigured && !adapter.isConfigured()) {
-        const missing = (adapter.requiredSecrets ?? []).join(", ");
-        return res.status(400).json({
-          message: `The "${adapter.label}" connector is not configured. Ask an admin to set its credentials${missing ? ` (${missing})` : ""}.`,
-        });
-      }
 
-      // Pull + normalize from the live API. fetchRecords throws on auth/network
-      // failure; surface that as a 502 (upstream dependency) rather than 500.
-      let result;
-      try {
-        result = await adapter.fetchRecords();
-      } catch (err: any) {
-        console.error(`[/api/workforce/sync] ${adapterKey} fetch failed:`, err);
-        return res.status(502).json({ message: err?.message ?? `${adapter.label} sync failed.` });
+      // Shared pipeline with the scheduler — see server/hrConnectors/sync.ts.
+      const result = await runConnectorSync({ institution, adapterKey, importedBy: userId });
+
+      if (!result.ok) {
+        // Map the discriminated failure code onto the HTTP status the client
+        // already understands: bad request (400), upstream failure (502),
+        // empty roster (422).
+        const status =
+          result.code === "fetch_failed" ? 502 : result.code === "no_records" ? 422 : 400;
+        if (result.code === "fetch_failed") {
+          console.error(`[/api/workforce/sync] ${adapterKey} fetch failed:`, result.message);
+        }
+        return res.status(status).json({ message: result.message });
       }
-
-      if (result.records.length === 0) {
-        return res.status(422).json({
-          message: `${adapter.label} returned no valid staff records.`,
-          errors: result.errors.slice(0, 100),
-        });
-      }
-
-      const batch = await storage.createImportBatch({
-        institution,
-        adapter: result.adapter,
-        filename: `${adapter.label} API sync`,
-        importedBy: userId,
-        totalRows: result.totalRows,
-        importedRows: 0,
-        updatedRows: 0,
-        errorRows: result.errors.length,
-        errors: result.errors,
-        columnMapping: result.columnMapping,
-      });
-
-      const summary = await storage.upsertStaffRecords(institution, batch.id, result.records);
-      const finalBatch = await storage.updateImportBatchCounts(batch.id, {
-        importedRows: summary.inserted,
-        updatedRows: summary.updated,
-      });
 
       return res.status(201).json({
-        batchId: batch.id,
+        batchId: result.batchId,
         adapter: result.adapter,
-        summary: {
-          ...summary,
-          totalRows: result.totalRows,
-          errorRows: result.errors.length,
-        },
+        summary: result.summary,
         columnMapping: result.columnMapping,
         errors: result.errors.slice(0, 100),
-        batch: finalBatch ?? batch,
       });
     } catch (err: any) {
       console.error("[/api/workforce/sync] error:", err);
@@ -2013,6 +1979,93 @@ export async function registerRoutes(
       return res.status(status).json(body);
     } catch (err: any) {
       console.error("[/api/workforce/test-connection] error:", err);
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Scheduled HR sync configuration (Task #35) ────────────────────
+  // Per-institution connector configs that the background scheduler drives.
+  // GET merges every registered API connector with its stored config (so the
+  // UI lists connectors that have never been configured) and reports the
+  // last-sync status. PUT enables/disables automatic sync + sets the cadence.
+
+  // List API connectors + each one's scheduled-sync config + last-sync status.
+  app.get("/api/workforce/connector-configs", ...workforceGate, async (req, res) => {
+    try {
+      const institution = req.institutionScope!;
+      const configs = await storage.getConnectorConfigs(institution);
+      const byAdapter = new Map(configs.map((c) => [c.adapter, c]));
+      const items = listHrConnectors()
+        .filter((a) => !a.acceptsFile) // only live API adapters can be scheduled
+        .map((a) => {
+          const cfg = byAdapter.get(a.key);
+          return {
+            adapter: a.key,
+            label: a.label,
+            configured: a.isConfigured ? a.isConfigured() : true,
+            requiredSecrets: a.requiredSecrets ?? [],
+            enabled: cfg?.enabled ?? false,
+            intervalMinutes: cfg?.intervalMinutes ?? HR_SYNC_DEFAULT_INTERVAL_MINUTES,
+            lastSyncedAt: cfg?.lastSyncedAt ?? null,
+            lastSyncStatus: cfg?.lastSyncStatus ?? null,
+            lastSyncMessage: cfg?.lastSyncMessage ?? null,
+            lastSyncSummary: cfg?.lastSyncSummary ?? null,
+          };
+        });
+      return res.json({ configs: items });
+    } catch (err: any) {
+      console.error("[/api/workforce/connector-configs] error:", err);
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Enable/disable scheduled sync for one adapter + set its cadence.
+  app.put("/api/workforce/connector-configs/:adapter", ...workforceGate, async (req, res) => {
+    try {
+      const institution = req.institutionScope!;
+      const userId = currentUserId(req)!;
+      const adapterKey = String(req.params.adapter);
+      const adapter = getHrConnector(adapterKey);
+      if (!adapter || adapter.acceptsFile || !adapter.fetchRecords) {
+        return res.status(400).json({
+          message: `"${adapterKey}" is not a schedulable live HR connector.`,
+        });
+      }
+
+      const parsed = z
+        .object({
+          enabled: z.boolean(),
+          intervalMinutes: z
+            .number()
+            .int()
+            .min(HR_SYNC_MIN_INTERVAL_MINUTES)
+            .max(HR_SYNC_MAX_INTERVAL_MINUTES)
+            .optional(),
+        })
+        .safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid config.", errors: parsed.error.flatten() });
+      }
+
+      // Block enabling a connector whose server-side credentials are missing —
+      // it would only ever fail-close on every tick.
+      if (parsed.data.enabled && adapter.isConfigured && !adapter.isConfigured()) {
+        const missing = (adapter.requiredSecrets ?? []).join(", ");
+        return res.status(400).json({
+          message: `Cannot enable scheduled sync — "${adapter.label}" is not configured${missing ? ` (set ${missing})` : ""}.`,
+        });
+      }
+
+      const config = await storage.upsertConnectorConfig({
+        institution,
+        adapter: adapterKey,
+        enabled: parsed.data.enabled,
+        intervalMinutes: parsed.data.intervalMinutes ?? HR_SYNC_DEFAULT_INTERVAL_MINUTES,
+        createdBy: userId,
+      });
+      return res.json({ config });
+    } catch (err: any) {
+      console.error("[/api/workforce/connector-configs/:adapter] error:", err);
       return res.status(500).json({ message: err.message });
     }
   });
