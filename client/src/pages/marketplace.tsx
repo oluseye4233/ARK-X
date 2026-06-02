@@ -1158,19 +1158,6 @@ function PublishPage() {
           </Link>
         </div>
 
-        <Link href="/marketplace/bonsai" data-testid="link-publish-bonsai-cta">
-          <div className="glass-card p-6 rounded-xl border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-all cursor-pointer space-y-3">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">🛰️</span>
-              <h3 className="font-display text-lg text-primary uppercase tracking-wider">Open the ATANDA Command Centre</h3>
-            </div>
-            <p className="font-mono text-xs text-muted-foreground leading-relaxed">
-              Link your subscriber profile to the ATANDA Command Centre — a dedicated, API-linked
-              control hub with the full dashboard suite beyond the ARK platform.
-            </p>
-            <span className="font-mono text-[10px] uppercase tracking-widest text-primary">Open Command Centre →</span>
-          </div>
-        </Link>
       </div>
     );
   }
