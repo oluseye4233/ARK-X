@@ -90,7 +90,7 @@ export default function ProfilePage() {
   const fields = [
     { key: "name", label: "Full Name", icon: User, value: form.name },
     { key: "role", label: "Role / Title", icon: Briefcase, value: form.role },
-    { key: "department", label: "Department", icon: Building2, value: form.department },
+    { key: "department", label: "Company/Department", icon: Building2, value: form.department },
     { key: "seniority", label: "Seniority Level", icon: Award, value: form.seniority },
     { key: "location", label: "Location", icon: MapPin, value: form.location },
   ];
