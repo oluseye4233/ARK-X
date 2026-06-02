@@ -109,6 +109,29 @@ async function applyCaps(
     }
   }
 
+  if (trigger === "card.verified") {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recent = await db
+      .select({ delta: arkScoreHistory.delta })
+      .from(arkScoreHistory)
+      .where(
+        and(
+          eq(arkScoreHistory.userId, userId),
+          eq(arkScoreHistory.trigger, "card.verified"),
+          gte(arkScoreHistory.createdAt, since),
+        ),
+      );
+    const used = recent.reduce((s, r) => s + Math.max(0, r.delta), 0);
+    const remaining = Math.max(0, FLYWHEEL_CAPS.VERIFICATION_PER_DAY - used);
+    if (rawDelta > remaining) {
+      return {
+        cappedDelta: remaining,
+        intendedCap: remaining,
+        reason: `Daily verification cap (+${FLYWHEEL_CAPS.VERIFICATION_PER_DAY}) reached`,
+      };
+    }
+  }
+
   if (trigger === "spc.published" || trigger === "spc.sold" || trigger === "spc.purchased") {
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const recent = await db

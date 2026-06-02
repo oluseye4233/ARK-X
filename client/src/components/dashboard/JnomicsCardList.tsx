@@ -1,9 +1,46 @@
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
-import { Database, Link as LinkIcon, Loader2, Layers, Award, Globe2, Eye, EyeOff } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Database, Link as LinkIcon, Loader2, Layers, Award, Globe2, Eye, EyeOff, ShieldCheck, ShieldQuestion, X, Sparkles, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
+import { FEATURES } from "@shared/featureFlags";
 import { FlippableCard } from "@/components/ui/flippable-card";
+
+// ── Primitive Card Verification (Task #55) ──────────────────────────
+interface VerificationRow {
+  cardId: string;
+  score: number;
+  tier: string | null;
+  status: string;
+  attempts: number;
+}
+
+interface VerificationChallenge {
+  id: string;
+  standard: string;
+  standardKey: string;
+  label: string;
+  skills: string[];
+  instruction: string;
+}
+
+interface VerificationQuest {
+  cardId: string;
+  cardName: string;
+  emoji: string;
+  category: string;
+  persona: string;
+  challenges: VerificationChallenge[];
+}
+
+// Tier → badge styling. Mirrors the cyberpunk palette; Platinum reads as the
+// primary cyan accent so a fully-verified primitive pops.
+const TIER_TONE: Record<string, string> = {
+  Bronze: "bg-amber-700/20 text-amber-400 border-amber-600/40",
+  Silver: "bg-slate-400/20 text-slate-200 border-slate-300/40",
+  Gold: "bg-yellow-500/20 text-yellow-300 border-yellow-400/50",
+  Platinum: "bg-primary/20 text-primary border-primary/50",
+};
 
 // Map CODEC categories to a short narrative shown on the back face. Keeps
 // the dashboard card grounded in the JUNGLENOMICS CODEC taxonomy without
@@ -51,6 +88,12 @@ export function JnomicsCardList({ matchedCardIds }: JnomicsCardListProps) {
   const [flipAllVersion, setFlipAllVersion] = useState(0);
   const [allFlipped, setAllFlipped] = useState(false);
 
+  // Verification (Task #55) — only wired when the flag is on. Map of cardId →
+  // banked verification, plus the card whose quest modal is open.
+  const verificationEnabled = FEATURES.cardVerification;
+  const [verifications, setVerifications] = useState<Record<string, VerificationRow>>({});
+  const [questCardId, setQuestCardId] = useState<string | null>(null);
+
   useEffect(() => {
     const fetchCards = async () => {
       setIsSyncing(true);
@@ -71,10 +114,28 @@ export function JnomicsCardList({ matchedCardIds }: JnomicsCardListProps) {
     }
   }, [matchedCardIds]);
 
+  useEffect(() => {
+    if (!verificationEnabled) return;
+    api
+      .getVerificationStatus()
+      .then((rows: VerificationRow[]) => {
+        const map: Record<string, VerificationRow> = {};
+        for (const r of rows) map[r.cardId] = r;
+        setVerifications(map);
+      })
+      .catch(() => {});
+  }, [verificationEnabled]);
+
   const handleFlipAll = () => {
     setAllFlipped(prev => !prev);
     setFlipAllVersion(v => v + 1);
   };
+
+  const handleVerified = (row: VerificationRow) => {
+    setVerifications(prev => ({ ...prev, [row.cardId]: row }));
+  };
+
+  const questCard = cards.find(c => c.id === questCardId) ?? null;
 
   return (
     <div className="glass-card p-6 rounded-xl border-secondary/20" data-testid="jnomics-card-list">
@@ -184,6 +245,14 @@ export function JnomicsCardList({ matchedCardIds }: JnomicsCardListProps) {
                         )}
                       </div>
                     )}
+
+                    {verificationEnabled && (
+                      <VerifyFooter
+                        verification={verifications[card.id]}
+                        onOpen={() => setQuestCardId(card.id)}
+                        cardId={card.id}
+                      />
+                    )}
                   </div>
                 }
                 back={
@@ -226,7 +295,259 @@ export function JnomicsCardList({ matchedCardIds }: JnomicsCardListProps) {
           ))}
         </div>
       )}
+
+      {verificationEnabled && questCard && (
+        <VerificationModal
+          cardId={questCard.id}
+          cardName={questCard.name}
+          emoji={questCard.emoji}
+          existing={verifications[questCard.id]}
+          onClose={() => setQuestCardId(null)}
+          onVerified={handleVerified}
+        />
+      )}
     </div>
+  );
+}
+
+// Front-face footer: a VERIFY action plus the banked tier badge once earned.
+function VerifyFooter({
+  verification,
+  onOpen,
+  cardId,
+}: {
+  verification?: VerificationRow;
+  onOpen: () => void;
+  cardId: string;
+}) {
+  const tier = verification?.tier ?? null;
+  return (
+    <div className="flex items-center justify-between gap-2 pt-2 mt-auto border-t border-white/5">
+      {tier ? (
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-widest border",
+            TIER_TONE[tier] ?? "bg-white/10 text-white/80 border-white/20",
+          )}
+          data-testid={`badge-verified-${cardId}`}
+        >
+          <ShieldCheck className="h-3 w-3" /> {tier} · {verification?.score}
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+          <ShieldQuestion className="h-3 w-3" /> Unverified
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={onOpen}
+        data-testid={`button-verify-${cardId}`}
+        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-primary/40 text-primary hover:bg-primary/10 text-[10px] font-mono uppercase tracking-widest transition-colors"
+      >
+        <ShieldCheck className="h-3 w-3" /> {tier ? "Re-verify" : "Verify"}
+      </button>
+    </div>
+  );
+}
+
+// The Verification Quest modal: loads the quest for a primitive, collects one
+// authored Context-Craft prompt per skill standard, submits, and surfaces the
+// resulting tier + ARK gain.
+function VerificationModal({
+  cardId,
+  cardName,
+  emoji,
+  existing,
+  onClose,
+  onVerified,
+}: {
+  cardId: string;
+  cardName: string;
+  emoji: string;
+  existing?: VerificationRow;
+  onClose: () => void;
+  onVerified: (row: VerificationRow) => void;
+}) {
+  const [quest, setQuest] = useState<VerificationQuest | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [prompts, setPrompts] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<{ score: number; tier: string | null; jstBoost: number; improved: boolean } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    api
+      .getVerificationQuest(cardId)
+      .then((data: { quest: VerificationQuest }) => {
+        if (cancelled) return;
+        setQuest(data.quest);
+      })
+      .catch((e: any) => {
+        if (!cancelled) setError(e?.message ?? "Could not load this verification quest.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cardId]);
+
+  const challenges = quest?.challenges ?? [];
+  const allAnswered =
+    challenges.length > 0 && challenges.every(c => (prompts[c.id]?.trim().length ?? 0) >= 10);
+
+  const handleSubmit = async () => {
+    if (!allAnswered || submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const submissions = challenges.map(c => ({ challengeId: c.id, prompt: prompts[c.id].trim() }));
+      const res = await api.submitVerification(cardId, submissions);
+      setResult({ score: res.score, tier: res.tier, jstBoost: res.jstBoost, improved: res.improved });
+      onVerified({
+        cardId,
+        score: res.verification.score,
+        tier: res.verification.tier,
+        status: res.verification.status,
+        attempts: res.verification.attempts,
+      });
+    } catch (e: any) {
+      setError(e?.message ?? "Submission failed.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+        onClick={onClose}
+        data-testid="modal-verification"
+      >
+        <motion.div
+          initial={{ scale: 0.96, y: 12 }}
+          animate={{ scale: 1, y: 0 }}
+          exit={{ scale: 0.96, y: 12 }}
+          onClick={e => e.stopPropagation()}
+          className="glass-card relative w-full max-w-2xl max-h-[88vh] overflow-y-auto rounded-xl border border-primary/30 p-6"
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close verification quest"
+            data-testid="button-close-verification"
+            className="absolute top-3 right-3 rounded p-1 border border-white/20 bg-black/30 text-white/80 hover:bg-black/50 transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+
+          <div className="flex items-center gap-3 mb-1 pr-9">
+            <span className="text-3xl" role="img" aria-label={cardName}>{emoji}</span>
+            <div>
+              <h3 className="font-display font-bold text-lg text-primary uppercase tracking-widest flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5" /> Verification Quest
+              </h3>
+              <p className="text-xs font-mono text-muted-foreground">{cardName}</p>
+            </div>
+          </div>
+
+          {existing?.tier && !result && (
+            <p className="text-[11px] font-mono text-muted-foreground mb-3">
+              Current: <span className="text-primary">{existing.tier} · {existing.score}</span> · re-verify to improve your tier.
+            </p>
+          )}
+
+          {loading ? (
+            <div className="flex items-center justify-center py-16 text-muted-foreground">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+          ) : error && !quest ? (
+            <p className="text-sm text-destructive py-8" data-testid="text-verification-error">{error}</p>
+          ) : result ? (
+            <div className="py-6 text-center" data-testid="verification-result">
+              <CheckCircle2 className="h-12 w-12 mx-auto text-secondary mb-3" />
+              <div className="text-4xl font-display font-bold text-white">{result.score}<span className="text-lg text-muted-foreground">/100</span></div>
+              {result.tier && (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 px-3 py-1 mt-2 rounded-full text-xs font-mono uppercase tracking-widest border",
+                    TIER_TONE[result.tier] ?? "bg-white/10 text-white/80 border-white/20",
+                  )}
+                >
+                  <ShieldCheck className="h-3.5 w-3.5" /> {result.tier}
+                </span>
+              )}
+              <p className="text-sm font-mono mt-4 text-muted-foreground">
+                {result.improved && result.jstBoost > 0 ? (
+                  <span className="text-secondary flex items-center justify-center gap-1">
+                    <Sparkles className="h-4 w-4" /> +{result.jstBoost} JST · ARK rising
+                  </span>
+                ) : (
+                  "No tier improvement — your banked tier stands."
+                )}
+              </p>
+              <button
+                type="button"
+                onClick={onClose}
+                data-testid="button-done-verification"
+                className="mt-6 px-4 py-2 rounded-md border border-primary/40 text-primary hover:bg-primary/10 text-xs font-mono uppercase tracking-widest transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-5 mt-4">
+              <p className="text-xs font-sans text-white/80 leading-relaxed">
+                Author one complete Context-Craft prompt per skill standard. Each prompt should
+                express all seven pillars — System, Role, Instruction, Example, Constraint, Format
+                and Data — to prove you can apply this primitive in production.
+              </p>
+              {challenges.map(ch => (
+                <div key={ch.id} className="flex flex-col gap-2" data-testid={`challenge-${ch.id}`}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-mono uppercase tracking-widest text-primary">{ch.standard}</span>
+                    <span className="text-[11px] font-mono text-muted-foreground">{ch.label}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {ch.skills.map(s => (
+                      <span key={s} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-white/70 border border-white/10">{s}</span>
+                    ))}
+                  </div>
+                  <textarea
+                    value={prompts[ch.id] ?? ""}
+                    onChange={e => setPrompts(p => ({ ...p, [ch.id]: e.target.value }))}
+                    rows={5}
+                    maxLength={4000}
+                    placeholder="Write your Context-Craft prompt here…"
+                    data-testid={`input-prompt-${ch.id}`}
+                    className="w-full rounded-md bg-background/60 border border-white/10 focus:border-primary/50 focus:outline-none p-3 text-sm font-mono text-white/90 resize-y"
+                  />
+                </div>
+              ))}
+
+              {error && <p className="text-xs text-destructive" data-testid="text-verification-error">{error}</p>}
+
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={!allAnswered || submitting}
+                data-testid="button-submit-verification"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md bg-primary/15 border border-primary/50 text-primary hover:bg-primary/25 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-mono uppercase tracking-widest transition-colors"
+              >
+                {submitting ? <><Loader2 className="h-4 w-4 animate-spin" /> Scoring…</> : <><ShieldCheck className="h-4 w-4" /> Submit for verification</>}
+              </button>
+            </div>
+          )}
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
   );
 }
 

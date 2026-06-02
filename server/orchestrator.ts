@@ -15,6 +15,7 @@ const EVENT_TO_TRIGGER: Partial<Record<ArkEventType, ArkTriggerType>> = {
   "cert.upgraded": "cert.upgraded",
   "spc.published": "spc.published",
   "spc.purchased": "spc.purchased",
+  "card.verified": "card.verified",
 };
 
 export type ArkEventPayloads = {
@@ -44,6 +45,14 @@ export type ArkEventPayloads = {
     listingId: string;
     asRole: "buyer" | "creator";
     isFirstSaleForCreator?: boolean;
+  };
+  "card.verified": {
+    cardId: string;
+    cardName: string;
+    score: number;
+    tier: string | null;
+    prevTier: string | null;
+    improved: boolean;
   };
 };
 

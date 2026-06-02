@@ -30,6 +30,7 @@ import { STAGE } from "@shared/featureFlags";
 import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, type SubscriptionPlan, CCGE_TIERS, type CcgeTier, jcseToTier, ALL_CARD_PILLARS, SPC_MIN_CERT_TO_PUBLISH, SPC_PRICE_MIN, SPC_PRICE_MAX, SPC_STATUSES, SPC_SCOPES, CERT_LEVEL_RANK, ARK_SCORE_DELTAS, type CardPillar, type SpcStatus, ASSESSMENT_SOURCES, PRIMARY_ASSESSMENT_SOURCES, ASSESSMENT_SOURCE_LABELS, type AssessmentSourceKey } from "@shared/schema";
 import { computeCompleteness, canonicalSourcesUsed, buildCombinedText } from "@shared/assessmentMerge";
 import { dealHand, scoreSession, evaluateCustomCard, blendCraftIntoFinal } from "./ccge";
+import { buildVerificationQuest, scoreVerificationPrompt, aggregateVerification } from "./cardVerification";
 import { orchestrator } from "./orchestrator";
 import { recalcArkForUser } from "./arkRecalc";
 import { computeLhcsForUser } from "./lhcs";
@@ -2550,6 +2551,153 @@ export async function registerRoutes(
       return res.json(sessions);
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Primitive Card Verification (Task #55) ─────────────
+  // Subscribers verify the CODEC primitives on their assessment by authoring
+  // their own Context-Craft prompts. requireFeature gates BEFORE requireAuth so
+  // the whole surface 404s (indistinguishable from unimplemented) while OFF.
+
+  // The user's own verification status across all primitives.
+  app.get("/api/verification/status", requireFeature("cardVerification"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const rows = await storage.getCardVerifications(userId);
+      return res.json(rows);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // The Verification Quest for a single primitive. Evidence-gated: the card must
+  // appear on the subscriber's latest assessment (matchedCardIds).
+  app.get("/api/verification/quest/:cardId", requireFeature("cardVerification"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const cardId = String(req.params.cardId);
+      const assessment = await storage.getLatestAssessment(userId);
+      const matched = assessment?.matchedCardIds ?? [];
+      if (!matched.includes(cardId)) {
+        return res.status(403).json({
+          message: "You can only verify primitives that appear on your assessment.",
+        });
+      }
+      const quest = buildVerificationQuest(cardId);
+      if (!quest) return res.status(404).json({ message: "No verification quest for this primitive." });
+      const existing = await storage.getCardVerification(userId, cardId);
+      return res.json({ quest, verification: existing ?? null });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Submit authored prompts (one per challenge) → score → tier → award.
+  app.post("/api/verification/:cardId/submit", requireFeature("cardVerification"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const cardId = String(req.params.cardId);
+
+      const schema = z.object({
+        submissions: z
+          .array(
+            z.object({
+              challengeId: z.string().min(1),
+              prompt: z.string().trim().min(10).max(4000),
+            }),
+          )
+          .min(1)
+          .max(3),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({
+          message: "Provide one prompt (10–4000 chars) for each verification challenge.",
+        });
+      }
+
+      // Evidence gate — only verify primitives on the user's assessment.
+      const assessment = await storage.getLatestAssessment(userId);
+      const matched = assessment?.matchedCardIds ?? [];
+      if (!matched.includes(cardId)) {
+        return res.status(403).json({
+          message: "You can only verify primitives that appear on your assessment.",
+        });
+      }
+
+      const quest = buildVerificationQuest(cardId);
+      if (!quest) return res.status(404).json({ message: "No verification quest for this primitive." });
+
+      // Every challenge in the quest must be answered exactly once.
+      const challengeById = new Map(quest.challenges.map((c) => [c.id, c]));
+      const answeredIds = parsed.data.submissions.map((s) => s.challengeId);
+      if (new Set(answeredIds).size !== answeredIds.length) {
+        return res.status(400).json({ message: "Each challenge may only be answered once." });
+      }
+      for (const id of answeredIds) {
+        if (!challengeById.has(id)) {
+          return res.status(400).json({ message: `Unknown challenge: ${id}` });
+        }
+      }
+      if (answeredIds.length !== quest.challenges.length) {
+        return res.status(400).json({
+          message: `Answer all ${quest.challenges.length} verification challenges.`,
+        });
+      }
+
+      const submissions = parsed.data.submissions.map((s) => {
+        const challenge = challengeById.get(s.challengeId)!;
+        const { craft, signals } = scoreVerificationPrompt(s.prompt, challenge);
+        return {
+          challengeId: s.challengeId,
+          standard: challenge.standard,
+          prompt: s.prompt,
+          craft,
+          signals,
+        };
+      });
+
+      const { score, tier } = aggregateVerification(submissions.map((s) => s.craft));
+
+      const result = await storage.finalizeCardVerification({
+        userId,
+        cardId,
+        score,
+        tier,
+        submissions,
+      });
+
+      // Mirror CCGE: recompute ARK via the orchestrator (maps card.verified →
+      // recalc with the daily verification cap + live SSE identity broadcast).
+      // Only fire when a tier improvement actually banked a JST boost.
+      if (result.improved && result.jstBoost > 0) {
+        await orchestrator.emit(
+          userId,
+          "card.verified",
+          {
+            cardId,
+            cardName: quest.cardName,
+            score: result.verification.score,
+            tier: result.verification.tier,
+            prevTier: result.prevTier,
+            improved: result.improved,
+          },
+          result.jstBoost,
+        );
+      }
+
+      return res.json({
+        verification: result.verification,
+        score,
+        tier,
+        improved: result.improved,
+        prevTier: result.prevTier,
+        jstBoost: result.jstBoost,
+        submissions,
+      });
+    } catch (err: any) {
+      console.error("Verification submit error:", err);
+      return res.status(err.status || 500).json({ message: err.message });
     }
   });
 

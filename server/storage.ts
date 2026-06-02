@@ -39,6 +39,8 @@ import {
   tenureBandFromHireDate,
   bookJourneyBadges, type BookJourneyBadge, type InsertBookJourneyBadge,
   bookLedgerSnapshots, type BookLedgerSnapshot, type InsertBookLedgerSnapshot,
+  cardVerifications, type CardVerification, type VerificationSubmission,
+  verificationArkDelta,
 } from "@shared/schema";
 import { or } from "drizzle-orm";
 
@@ -133,6 +135,22 @@ export interface IStorage {
       newJstTotal: number | null;
       newJstSkills: number | null;
     };
+  }>;
+
+  // Primitive Card Verification (Task #55)
+  getCardVerification(userId: string, cardId: string): Promise<CardVerification | undefined>;
+  getCardVerifications(userId: string): Promise<CardVerification[]>;
+  finalizeCardVerification(args: {
+    userId: string;
+    cardId: string;
+    score: number;
+    tier: CcgeTier | null;
+    submissions: VerificationSubmission[];
+  }): Promise<{
+    verification: CardVerification;
+    jstBoost: number;
+    improved: boolean;
+    prevTier: CcgeTier | null;
   }>;
 
   // SPHINX Marketplace
@@ -647,6 +665,142 @@ export class DatabaseStorage implements IStorage {
           newJstSkills: plan.newJstSkills,
         },
       };
+    });
+  }
+
+  // ── Primitive Card Verification (Task #55) ──────────────────
+  async getCardVerification(userId: string, cardId: string): Promise<CardVerification | undefined> {
+    const [row] = await db
+      .select()
+      .from(cardVerifications)
+      .where(and(eq(cardVerifications.userId, userId), eq(cardVerifications.cardId, cardId)));
+    return row;
+  }
+
+  async getCardVerifications(userId: string): Promise<CardVerification[]> {
+    return await db
+      .select()
+      .from(cardVerifications)
+      .where(eq(cardVerifications.userId, userId))
+      .orderBy(desc(cardVerifications.updatedAt));
+  }
+
+  /**
+   * Atomic upsert of a verification attempt. ARK (JST-skills) is awarded ONLY on
+   * a tier improvement vs. the row's previously-banked tier — the incremental
+   * delta = verificationArkDelta(newTier) - verificationArkDelta(prevTier). This
+   * mirrors the cert-upgrade flywheel: re-clearing the same tier never double-
+   * awards, and a lower attempt never claws back. The JST boost is applied to
+   * the user's latest assessment inside the same transaction; the route then
+   * calls recalcArkForUser("card.verified") which recomputes ARK and enforces
+   * the daily cap (the recalc owns its own transaction, like CCGE finish).
+   */
+  async finalizeCardVerification(args: {
+    userId: string;
+    cardId: string;
+    score: number;
+    tier: CcgeTier | null;
+    submissions: VerificationSubmission[];
+  }): Promise<{
+    verification: CardVerification;
+    jstBoost: number;
+    improved: boolean;
+    prevTier: CcgeTier | null;
+  }> {
+    return await db.transaction(async (tx) => {
+      // Lock the user row first — exactly as finalizeSession does for CCGE.
+      // This serializes ALL concurrent verification (and CCGE) writes for the
+      // same user, so two simultaneous submits for DIFFERENT cards can't both
+      // read the same latest-assessment jstSkills and clobber each other's
+      // boost (lost update). Per-card row locking alone wouldn't help since
+      // different cards are different rows.
+      const [lockedUser] = await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.id, args.userId))
+        .for("update");
+      if (!lockedUser) {
+        const err: any = new Error("User not found");
+        err.status = 404;
+        throw err;
+      }
+
+      const [existing] = await tx
+        .select()
+        .from(cardVerifications)
+        .where(and(eq(cardVerifications.userId, args.userId), eq(cardVerifications.cardId, args.cardId)))
+        .for("update");
+
+      const prevTier = (existing?.tier as CcgeTier | null) ?? null;
+      const prevTierValue = verificationArkDelta(prevTier);
+      const newTierValue = verificationArkDelta(args.tier);
+      const improved = newTierValue > prevTierValue;
+      const jstBoost = improved ? newTierValue - prevTierValue : 0;
+
+      // Banked best score/tier never regresses; the latest submissions snapshot
+      // is always stored so the user can review their most recent attempt.
+      const bestScore = Math.max(existing?.score ?? 0, args.score);
+      const bestTier: CcgeTier | null =
+        verificationArkDelta(args.tier) >= verificationArkDelta(prevTier) ? args.tier : prevTier;
+      const status = bestTier ? "verified" : "attempted";
+      const arkAwarded = (existing?.arkAwarded ?? 0) + jstBoost;
+      const attempts = (existing?.attempts ?? 0) + 1;
+
+      let verification: CardVerification;
+      if (existing) {
+        const [updated] = await tx
+          .update(cardVerifications)
+          .set({
+            score: bestScore,
+            tier: bestTier,
+            status,
+            submissions: args.submissions,
+            arkAwarded,
+            attempts,
+            updatedAt: new Date(),
+          })
+          .where(eq(cardVerifications.id, existing.id))
+          .returning();
+        verification = updated;
+      } else {
+        const [created] = await tx
+          .insert(cardVerifications)
+          .values({
+            userId: args.userId,
+            cardId: args.cardId,
+            score: bestScore,
+            tier: bestTier,
+            status,
+            submissions: args.submissions,
+            arkAwarded,
+            attempts,
+          })
+          .returning();
+        verification = created;
+      }
+
+      // Apply the incremental JST-skills boost to the user's latest assessment
+      // so recalcArkForUser picks it up. Skills + total are bumped in lockstep
+      // (the JST formula is linear), each clamped to its ceiling.
+      if (jstBoost > 0) {
+        const [latestAssessment] = await tx
+          .select()
+          .from(assessments)
+          .where(eq(assessments.userId, args.userId))
+          .orderBy(sql`${assessments.createdAt} DESC`)
+          .limit(1);
+        if (latestAssessment) {
+          const newSkills = Math.min(100, latestAssessment.jstSkills + jstBoost);
+          const skillsDelta = newSkills - latestAssessment.jstSkills;
+          const newTotal = Math.min(300, latestAssessment.jstTotal + skillsDelta);
+          await tx
+            .update(assessments)
+            .set({ jstSkills: newSkills, jstTotal: newTotal })
+            .where(eq(assessments.id, latestAssessment.id));
+        }
+      }
+
+      return { verification, jstBoost, improved, prevTier };
     });
   }
 

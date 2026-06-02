@@ -106,6 +106,49 @@ export function jcseToTier(jcse: number): CcgeTier | null {
   return null;
 }
 
+// ── Primitive Card Verification (Task #55) ────────────────────
+// A subscriber verifies a CODEC primitive on their assessment by authoring
+// their own Context-Craft prompts (one per skill standard mapped on the card).
+// Each prompt is scored 0-50 (reuses the CCGE craft evaluator) and aggregated
+// to a 0-100 verification score → tier. Thresholds align to the HIVE cert
+// framework (Bronze 60 / Silver 70 / Gold 80 / Platinum 90) on the 0-100 scale,
+// deliberately STRICTER than the JCSE in-game rubric: a verification badge is a
+// stronger claim than a single game session, so it must clear a higher bar.
+export const VERIFICATION_TIER_THRESHOLDS = {
+  BRONZE: 60,
+  SILVER: 70,
+  GOLD: 80,
+  PLATINUM: 90,
+} as const;
+
+export function verificationScoreToTier(score: number): CcgeTier | null {
+  if (score >= VERIFICATION_TIER_THRESHOLDS.PLATINUM) return "Platinum";
+  if (score >= VERIFICATION_TIER_THRESHOLDS.GOLD) return "Gold";
+  if (score >= VERIFICATION_TIER_THRESHOLDS.SILVER) return "Silver";
+  if (score >= VERIFICATION_TIER_THRESHOLDS.BRONZE) return "Bronze";
+  return null;
+}
+
+// Verification JST carries MORE weight than a standard CCGE session
+// (SESSION deltas are 2/4/6/9). A verified primitive is a durable, evidence-
+// backed skill claim, so its JST-skills boost is ~3× the session reward.
+export const VERIFICATION_ARK_DELTAS = {
+  BRONZE: 6,
+  SILVER: 12,
+  GOLD: 20,
+  PLATINUM: 30,
+} as const;
+
+export function verificationArkDelta(tier: CcgeTier | null): number {
+  switch (tier) {
+    case "Platinum": return VERIFICATION_ARK_DELTAS.PLATINUM;
+    case "Gold": return VERIFICATION_ARK_DELTAS.GOLD;
+    case "Silver": return VERIFICATION_ARK_DELTAS.SILVER;
+    case "Bronze": return VERIFICATION_ARK_DELTAS.BRONZE;
+    default: return 0;
+  }
+}
+
 // ARK Score deltas per flywheel event (PDD §3.10, lean adaptation)
 export const ARK_SCORE_DELTAS = {
   SESSION_BRONZE: 2,
@@ -264,6 +307,10 @@ export function lhcsStatusFromReadiness(readiness: number): LhcsStatus {
 export const FLYWHEEL_CAPS = {
   CCGE_PER_DAY: 15,
   SPHINX_PER_30D: 20,
+  // Verification rewards are heavier per event than CCGE, so the daily ceiling
+  // is higher to let a subscriber verify a few primitives in one sitting, but
+  // still bounded to prevent farming the whole deck in a single day.
+  VERIFICATION_PER_DAY: 40,
 } as const;
 
 export const ARK_TRIGGER_TYPES = [
@@ -273,6 +320,7 @@ export const ARK_TRIGGER_TYPES = [
   "spc.published",
   "spc.sold",
   "spc.purchased",
+  "card.verified",
   "manual.recompute",
   "backfill",
 ] as const;
@@ -643,6 +691,47 @@ export const insertGameSessionSchema = createInsertSchema(gameSessions).omit({
 export type InsertGameSession = z.infer<typeof insertGameSessionSchema>;
 export type GameSession = typeof gameSessions.$inferSelect;
 
+// ── Primitive Card Verification (Task #55) ────────────────────
+// One row per (user, CODEC primitive) — the durable, idempotent record of a
+// subscriber's verification of that primitive. `submissions` snapshots the
+// authored prompt + craft score for each skill standard the card maps to.
+// ARK is only awarded on a tier IMPROVEMENT (mirrors cert upgrade), so the row
+// is upserted: re-attempting a lower tier never claws back, and re-clearing the
+// same tier never double-awards.
+export type VerificationSubmission = {
+  challengeId: string;   // e.g. "codec-ant::onet"
+  standard: string;      // "O*NET" | "SFIA" | "WEF"
+  prompt: string;        // the subscriber's authored Context-Craft prompt
+  craft: number;         // 0-50 craft evaluation of that prompt
+  signals: string[];     // structural cues detected in the prompt
+};
+
+export const cardVerifications = pgTable(
+  "card_verifications",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull(),
+    cardId: varchar("card_id").notNull(), // codec-xxx primitive id
+    score: integer("score").notNull().default(0), // 0-100 aggregate
+    tier: text("tier"), // Bronze/Silver/Gold/Platinum or null (below Bronze)
+    status: text("status").notNull().default("attempted"), // attempted | verified
+    submissions: jsonb("submissions").$type<VerificationSubmission[]>().default([]).notNull(),
+    arkAwarded: integer("ark_awarded").notNull().default(0), // cumulative JST-skill boost awarded
+    attempts: integer("attempts").notNull().default(0),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("card_verifications_user_card_uidx").on(t.userId, t.cardId)],
+);
+
+export const insertCardVerificationSchema = createInsertSchema(cardVerifications).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCardVerification = z.infer<typeof insertCardVerificationSchema>;
+export type CardVerification = typeof cardVerifications.$inferSelect;
+
 // ── SPHINX Marketplace Tables ────────────────────────────────
 export const spcListings = pgTable("spc_listings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -818,6 +907,9 @@ export const ARK_EVENT_TYPES = [
   // Phase M1 (SPHINX × Matrix) — synergy bonuses are SPHINX-class events,
   // capped under the existing SPHINX +20/30d ceiling via arkRecalc.applyCaps.
   "synergy.awarded",
+  // Primitive Card Verification (Task #55) — a subscriber verified a CODEC
+  // primitive; maps to the "card.verified" ARK trigger (own daily cap).
+  "card.verified",
 ] as const;
 
 export const CHECKOUT_STATUSES = ["pending", "completed", "failed", "canceled"] as const;

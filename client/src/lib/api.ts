@@ -147,6 +147,21 @@ export const api = {
   getCcgeUserSessions: (userId: string) =>
     apiRequest(`/api/ccge/sessions/user/${userId}`),
 
+  // ── Primitive Card Verification (Task #55) ──
+  getVerificationStatus: () => apiRequest("/api/verification/status"),
+
+  getVerificationQuest: (cardId: string) =>
+    apiRequest(`/api/verification/quest/${cardId}`),
+
+  submitVerification: (
+    cardId: string,
+    submissions: { challengeId: string; prompt: string }[],
+  ) =>
+    apiRequest(`/api/verification/${cardId}/submit`, {
+      method: "POST",
+      body: JSON.stringify({ submissions }),
+    }),
+
   hivePrecheck: (data: { title: string; description: string; body: string; pillar: string }) =>
     apiRequest("/api/sphinx/hive-precheck", {
       method: "POST",

@@ -53,7 +53,11 @@ export type FeatureKey =
   | "revenueGuardrail" // cost-cap second gate + model policy + V2 budgets
   // ── Book Companion (Task #22) — reader onboarding journey (trigger: book
   //    launch / first reader cohort) ──
-  | "bookCompanion"; // /book journey + /b/:slug QR resolver + chapter badges + Ledger
+  | "bookCompanion" // /book journey + /b/:slug QR resolver + chapter badges + Ledger
+  // ── Primitive Card Verification (Task #55) — subscribers verify the CODEC
+  //    primitives on their assessment via a Context-Craft Verification Quest
+  //    (trigger: first paid subscriber cohort / verification GA) ──
+  | "cardVerification"; // /api/verification/* + VERIFY button + per-card badge
 
 /**
  * MVP defaults — every CLASS C surface is OFF.
@@ -79,6 +83,7 @@ export const MVP_FEATURES: Readonly<Record<FeatureKey, boolean>> = Object.freeze
   contextCraftPage: false,
   revenueGuardrail: false,
   bookCompanion: false,
+  cardVerification: false,
 });
 
 /**
