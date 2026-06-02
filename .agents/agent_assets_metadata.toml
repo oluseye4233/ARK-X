@@ -89,13 +89,13 @@ title = "ARK Living PDD v11 — Markdown source"
 id = "_rzaPmVvZ27ukQaMuBG7w"
 uri = "file://exports/ARK_PDD_Current_ATLAS.pdf"
 type = "pdf"
-title = "ARK Platform — Living PDD v11 (ATLAS 4-Part)"
+title = "ARK Platform — Living PDD v11 (ATLAS, source document)"
 
 [[outputs]]
 id = "Cp6nF5UV8mHkkwiBHx0iZ"
 uri = "file://exports/ARK_PDD_Current_MVP_Spartan.pdf"
 type = "pdf"
-title = "ARK Platform — SPARTAN MVP PDD (compressed from full ATLAS PDD)"
+title = "ARK Platform — SPARTAN MVP PDD v12 (compresses the Living PDD)"
 
 [[outputs]]
 id = "jt5lyS6qEltRJz2TLEBhP"

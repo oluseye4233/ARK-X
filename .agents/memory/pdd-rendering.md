@@ -6,17 +6,22 @@ description: How to render exports/*.md PDDs to PDF in this Replit env
 # Rendering PDDs to PDF
 
 `scripts/renderPdd.ts <src.md> <out.pdf>` uses `md-to-pdf` (puppeteer-core). Puppeteer
-CANNOT auto-resolve a browser in this environment — it throws at `resolveExecutablePath`.
+CANNOT auto-resolve a browser here — it throws "Could not find Chrome" /
+`resolveExecutablePath`, and `npx puppeteer browsers install chrome` times out.
 
-**Fix:** export `PUPPETEER_EXECUTABLE_PATH` to the nix-store chromium binary before running, e.g.
+**Fix:** export `PUPPETEER_EXECUTABLE_PATH` to a real nix chromium, then run:
 
-    # pick a REAL chromium browser (not chromium-bsu the game, not ungoogled):
-    export PUPPETEER_EXECUTABLE_PATH="$(ls -d /nix/store/*-chromium-[0-9]*/bin/chromium | head -1)"
+    export PUPPETEER_EXECUTABLE_PATH="$(which chromium)"   # clean recent stable build
     npx tsx scripts/renderPdd.ts exports/X.md exports/X.pdf
 
-**Why:** the nix chromium isn't on PATH where puppeteer-core looks, and the launch args in
-renderPdd.ts (`--no-sandbox` etc.) don't set the executable path. The nix hash in the path
-changes across rebuilds, so resolve it with a glob rather than hardcoding.
+**Pitfall:** do NOT use `ls /nix/store/*chromium*/bin/chromium | head -1` — the glob
+sorts an ancient `ungoogled-chromium-98` first, which crashes Puppeteer. `$(which chromium)`
+resolves a recent stable chromium (e.g. 125); otherwise pick a non-ungoogled high-version
+path explicitly. The nix hash changes across rebuilds, so never hardcode the full path.
+
+**Why this matters repeatedly:** the "Current" PDDs are LIVING docs — same filename, version
+bumped inside (ATLAS PDD-CUR-2026-0NN, SPARTAN PDD-MVP-2026-0NN); git history preserves prior.
+Every refresh regenerates the sibling .pdf, so you need a working headless Chrome each time.
 
 **Styling:** CSS lives in `scripts/pddStyles.ts` (PDD_BASE_CSS). Cover/toc use raw HTML
 `<div class="cover">` / `<div class="toc">` blocks at the top of the markdown.

@@ -1,9 +1,9 @@
-- [Feature flag layering](feature-flags.md) — flagged-off surfaces must be re-checked inside any always-on parent route (e.g. `/marketplace/:id` swallows reserved CLASS C slugs even when their own `Route` isn't registered).
-- [Route patcher pitfalls](route-patcher.md) — when curl-smoke-testing flagged routes, send the correct HTTP verb; POSTing a GET-only path returns 404 from Express regardless of the flag, masking real coverage gaps.
+- [Feature flag layering](feature-flags.md) — re-check flagged-off surfaces inside always-on parent routes (e.g. `/marketplace/:id` can swallow reserved CLASS C slugs).
+- [Route patcher pitfalls](route-patcher.md) — when smoke-testing flagged routes, use the correct HTTP verb; a wrong-verb 404 masks real flag-coverage gaps.
 - [Revenue guardrail two-gate budget](revenue-guardrail.md) — AI calls need both token-cap AND cost-cap gates; FREE and ENTERPRISE cost caps are absolute, not 10%-derived.
 - [Flywheel cap models](flywheel-cap-models.md) — two distinct cap mechanisms (CCGE daily-throttle vs SPHINX hard-cap); mirror the sibling the task references.
-- [Dev DB migration drift](dev-db-migration-drift.md) — merged migrations aren't auto-applied to dev DB; run `psql "$DATABASE_URL" -f migrations/<file>.sql`. Use unique monotonic prefixes; `current_role` is a reserved word.
-- [PDD PDF rendering](pdd-rendering.md) — renderPdd.ts needs PUPPETEER_EXECUTABLE_PATH set to nix chromium; puppeteer can't auto-resolve the browser.
+- [Dev DB migration drift](dev-db-migration-drift.md) — merged migrations aren't auto-applied to dev DB; apply via psql, unique monotonic prefixes, avoid reserved words.
+- [PDD PDF rendering](pdd-rendering.md) — renderPdd.ts needs PUPPETEER_EXECUTABLE_PATH=$(which chromium); never `head -1` the nix glob (picks ancient ungoogled-98).
 - [Background procs die between bash calls](bash-background-procs.md) — a `&` server from one bash call is dead in the next; start+test+kill in ONE call, never pkill the workflow.
 - [HR connector adapters](hr-connectors.md) — file adapters impl `parse`, API adapters impl async `fetchRecords`; roster sync is on-demand (session-scoped) not a global scheduler (no per-tenant config).
 - [Empty profile state](empty-profile-state.md) — removing all sources persists a zeroed assessment (`sourcesUsed=[]`, completeness 0), NOT floor scores; guard surfaces with `isEmptyProfile` (empty array ≠ null legacy rows).
