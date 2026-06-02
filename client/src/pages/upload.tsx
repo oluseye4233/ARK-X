@@ -6,6 +6,16 @@ import { ResumeUploader } from "@/components/upload/ResumeUploader";
 import { SelfAssessmentForm } from "@/components/upload/SelfAssessmentForm";
 import { LinkedInImporter } from "@/components/upload/LinkedInImporter";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
 
@@ -59,6 +69,7 @@ export default function UploadPage() {
   const [completeness, setCompleteness] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [pendingRemove, setPendingRemove] = useState<SourceStatus | null>(null);
 
   const refreshSources = useCallback(async () => {
     if (!user) return;
@@ -86,20 +97,22 @@ export default function UploadPage() {
 
   // Drop a source the user no longer wants. The server re-runs the cumulative
   // merge over the remaining sources, so we just refresh the meter afterwards.
-  const handleRemove = useCallback(
-    async (key: string) => {
-      setRemoving(key);
-      try {
-        await api.removeAssessmentSource(key);
-        await refreshSources();
-      } catch {
-        // Non-fatal — leave the card as-is if removal fails.
-      } finally {
-        setRemoving(null);
-      }
-    },
-    [refreshSources],
-  );
+  // Gated behind a confirm dialog so an accidental click can't silently drop a
+  // source and lower the user's completeness / ARK score.
+  const handleConfirmRemove = useCallback(async () => {
+    if (!pendingRemove) return;
+    const key = pendingRemove.source;
+    setRemoving(key);
+    setPendingRemove(null);
+    try {
+      await api.removeAssessmentSource(key);
+      await refreshSources();
+    } catch {
+      // Non-fatal — leave the card as-is if removal fails.
+    } finally {
+      setRemoving(null);
+    }
+  }, [pendingRemove, refreshSources]);
 
   const statusFor = (key: IntakeMode): SourceStatus | undefined =>
     sources.find((s) => s.source === key);
@@ -188,7 +201,7 @@ export default function UploadPage() {
                 {done ? (
                   <button
                     type="button"
-                    onClick={() => handleRemove(st.source)}
+                    onClick={() => setPendingRemove(st)}
                     disabled={isRemoving}
                     aria-label={`Remove ${st.label}`}
                     title={`Remove ${st.label}`}
@@ -268,6 +281,39 @@ export default function UploadPage() {
       {mode === "resume" && <ResumeUploader onComplete={handleContributed} />}
       {mode === "self" && <SelfAssessmentForm onComplete={handleContributed} />}
       {mode === "linkedin" && <LinkedInImporter onComplete={handleContributed} />}
+
+      <AlertDialog
+        open={pendingRemove !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingRemove(null);
+        }}
+      >
+        <AlertDialogContent data-testid="dialog-remove-source">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Remove {pendingRemove?.label}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This drops your {pendingRemove?.label} source and re-runs your
+              cumulative ARK assessment over what's left. Your profile
+              completeness and ARK score may go down. This can't be undone, but
+              you can always add the source again.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-remove-source">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmRemove}
+              data-testid="button-confirm-remove-source"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Remove source
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
