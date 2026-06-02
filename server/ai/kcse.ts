@@ -15,24 +15,30 @@ export type ClaudeKcseResult = {
 const KCSE_TTL_MS = 60 * 60 * 1000;
 const KCSE_PROMPT_VERSION = "v1";
 
-const SYSTEM_PROMPT = `You are KCSE Judge for Junglenomics' Context Craft Game Engine. Score how well the player's selected Super Prompt Cards address the scenario.
+const SYSTEM_PROMPT = `You are KCSE Judge for Junglenomics' Context Craft Game Engine. The player selects Super Prompt Cards AND then authors a custom card — a real prompt they type — as the final stage. Judge how well their selected cards AND authored prompt together address the scenario. When an authoredCard is present, weigh the quality, clarity, and scenario-fit of the authored prompt most heavily.
 
 Return strict JSON: {"kcseDelta": number (-5 to +5, additive bonus on top of deterministic score), "narrative": string (2 sentences max), "strengths": string[] (≤3), "weaknesses": string[] (≤3)}.
 
 kcseDelta rubric:
-+3..+5 = exceptional pillar coverage, novel synergy, addresses scenario explicitly
++3..+5 = exceptional authored prompt + pillar coverage, addresses scenario explicitly
 +1..+2 = competent, on-target
 0 = average; matches deterministic
--2..-1 = weak coverage or off-topic
--5..-3 = mostly irrelevant
+-2..-1 = weak/vague authored prompt or off-topic
+-5..-3 = mostly irrelevant or empty authored prompt
 
 Be terse. No prose outside the JSON.`;
 
-function buildUserPrompt(scenario: CcgeScenario, played: CcgeCard[], deterministic: KcseBreakdown): string {
+function buildUserPrompt(
+  scenario: CcgeScenario,
+  played: CcgeCard[],
+  deterministic: KcseBreakdown,
+  customCard?: { name: string; body: string },
+): string {
   return JSON.stringify({
     scenario: { tier: scenario.tier, title: scenario.title, prompt: scenario.prompt, targetPillars: scenario.targetPillars, tokenBudget: scenario.tokenBudget },
     playedCards: played.map(c => ({ name: c.name, pillar: c.pillar, type: c.type, baseKcse: c.baseKcse, body: c.body.slice(0, 220) })),
-    deterministicScore: { final: deterministic.final, knowledge: deterministic.knowledge, clarity: deterministic.clarity, specificity: deterministic.specificity, efficiency: deterministic.efficiency, synergies: deterministic.synergies.map(s => s.name) },
+    authoredCard: customCard ? { name: customCard.name.slice(0, 80), body: customCard.body.slice(0, 1500) } : null,
+    deterministicScore: { final: deterministic.final, knowledge: deterministic.knowledge, clarity: deterministic.clarity, specificity: deterministic.specificity, efficiency: deterministic.efficiency, craft: deterministic.craft ?? null, synergies: deterministic.synergies.map(s => s.name) },
   });
 }
 
@@ -57,11 +63,17 @@ export async function scoreSessionWithClaude(opts: {
   scenario: CcgeScenario;
   playedCards: CcgeCard[];
   deterministic: KcseBreakdown;
+  customCard?: { name: string; body: string };
 }): Promise<ClaudeKcseResult | null> {
   if (!isClaudeAvailable()) return null;
 
   const sortedIds = [...opts.playedCards.map(c => c.id)].sort();
-  const key = cacheKey(["kcse", KCSE_PROMPT_VERSION, MODELS.HAIKU, opts.scenario.id, ...sortedIds]);
+  // Fold the authored card into the cache key so a different prompt body never
+  // reuses a prior verdict (the authored prompt is the dominant scored artifact).
+  const cardFingerprint = opts.customCard
+    ? `${opts.customCard.name}::${opts.customCard.body}`
+    : "";
+  const key = cacheKey(["kcse", KCSE_PROMPT_VERSION, MODELS.HAIKU, opts.scenario.id, ...sortedIds, cardFingerprint]);
   const cached = await cacheGet<{ kcseDelta: number; narrative: string; strengths: string[]; weaknesses: string[] }>(key);
   if (cached) {
     return { ...cached, viaClaude: true, cached: true };
@@ -78,7 +90,7 @@ export async function scoreSessionWithClaude(opts: {
 
   try {
     const client = getAnthropic();
-    const userPrompt = buildUserPrompt(opts.scenario, opts.playedCards, opts.deterministic);
+    const userPrompt = buildUserPrompt(opts.scenario, opts.playedCards, opts.deterministic, opts.customCard);
     const t0 = Date.now();
     const callPromise = client.messages.create({
       model: MODELS.HAIKU,

@@ -29,7 +29,7 @@ import { requireFeature, getResolvedFeatures, isFeatureEnabled } from "./feature
 import { STAGE } from "@shared/featureFlags";
 import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, type SubscriptionPlan, CCGE_TIERS, type CcgeTier, jcseToTier, ALL_CARD_PILLARS, SPC_MIN_CERT_TO_PUBLISH, SPC_PRICE_MIN, SPC_PRICE_MAX, SPC_STATUSES, SPC_SCOPES, CERT_LEVEL_RANK, ARK_SCORE_DELTAS, type CardPillar, type SpcStatus, ASSESSMENT_SOURCES, PRIMARY_ASSESSMENT_SOURCES, ASSESSMENT_SOURCE_LABELS, type AssessmentSourceKey } from "@shared/schema";
 import { computeCompleteness, canonicalSourcesUsed, buildCombinedText } from "@shared/assessmentMerge";
-import { dealHand, scoreSession } from "./ccge";
+import { dealHand, scoreSession, evaluateCustomCard, blendCraftIntoFinal } from "./ccge";
 import { orchestrator } from "./orchestrator";
 import { recalcArkForUser } from "./arkRecalc";
 import { computeLhcsForUser } from "./lhcs";
@@ -2423,12 +2423,17 @@ export async function registerRoutes(
 
   app.post("/api/ccge/sessions/:id/finish", requireAuth, async (req, res) => {
     try {
-      const schema = z.object({ playedCardIds: z.array(z.string()).min(1).max(5), useClaude: z.boolean().optional() });
+      const schema = z.object({
+        playedCardIds: z.array(z.string()).min(1).max(5),
+        useClaude: z.boolean().optional(),
+        customCardName: z.string().trim().min(2).max(80),
+        customCardBody: z.string().trim().min(10).max(4000),
+      });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ message: "playedCardIds must be an array of 1–5 card IDs" });
+        return res.status(400).json({ message: "Provide 1–5 card IDs plus a card name (2–80 chars) and a prompt (10–4000 chars)." });
       }
-      const { playedCardIds, useClaude } = parsed.data;
+      const { playedCardIds, useClaude, customCardName, customCardBody } = parsed.data;
 
       const session = await storage.getGameSession(String(req.params.id));
       if (!session) return res.status(404).json({ message: "Session not found" });
@@ -2461,6 +2466,13 @@ export async function registerRoutes(
 
       const breakdown = scoreSession(playedCards, scenario);
 
+      // ── Card Design stage (final stage) — evaluate the player's authored card.
+      const cardFinal = breakdown.final;
+      const craftResult = evaluateCustomCard({ name: customCardName, body: customCardBody, scenario });
+      breakdown.craft = craftResult.craft;
+      breakdown.craftSignals = craftResult.signals;
+      breakdown.final = blendCraftIntoFinal(cardFinal, craftResult.craft);
+
       const actorUserId = currentUserId(req)!;
       let claudeKcse: Awaited<ReturnType<typeof scoreSessionWithClaude>> = null;
       const actor = await storage.getUser(actorUserId);
@@ -2483,6 +2495,7 @@ export async function registerRoutes(
           scenario,
           playedCards,
           deterministic: breakdown,
+          customCard: { name: customCardName, body: customCardBody },
         });
         if (claudeKcse) {
           breakdown.final = Math.max(0, Math.min(50, Math.round((breakdown.final + claudeKcse.kcseDelta) * 10) / 10));
@@ -2496,6 +2509,8 @@ export async function registerRoutes(
         playedCardIds,
         breakdown,
         tier,
+        customCardName,
+        customCardBody,
       });
 
       await orchestrator.emit(actorUserId, "game.session.finished", {

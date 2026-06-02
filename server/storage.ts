@@ -558,6 +558,8 @@ export class DatabaseStorage implements IStorage {
     playedCardIds: string[];
     breakdown: KcseBreakdown;
     tier: CcgeTier | null;
+    customCardName?: string;
+    customCardBody?: string;
   }) {
     const { planFlywheel } = await import("./ccge");
     return await db.transaction(async (tx) => {
@@ -623,6 +625,9 @@ export class DatabaseStorage implements IStorage {
           status: "finished",
           kcseScore: args.breakdown.final,
           kcseBreakdown: args.breakdown,
+          customCardName: args.customCardName ?? null,
+          customCardBody: args.customCardBody ?? null,
+          craftScore: args.breakdown.craft ?? null,
           certTierEarned: args.tier,
           arkScoreDelta: plan.arkScoreDelta,
           certUpgradedFrom: plan.certUpgradedFrom,

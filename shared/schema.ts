@@ -605,6 +605,12 @@ export type KcseBreakdown = {
   tokenBudget: number;
   base: number;
   final: number;
+  // Custom-card design stage (final stage of every game sequence). `craft` is
+  // the 0-50 evaluation of the player's authored prompt; `craftSignals` lists
+  // the heuristic cues detected in it. Optional for backward compatibility with
+  // sessions persisted before the design stage existed.
+  craft?: number;
+  craftSignals?: string[];
 };
 
 export const gameSessions = pgTable("game_sessions", {
@@ -616,6 +622,11 @@ export const gameSessions = pgTable("game_sessions", {
   status: text("status").notNull().default("in_progress"),
   kcseScore: real("kcse_score"),
   kcseBreakdown: jsonb("kcse_breakdown").$type<KcseBreakdown>(),
+  // Design stage — the player's authored custom card (name + prompt body) and
+  // its 0-50 craft evaluation. Null for sessions started before the stage shipped.
+  customCardName: text("custom_card_name"),
+  customCardBody: text("custom_card_body"),
+  craftScore: real("craft_score"),
   certTierEarned: text("cert_tier_earned"),
   arkScoreDelta: integer("ark_score_delta").default(0),
   certUpgradedFrom: text("cert_upgraded_from"),

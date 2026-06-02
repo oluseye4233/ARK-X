@@ -88,6 +88,9 @@ type Session = {
   arkScoreDelta: number | null;
   certUpgradedFrom: string | null;
   certUpgradedTo: string | null;
+  customCardName?: string | null;
+  customCardBody?: string | null;
+  craftScore?: number | null;
 };
 
 type Breakdown = {
@@ -101,6 +104,8 @@ type Breakdown = {
   tokenBudget: number;
   base: number;
   final: number;
+  craft?: number;
+  craftSignals?: string[];
 };
 
 type FinishResult = {
@@ -160,6 +165,10 @@ export default function PlayPage() {
   const [played, setPlayed] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<FinishResult | null>(null);
+  const [stage, setStage] = useState<"select" | "design">("select");
+  const [cardName, setCardName] = useState("");
+  const [cardBody, setCardBody] = useState("");
+  const [designError, setDesignError] = useState<string | null>(null);
   const [tierFilter, setTierFilter] = useState<string>("All");
 
   // Phase J.1 — Custom scenario builder state
@@ -210,6 +219,10 @@ export default function PlayPage() {
       setActiveScenario(scenario);
       setPlayed([]);
       setResult(null);
+      setStage("select");
+      setCardName("");
+      setCardBody("");
+      setDesignError(null);
     } catch (err: any) {
       if (String(err.message).includes("not seeded")) {
         await api.seed();
@@ -219,6 +232,10 @@ export default function PlayPage() {
           setActiveScenario(scenario);
           setPlayed([]);
           setResult(null);
+          setStage("select");
+          setCardName("");
+          setCardBody("");
+          setDesignError(null);
         } catch (err2: any) {
           setError(err2.message);
         }
@@ -253,12 +270,29 @@ export default function PlayPage() {
     setPlayed(played.filter((p) => p !== id));
   };
 
+  const advanceToDesign = () => {
+    if (played.length === 0) return;
+    setError(null);
+    setStage("design");
+  };
+
   const submitSession = async () => {
     if (!session || played.length === 0) return;
+    const name = cardName.trim();
+    const body = cardBody.trim();
+    if (name.length < 2) {
+      setDesignError("Give your card a name (at least 2 characters).");
+      return;
+    }
+    if (body.length < 10) {
+      setDesignError("Write a prompt of at least 10 characters.");
+      return;
+    }
+    setDesignError(null);
     setSubmitting(true);
     setError(null);
     try {
-      const r = await api.finishCcgeSession(session.id, played);
+      const r = await api.finishCcgeSession(session.id, played, { name, body });
       setResult(r);
     } catch (err: any) {
       setError(err.message);
@@ -273,6 +307,10 @@ export default function PlayPage() {
     setPlayed([]);
     setResult(null);
     setError(null);
+    setStage("select");
+    setCardName("");
+    setCardBody("");
+    setDesignError(null);
   };
 
   const tokensUsed = played.reduce((sum, id) => sum + (cardMap.get(id)?.tokenCost ?? 0), 0);
@@ -473,6 +511,46 @@ export default function PlayPage() {
           </div>
         </div>
 
+        {/* Authored card (Card Design stage) */}
+        {result.session.customCardName ? (
+          <div className="glass-card p-6 rounded-xl" data-testid="card-authored-result">
+            <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">Your Authored Card</span>
+              </div>
+              {typeof breakdown.craft === "number" ? (
+                <div className="text-right">
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Craft Score</div>
+                  <div className="text-2xl font-display font-bold text-primary tabular-nums" data-testid="text-craft-score">
+                    {breakdown.craft}<span className="text-sm text-muted-foreground">/50</span>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            <h3 className="text-lg font-display font-bold text-foreground" data-testid="text-authored-card-name">
+              {result.session.customCardName}
+            </h3>
+            {result.session.customCardBody ? (
+              <pre className="mt-3 whitespace-pre-wrap text-xs text-muted-foreground font-mono leading-relaxed bg-background/40 rounded-lg p-4 max-h-60 overflow-auto" data-testid="text-authored-card-body">
+                {result.session.customCardBody}
+              </pre>
+            ) : null}
+            {breakdown.craftSignals && breakdown.craftSignals.length > 0 ? (
+              <div className="mt-4">
+                <p className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-2">Craft Signals</p>
+                <div className="flex flex-wrap gap-1.5" data-testid="list-craft-signals">
+                  {breakdown.craftSignals.map((s) => (
+                    <Badge key={s} variant="outline" className="font-mono text-[10px] bg-primary/10 text-primary border-primary/40">
+                      {s}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         {tier && shareUrl && badgePngUrl ? (
           <ShareWinCard shareUrl={shareUrl} pngUrl={badgePngUrl} tier={tier} />
         ) : null}
@@ -499,6 +577,118 @@ export default function PlayPage() {
     const playedCards = played
       .map((id) => cardMap.get(id))
       .filter((c): c is Card => !!c);
+
+    // ─── CARD DESIGN STAGE (final stage before scoring) ───
+    if (stage === "design") {
+      return (
+        <div className="max-w-4xl mx-auto space-y-6" data-testid="ccge-design-view">
+          <div className="glass-card p-6 rounded-xl">
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+                Final Stage — Design Your Card
+              </span>
+            </div>
+            <h1 className="text-2xl font-display font-bold text-foreground">Author your custom prompt</h1>
+            <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+              Name your card and write the actual prompt (e.g. a SYSTEM prompt) for{" "}
+              <span className="text-foreground font-medium">{activeScenario.title}</span>. This authored
+              card is the final, scored artifact — craft it well.
+            </p>
+            <div className="flex flex-wrap gap-1.5 mt-3">
+              <span className="text-[10px] font-mono uppercase text-muted-foreground tracking-widest mr-1">Target Pillars:</span>
+              {activeScenario.targetPillars.map((p) => (
+                <Badge key={p} variant="outline" className={cn("font-mono text-[10px]", PILLAR_COLORS[p])}>
+                  {p}
+                </Badge>
+              ))}
+            </div>
+          </div>
+
+          {/* Selected cards reference */}
+          <div className="glass-card p-5 rounded-xl">
+            <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+              Your Selected Cards — {playedCards.length}
+            </span>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3 mt-3" data-testid="design-selected-cards">
+              {playedCards.map((c, i) => (
+                <CcgeCard key={c.id} card={c} variant="played" index={i + 1} />
+              ))}
+            </div>
+          </div>
+
+          {/* Authoring form */}
+          <div className="glass-card p-6 rounded-xl space-y-5">
+            <div>
+              <label htmlFor="card-name" className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+                Card Name
+              </label>
+              <input
+                id="card-name"
+                type="text"
+                value={cardName}
+                onChange={(e) => setCardName(e.target.value)}
+                maxLength={80}
+                placeholder="e.g. Compliance Sentinel"
+                className="mt-2 w-full rounded-lg bg-background/60 border border-border px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                data-testid="input-card-name"
+              />
+            </div>
+            <div>
+              <label htmlFor="card-body" className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+                Prompt
+              </label>
+              <textarea
+                id="card-body"
+                value={cardBody}
+                onChange={(e) => setCardBody(e.target.value)}
+                maxLength={4000}
+                rows={10}
+                placeholder="You are a... Your role is to... Constraints:... Output format:..."
+                className="mt-2 w-full rounded-lg bg-background/60 border border-border px-3 py-2 text-sm text-foreground font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/50 resize-y"
+                data-testid="input-card-body"
+              />
+              <div className="text-[10px] font-mono text-muted-foreground mt-1 text-right" data-testid="text-card-body-count">
+                {cardBody.trim().length}/4000
+              </div>
+            </div>
+
+            {designError && (
+              <div className="text-sm text-destructive flex items-center gap-2" data-testid="text-design-error">
+                <AlertCircle className="h-4 w-4" /> {designError}
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => { setStage("select"); setDesignError(null); }}
+                disabled={submitting}
+                className="flex-1"
+                data-testid="button-back-to-select"
+              >
+                Back to Cards
+              </Button>
+              <Button
+                onClick={submitSession}
+                disabled={submitting}
+                className="flex-1"
+                data-testid="button-submit-session"
+              >
+                {submitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+                Submit & Score Card
+              </Button>
+            </div>
+          </div>
+
+          {error && (
+            <div className="glass-card p-4 rounded-lg border border-destructive/40 text-sm text-destructive flex items-center gap-2">
+              <AlertCircle className="h-4 w-4" /> {error}
+            </div>
+          )}
+        </div>
+      );
+    }
 
     return (
       <div className="max-w-6xl mx-auto space-y-6" data-testid="ccge-session-view">
@@ -567,12 +757,12 @@ export default function PlayPage() {
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">Your Hand</span>
             <Button
-              onClick={submitSession}
-              disabled={played.length === 0 || submitting}
-              data-testid="button-submit-session"
+              onClick={advanceToDesign}
+              disabled={played.length === 0}
+              data-testid="button-advance-to-design"
             >
-              {submitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
-              Score My Prompt
+              <ArrowRight className="h-4 w-4 mr-2" />
+              Next: Design Your Card
             </Button>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">

@@ -128,10 +128,20 @@ export const api = {
 
   getCcgeSession: (id: string) => apiRequest(`/api/ccge/sessions/${id}`),
 
-  finishCcgeSession: (id: string, playedCardIds: string[]) =>
+  finishCcgeSession: (
+    id: string,
+    playedCardIds: string[],
+    customCard: { name: string; body: string },
+    useClaude?: boolean,
+  ) =>
     apiRequest(`/api/ccge/sessions/${id}/finish`, {
       method: "POST",
-      body: JSON.stringify({ playedCardIds }),
+      body: JSON.stringify({
+        playedCardIds,
+        customCardName: customCard.name,
+        customCardBody: customCard.body,
+        ...(useClaude !== undefined ? { useClaude } : {}),
+      }),
     }),
 
   getCcgeUserSessions: (userId: string) =>
