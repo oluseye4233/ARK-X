@@ -65,11 +65,13 @@ function RadarMini({ vectors, size = 230 }: { vectors: Array<{ subject: string; 
 
 function MetricCard({
   title,
+  sub,
   meaning,
   children,
   testId,
 }: {
   title: string;
+  sub?: string;
   meaning: string;
   children: React.ReactNode;
   testId?: string;
@@ -82,6 +84,11 @@ function MetricCard({
       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: ATANDA.blue }}>
         {title}
       </div>
+      {sub && (
+        <div style={{ fontSize: 9.5, fontWeight: 600, color: ATANDA.sub, marginTop: 2, letterSpacing: 0.2 }}>
+          {sub}
+        </div>
+      )}
       <div style={{ marginTop: 10 }}>{children}</div>
       <div style={{ fontSize: 10.5, color: ATANDA.sub, marginTop: 10, lineHeight: 1.35 }}>{meaning}</div>
     </div>
@@ -323,7 +330,7 @@ export const ArkReportSheet = forwardRef<HTMLDivElement, ArkReportSheetProps>(fu
         {/* Metric grid */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
           {/* JST */}
-          <MetricCard title="JST Index" meaning="What the market will pay for your jobs, skills and talent today." testId="card-report-jst">
+          <MetricCard title="JST Index" sub="Jobs · Skills · Talent" meaning="What the market will pay for your jobs, skills and talent today." testId="card-report-jst">
             <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
               <span style={{ fontSize: 30, fontWeight: 800, color: ATANDA.ink }}>{jst}</span>
               <span style={{ fontSize: 12, color: ATANDA.sub }}>/ 300</span>
@@ -344,7 +351,7 @@ export const ArkReportSheet = forwardRef<HTMLDivElement, ArkReportSheetProps>(fu
           </MetricCard>
 
           {/* CCMI */}
-          <MetricCard title="CCMI · Prompt-Craft Mastery" meaning="How well you direct AI through context. Tier reflects your mastery band." testId="card-report-ccmi">
+          <MetricCard title="CCMI · Prompt-Craft Mastery" sub="Context Craft Mastery Index" meaning="How well you direct AI through context. Tier reflects your mastery band." testId="card-report-ccmi">
             <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
               <span style={{ fontSize: 30, fontWeight: 800, color: ATANDA.ink }}>{ccmi}</span>
               <span style={{ fontSize: 12, color: ATANDA.sub }}>/ 300{pillars?.tier ? ` · ${pillars.tier}` : ""}</span>
@@ -366,7 +373,7 @@ export const ArkReportSheet = forwardRef<HTMLDivElement, ArkReportSheetProps>(fu
           </MetricCard>
 
           {/* LHCS */}
-          <MetricCard title="LHCS Readiness" meaning="Live readiness signal from your real platform activity." testId="card-report-lhcs">
+          <MetricCard title="LHCS Readiness" sub="Life-Career Health Signal" meaning="Live readiness signal from your real platform activity." testId="card-report-lhcs">
             <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
               <span style={{ fontSize: 30, fontWeight: 800, color: ATANDA.ink }}>{readiness ?? "—"}</span>
               {readiness !== null && <span style={{ fontSize: 12, color: ATANDA.sub }}>% ready</span>}
@@ -390,8 +397,7 @@ export const ArkReportSheet = forwardRef<HTMLDivElement, ArkReportSheetProps>(fu
           {/* Vulnerability */}
           <MetricCard title="AI Vulnerability" meaning="How exposed your current work is to automation within 24 months." testId="card-report-vuln">
             <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
-              <span style={{ fontSize: 30, fontWeight: 800, color: vInfo.color }}>L{vuln}</span>
-              <span style={{ fontSize: 12, color: ATANDA.sub }}>{vInfo.name}</span>
+              <span style={{ fontSize: 30, fontWeight: 800, color: vInfo.color, textTransform: "uppercase" }}>{vInfo.name}</span>
             </div>
             <div style={{ display: "flex", gap: 4 }}>
               {[0, 1, 2, 3, 4].map((i) => (
