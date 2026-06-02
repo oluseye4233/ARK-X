@@ -63,7 +63,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { SpcTaxonomyPanel } from "@/components/marketplace/SpcTaxonomyPanel";
 import { ForgeLabPage } from "@/pages/marketplace-forge-lab";
-import { BonsaiPage } from "@/pages/marketplace-bonsai";
+import { CommandCentrePage } from "@/pages/marketplace-bonsai";
 
 const CATEGORY_FILTER = ["All", ...MARKETPLACE_CATEGORIES] as const;
 // M3 — 6-dim taxonomy filters (matches `server/jnomicsSeed.ts`).
@@ -1159,16 +1159,16 @@ function PublishPage() {
         </div>
 
         <Link href="/marketplace/bonsai" data-testid="link-publish-bonsai-cta">
-          <div className="glass-card p-6 rounded-xl border border-secondary/30 bg-secondary/5 hover:bg-secondary/10 transition-all cursor-pointer space-y-3">
+          <div className="glass-card p-6 rounded-xl border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-all cursor-pointer space-y-3">
             <div className="flex items-center gap-3">
-              <span className="text-2xl">🌱</span>
-              <h3 className="font-display text-lg text-secondary uppercase tracking-wider">New seller? Start the Bonsai walkthrough</h3>
+              <span className="text-2xl">🛰️</span>
+              <h3 className="font-display text-lg text-primary uppercase tracking-wider">Open the ATANDA Command Centre</h3>
             </div>
             <p className="font-mono text-xs text-muted-foreground leading-relaxed">
-              The 18-stage Bonsai onboarding teaches you how to grow a publish-ready Super Prompt Card from
-              seed to canopy — no certification required.
+              Link your subscriber profile to the ATANDA Command Centre — a dedicated, API-linked
+              control hub with the full dashboard suite beyond the ARK platform.
             </p>
-            <span className="font-mono text-[10px] uppercase tracking-widest text-secondary">Open Bonsai →</span>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-primary">Open Command Centre →</span>
           </div>
         </Link>
       </div>
@@ -1473,7 +1473,7 @@ export default function MarketplacePage() {
   if (matchRoundtable && FEATURES.sphinxAdvanced) return <RoundtablePage />;
   if (matchSynthesis  && FEATURES.sphinxAdvanced) return <SynthesisPage />;
   if (matchForgeLab   && FEATURES.forgeLabDocx)   return <ForgeLabPage />;
-  if (matchBonsai)     return <BonsaiPage />;
+  if (matchBonsai)     return <CommandCentrePage />;
   if (matchCorporate  && FEATURES.corporateMarketplace) return <CorporateMarketplacePage />;
   if (matchDetail && paramsDetail) {
     if (paramsDetail.id === "publish")    return <PublishPage />;
@@ -1481,7 +1481,7 @@ export default function MarketplacePage() {
     if (paramsDetail.id === "roundtable" && FEATURES.sphinxAdvanced) return <RoundtablePage />;
     if (paramsDetail.id === "synthesis"  && FEATURES.sphinxAdvanced) return <SynthesisPage />;
     if (paramsDetail.id === "forge-lab"  && FEATURES.forgeLabDocx)   return <ForgeLabPage />;
-    if (paramsDetail.id === "bonsai")     return <BonsaiPage />;
+    if (paramsDetail.id === "bonsai")     return <CommandCentrePage />;
     if (paramsDetail.id === "corporate"  && FEATURES.corporateMarketplace) return <CorporateMarketplacePage />;
     // Reserved CLASS C slugs with flag off → render 404 instead of trying
     // to fetch a listing with id "synergy"/"roundtable"/etc.
