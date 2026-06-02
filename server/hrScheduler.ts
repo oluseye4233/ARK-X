@@ -24,7 +24,7 @@ export const SCHEDULED_SYNC_ACTOR = "system:hr-scheduler";
 /** How often the scheduler wakes to look for due configs. Each config's own
  *  `intervalMinutes` controls how often it actually syncs; this tick just has
  *  to be frequent enough to honour the smallest configured cadence. */
-const TICK_MS = (() => {
+export const TICK_MS = (() => {
   const raw = Number(process.env.HR_SYNC_TICK_MS);
   return Number.isFinite(raw) && raw >= 1000 ? raw : 60_000;
 })();

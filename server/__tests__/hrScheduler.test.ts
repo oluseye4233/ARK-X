@@ -4,7 +4,7 @@ import type { HrConnectorAdapter } from "../hrConnectors/types";
 import type { HrConnectorParseResult } from "@shared/schema";
 import { registerHrConnector } from "../hrConnectors";
 import { runConnectorSync } from "../hrConnectors/sync";
-import { isDue, syncConfigNow, tick, startHrScheduler, stopHrScheduler } from "../hrScheduler";
+import { isDue, syncConfigNow, tick, startHrScheduler, stopHrScheduler, TICK_MS } from "../hrScheduler";
 import { getResolvedFeatures } from "../featureFlags";
 import { storage } from "../storage";
 
@@ -594,4 +594,77 @@ test("stopHrScheduler: cancels the one-shot warm-up tick when stopped before it 
   } finally {
     getSpy.mock.restore();
   }
+});
+
+// ─────────────────────────────────────────────────────────────
+// Interval wiring — proves the setInterval(tick, TICK_MS) plumbing (Task #52)
+//
+// The lifecycle tests above never let a timer fire. These advance fake time and
+// prove the recurring interval actually drives tick(): each call reaches
+// storage.getEnabledConnectorConfigs (the first thing tick() does), so its spy
+// count is a faithful tally of how many times tick() ran. Configs resolve to []
+// so each tick is a clean no-op that touches no DB or HR API.
+// ─────────────────────────────────────────────────────────────
+
+/** Drain the microtask queue so an awaited tick() settles (and clears the
+ *  `ticking` guard) before we advance fake time again. */
+async function flushMicrotasks() {
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+}
+
+test("startHrScheduler: the recurring interval invokes tick() once per elapsed TICK_MS", async () => {
+  await withSchedulerEnv({ workforce: true }, async () => {
+    const getSpy = mock.method(storage, "getEnabledConnectorConfigs", async () => [] as any);
+    try {
+      assert.equal(startHrScheduler(), true, "scheduler should start");
+
+      // Consume the one-shot ~5s warm-up tick first so we count only the
+      // recurring interval afterwards (warm-up fires before the first interval).
+      mock.timers.tick(5_000);
+      await flushMicrotasks();
+      const afterWarmup = getSpy.mock.callCount();
+      assert.equal(afterWarmup, 1, "warm-up pass should run ~5s after start");
+
+      // Advancing one TICK_MS at a time must fire exactly one more tick each
+      // time. (Advancing several intervals in a single jump would collapse into
+      // one tick via the in-flight `ticking` guard, so we step + flush.)
+      for (let i = 1; i <= 3; i++) {
+        mock.timers.tick(TICK_MS);
+        await flushMicrotasks();
+        assert.equal(
+          getSpy.mock.callCount(),
+          afterWarmup + i,
+          `interval should have driven tick() ${i} time(s)`,
+        );
+      }
+    } finally {
+      getSpy.mock.restore();
+    }
+  });
+});
+
+test("stopHrScheduler: after stop, advancing time fires no further ticks", async () => {
+  await withSchedulerEnv({ workforce: true }, async () => {
+    const getSpy = mock.method(storage, "getEnabledConnectorConfigs", async () => [] as any);
+    try {
+      assert.equal(startHrScheduler(), true, "scheduler should start");
+
+      // Let the warm-up and one interval fire so the timer is demonstrably live.
+      mock.timers.tick(5_000);
+      await flushMicrotasks();
+      mock.timers.tick(TICK_MS);
+      await flushMicrotasks();
+      const before = getSpy.mock.callCount();
+      assert.ok(before >= 1, "at least one tick should have fired before stop");
+
+      stopHrScheduler();
+
+      // Advance well past several intervals — the cleared interval must be dead.
+      mock.timers.tick(TICK_MS * 5);
+      await flushMicrotasks();
+      assert.equal(getSpy.mock.callCount(), before, "no ticks may fire after stop");
+    } finally {
+      getSpy.mock.restore();
+    }
+  });
 });
