@@ -14,6 +14,7 @@ import {
   Activity,
   Layers,
   TrendingUp,
+  Download,
 } from "lucide-react";
 import { api } from "@/lib/api";
 
@@ -501,6 +502,17 @@ export default function WorkforcePage() {
       {/* ── Intelligence summary ─────────────────────────── */}
       {intel && (
         <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-[Rajdhani] text-xl font-semibold">Workforce Intelligence</h2>
+            <a
+              href={api.workforceIntelligenceCsvUrl()}
+              className="neon-border flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs uppercase tracking-wider hover:bg-primary/10"
+              data-testid="link-export-intelligence-csv"
+              title="Download all breakdowns as CSV for board/HR reporting"
+            >
+              <Download className="h-3.5 w-3.5" /> Export CSV
+            </a>
+          </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <StatCard label="Staff" value={intel.totals.staff} />
             <StatCard label="Linked" value={intel.totals.linked} />

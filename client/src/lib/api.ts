@@ -271,6 +271,7 @@ export const api = {
   getWorkforceStaff: () => apiRequest("/api/workforce/staff"),
   getWorkforceIntelligence: () => apiRequest("/api/workforce/intelligence"),
   getWorkforceImportBatches: () => apiRequest("/api/workforce/import-batches"),
+  workforceIntelligenceCsvUrl: () => "/api/workforce/intelligence.csv",
   linkWorkforceStaff: (id: string) =>
     apiRequest(`/api/workforce/staff/${id}/link`, { method: "POST" }),
   inviteWorkforceStaff: (id: string) =>

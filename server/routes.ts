@@ -1861,6 +1861,90 @@ export async function registerRoutes(
     }
   });
 
+  // Workforce intelligence CSV export — same breakdowns as the on-screen
+  // dashboard, flattened into one file for board/HR reviews. Mirrors the cohort
+  // grades.csv pattern (gated identically by flag + requireInstitutionAdmin).
+  app.get("/api/workforce/intelligence.csv", ...workforceGate, async (req, res) => {
+    try {
+      const intel = await storage.getWorkforceIntelligence(req.institutionScope!);
+      const esc = (v: any) => {
+        if (v === null || v === undefined) return "";
+        const s = String(v);
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const header = [
+        "section",
+        "group",
+        "staff",
+        "linked",
+        "assessed",
+        "avg_ark",
+        "avg_jst",
+        "avg_vulnerability_pct",
+      ];
+      const lines = [header.join(",")];
+      const row = (
+        section: string,
+        group: string,
+        staff: number,
+        linked: number,
+        assessed: number,
+        avgArk: number,
+        avgJst: number,
+        avgVuln: number,
+      ) =>
+        lines.push(
+          [section, group, staff, linked, assessed, avgArk, avgJst, avgVuln]
+            .map(esc)
+            .join(","),
+        );
+
+      row(
+        "Totals",
+        "All Staff",
+        intel.totals.staff,
+        intel.totals.linked,
+        intel.totals.assessed,
+        intel.totals.avgArk,
+        intel.totals.avgJst,
+        intel.totals.avgVulnerability,
+      );
+
+      const sections: Array<[string, typeof intel.byDepartment]> = [
+        ["By Department", intel.byDepartment],
+        ["By Tenure Band", intel.byTenureBand],
+        ["By Compensation Band", intel.byCompensationBand],
+        ["By Manager", intel.byManager],
+        ["By Location", intel.byLocation],
+      ];
+      for (const [section, rows] of sections) {
+        for (const r of rows) {
+          row(
+            section,
+            r.key,
+            r.count,
+            r.linkedCount,
+            r.assessedCount,
+            r.avgArk,
+            r.avgJst,
+            r.avgVulnerability,
+          );
+        }
+      }
+
+      const slug = (intel.institution || "institution").replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+      const date = new Date().toISOString().slice(0, 10);
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="workforce-intelligence-${slug}-${date}.csv"`,
+      );
+      res.send(lines.join("\n"));
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
   // Import-batch audit history.
   app.get("/api/workforce/import-batches", ...workforceGate, async (req, res) => {
     try {
