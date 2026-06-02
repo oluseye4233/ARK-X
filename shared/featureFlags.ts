@@ -83,7 +83,7 @@ export const MVP_FEATURES: Readonly<Record<FeatureKey, boolean>> = Object.freeze
   contextCraftPage: false,
   revenueGuardrail: false,
   bookCompanion: false,
-  cardVerification: false,
+  cardVerification: true,
 });
 
 /**
