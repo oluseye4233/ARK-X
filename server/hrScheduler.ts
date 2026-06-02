@@ -35,7 +35,7 @@ let ticking = false;
 /** Per-config in-flight guard so a manual sync + a tick can't double-run. */
 const inFlight = new Set<string>();
 
-function isDue(config: { lastSyncedAt: Date | null; intervalMinutes: number }, now: number): boolean {
+export function isDue(config: { lastSyncedAt: Date | null; intervalMinutes: number }, now: number): boolean {
   if (!config.lastSyncedAt) return true; // never synced → due immediately
   const elapsedMin = (now - new Date(config.lastSyncedAt).getTime()) / 60_000;
   return elapsedMin >= config.intervalMinutes;
