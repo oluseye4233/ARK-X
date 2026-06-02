@@ -19,6 +19,15 @@ import { api } from "@/lib/api";
 
 type FieldDef = { key: string; label: string };
 
+type Connector = {
+  key: string;
+  label: string;
+  acceptsFile: boolean;
+  isApi: boolean;
+  requiredSecrets: string[];
+  configured: boolean;
+};
+
 type StaffRow = {
   id: string;
   fullName: string;
@@ -156,7 +165,7 @@ export default function WorkforcePage() {
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [importResult, setImportResult] = useState<any>(null);
 
-  const connectorsQ = useQuery<{ connectors: Array<{ key: string; label: string }>; fields: FieldDef[] }>({
+  const connectorsQ = useQuery<{ connectors: Connector[]; fields: FieldDef[] }>({
     queryKey: ["/api/workforce/connectors"],
     queryFn: () => api.getWorkforceConnectors(),
   });
@@ -208,6 +217,17 @@ export default function WorkforcePage() {
       qc.invalidateQueries({ queryKey: ["/api/workforce/intelligence"] });
     },
   });
+
+  const syncMut = useMutation({
+    mutationFn: (adapter: string) => api.syncWorkforceConnector(adapter),
+    onSuccess: (res: any) => {
+      setImportResult(res);
+      qc.invalidateQueries({ queryKey: ["/api/workforce/staff"] });
+      qc.invalidateQueries({ queryKey: ["/api/workforce/intelligence"] });
+    },
+  });
+
+  const apiConnectors = (connectorsQ.data?.connectors ?? []).filter((c) => c.isApi);
 
   function handleFile(f: File | null) {
     setFile(f);
@@ -272,9 +292,69 @@ export default function WorkforcePage() {
             </span>
           )}
           <span className="text-xs text-muted-foreground">
-            Adapter: {connectorsQ.data?.connectors?.map((c) => c.label).join(", ") || "CSV"}
+            Sources: {connectorsQ.data?.connectors?.map((c) => c.label).join(", ") || "CSV"}
           </span>
         </div>
+
+        {/* ── Live HR-system connectors (API sync) ─────────── */}
+        {apiConnectors.length > 0 && (
+          <div className="mt-5 border-t border-border/40 pt-4" data-testid="panel-live-connectors">
+            <div className="mb-1 flex items-center gap-2">
+              <Activity className="h-4 w-4 text-primary" />
+              <h3 className="font-[Rajdhani] text-lg font-semibold">Live HR Connectors</h3>
+            </div>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Sync your roster directly from a connected HR system. Credentials are
+              configured server-side — nothing is uploaded here.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {apiConnectors.map((c) => (
+                <div
+                  key={c.key}
+                  className="neon-border flex flex-col gap-2 rounded-lg p-3"
+                  data-testid={`card-connector-${c.key}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-[Rajdhani] font-semibold">{c.label}</span>
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wider ${
+                        c.configured
+                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                          : "border-slate-500/40 bg-slate-500/10 text-slate-300"
+                      }`}
+                      data-testid={`status-connector-${c.key}`}
+                    >
+                      {c.configured ? "Connected" : "Not configured"}
+                    </span>
+                  </div>
+                  {!c.configured && c.requiredSecrets.length > 0 && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Needs: {c.requiredSecrets.join(", ")}
+                    </p>
+                  )}
+                  <button
+                    disabled={!c.configured || syncMut.isPending}
+                    onClick={() => syncMut.mutate(c.key)}
+                    className="flex items-center justify-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+                    data-testid={`button-sync-${c.key}`}
+                  >
+                    {syncMut.isPending && syncMut.variables === c.key ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Activity className="h-3.5 w-3.5" />
+                    )}
+                    Sync now
+                  </button>
+                </div>
+              ))}
+            </div>
+            {syncMut.isError && (
+              <p className="mt-3 text-sm text-destructive" data-testid="text-sync-error">
+                {(syncMut.error as Error).message}
+              </p>
+            )}
+          </div>
+        )}
 
         {previewMut.isError && (
           <p className="mt-3 text-sm text-destructive" data-testid="text-preview-error">

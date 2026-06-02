@@ -1622,6 +1622,12 @@ export async function registerRoutes(
           key: a.key,
           label: a.label,
           acceptsFile: a.acceptsFile,
+          // Live API adapters report whether their server-side credentials are
+          // present so the UI can enable/disable the sync button. File adapters
+          // (and any adapter without required secrets) are always "configured".
+          isApi: !a.acceptsFile,
+          requiredSecrets: a.requiredSecrets ?? [],
+          configured: a.isConfigured ? a.isConfigured() : true,
         })),
         fields: HR_FIELD_KEYS.map((key) => ({ key, label: HR_FIELD_LABELS[key] })),
       });
@@ -1657,6 +1663,11 @@ export async function registerRoutes(
         const adapter = getHrConnector(adapterKey);
         if (!adapter) {
           return res.status(400).json({ message: `Unknown HR connector "${adapterKey}".` });
+        }
+        if (!adapter.parse) {
+          return res.status(400).json({
+            message: `The "${adapter.label}" connector is API-backed — use the sync action instead of a file upload.`,
+          });
         }
         if (!req.file) {
           return res.status(400).json({ message: "No file uploaded. Upload a CSV roster." });
@@ -1700,6 +1711,11 @@ export async function registerRoutes(
         const adapter = getHrConnector(adapterKey);
         if (!adapter) {
           return res.status(400).json({ message: `Unknown HR connector "${adapterKey}".` });
+        }
+        if (!adapter.parse) {
+          return res.status(400).json({
+            message: `The "${adapter.label}" connector is API-backed — use the sync action instead of a file upload.`,
+          });
         }
         if (!req.file) {
           return res.status(400).json({ message: "No file uploaded. Upload a CSV roster." });
@@ -1757,6 +1773,87 @@ export async function registerRoutes(
       }
     },
   );
+
+  // On-demand re-sync from a LIVE HR API connector (BambooHR / Gusto / Workday).
+  // Pulls the roster via the adapter's `fetchRecords` (server-side credentials
+  // only — nothing is accepted from the client beyond the adapter key), upserts
+  // into staff_records, and records the same audit batch a file import does, so
+  // re-syncing keeps rosters current without re-uploading. Idempotent: the
+  // upsert matches on email/externalId and preserves prior manual ARK links.
+  app.post("/api/workforce/sync", ...workforceGate, async (req, res) => {
+    try {
+      const institution = req.institutionScope!;
+      const userId = currentUserId(req)!;
+      const adapterKey = (req.body?.adapter as string) || "";
+      const adapter = getHrConnector(adapterKey);
+      if (!adapter) {
+        return res.status(400).json({ message: `Unknown HR connector "${adapterKey}".` });
+      }
+      if (!adapter.fetchRecords) {
+        return res.status(400).json({
+          message: `The "${adapter.label}" connector does not support API sync. Use the file import instead.`,
+        });
+      }
+      if (adapter.isConfigured && !adapter.isConfigured()) {
+        const missing = (adapter.requiredSecrets ?? []).join(", ");
+        return res.status(400).json({
+          message: `The "${adapter.label}" connector is not configured. Ask an admin to set its credentials${missing ? ` (${missing})` : ""}.`,
+        });
+      }
+
+      // Pull + normalize from the live API. fetchRecords throws on auth/network
+      // failure; surface that as a 502 (upstream dependency) rather than 500.
+      let result;
+      try {
+        result = await adapter.fetchRecords();
+      } catch (err: any) {
+        console.error(`[/api/workforce/sync] ${adapterKey} fetch failed:`, err);
+        return res.status(502).json({ message: err?.message ?? `${adapter.label} sync failed.` });
+      }
+
+      if (result.records.length === 0) {
+        return res.status(422).json({
+          message: `${adapter.label} returned no valid staff records.`,
+          errors: result.errors.slice(0, 100),
+        });
+      }
+
+      const batch = await storage.createImportBatch({
+        institution,
+        adapter: result.adapter,
+        filename: `${adapter.label} API sync`,
+        importedBy: userId,
+        totalRows: result.totalRows,
+        importedRows: 0,
+        updatedRows: 0,
+        errorRows: result.errors.length,
+        errors: result.errors,
+        columnMapping: result.columnMapping,
+      });
+
+      const summary = await storage.upsertStaffRecords(institution, batch.id, result.records);
+      const finalBatch = await storage.updateImportBatchCounts(batch.id, {
+        importedRows: summary.inserted,
+        updatedRows: summary.updated,
+      });
+
+      return res.status(201).json({
+        batchId: batch.id,
+        adapter: result.adapter,
+        summary: {
+          ...summary,
+          totalRows: result.totalRows,
+          errorRows: result.errors.length,
+        },
+        columnMapping: result.columnMapping,
+        errors: result.errors.slice(0, 100),
+        batch: finalBatch ?? batch,
+      });
+    } catch (err: any) {
+      console.error("[/api/workforce/sync] error:", err);
+      return res.status(500).json({ message: err.message });
+    }
+  });
 
   // Staff roster joined with each member's ARK identity + assessment status.
   app.get("/api/workforce/staff", ...workforceGate, async (req, res) => {

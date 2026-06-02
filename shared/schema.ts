@@ -1117,9 +1117,10 @@ export type CohortAssignment = typeof cohortAssignments.$inferSelect;
 // source columns onto this single normalized HR field set so the data model
 // never has to change when a new adapter is added.
 
-/** Registered HR-connector adapter keys. CSV is the first working adapter;
- *  future live connectors (workday/bamboohr/sap) register under new keys. */
-export const HR_CONNECTOR_ADAPTERS = ["csv"] as const;
+/** Registered HR-connector adapter keys. CSV is the file-upload adapter;
+ *  `bamboohr` / `gusto` / `workday` are live API-backed adapters that pull
+ *  rosters directly from the HR system using server-side credentials. */
+export const HR_CONNECTOR_ADAPTERS = ["csv", "bamboohr", "gusto", "workday"] as const;
 export type HrConnectorAdapterKey = (typeof HR_CONNECTOR_ADAPTERS)[number];
 
 /** Normalized HR fields every adapter maps its raw columns onto. The set is

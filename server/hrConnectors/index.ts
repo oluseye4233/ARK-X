@@ -12,3 +12,11 @@ export {
   listHrConnectors,
 } from "./registry";
 export { parseCsv } from "./csvAdapter";
+export {
+  finalizeApiRecords,
+  normalizeHireDate,
+  detectFieldMapping,
+  fetchJson,
+  secretsPresent,
+  assertConfigured,
+} from "./normalize";

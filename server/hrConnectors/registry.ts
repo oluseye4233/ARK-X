@@ -6,6 +6,9 @@
 
 import type { HrConnectorAdapter, HrConnectorAdapterKey } from "./types";
 import csvAdapter from "./csvAdapter";
+import bamboohrAdapter from "./bamboohrAdapter";
+import gustoAdapter from "./gustoAdapter";
+import workdayAdapter from "./workdayAdapter";
 
 const adapters = new Map<HrConnectorAdapterKey, HrConnectorAdapter>();
 
@@ -23,5 +26,8 @@ export function listHrConnectors(): HrConnectorAdapter[] {
   return Array.from(adapters.values());
 }
 
-// Register the built-in adapters.
+// Register the built-in adapters: CSV file upload + the live API connectors.
 registerHrConnector(csvAdapter);
+registerHrConnector(bamboohrAdapter);
+registerHrConnector(gustoAdapter);
+registerHrConnector(workdayAdapter);

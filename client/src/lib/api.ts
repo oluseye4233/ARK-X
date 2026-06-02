@@ -275,6 +275,12 @@ export const api = {
     apiRequest(`/api/workforce/staff/${id}/link`, { method: "POST" }),
   inviteWorkforceStaff: (id: string) =>
     apiRequest(`/api/workforce/staff/${id}/invite`, { method: "POST" }),
+  // On-demand re-sync from a live HR API connector (BambooHR / Gusto / Workday).
+  syncWorkforceConnector: (adapter: string) =>
+    apiRequest("/api/workforce/sync", {
+      method: "POST",
+      body: JSON.stringify({ adapter }),
+    }),
   previewWorkforceImport: async (
     file: File,
     opts?: { adapter?: string; columnMapping?: Record<string, string> },
