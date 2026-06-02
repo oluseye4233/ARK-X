@@ -198,6 +198,22 @@ function timeAgo(iso: string): string {
   return `${Math.floor(hr / 24)}d ago`;
 }
 
+const SYNC_INTERVAL_OPTIONS: { value: number; label: string }[] = [
+  { value: 15, label: "15m" },
+  { value: 30, label: "30m" },
+  { value: 60, label: "1h" },
+  { value: 360, label: "6h" },
+  { value: 1440, label: "Daily" },
+];
+
+function cadenceLabel(minutes: number): string {
+  const match = SYNC_INTERVAL_OPTIONS.find((o) => o.value === minutes);
+  if (match) return match.label;
+  if (minutes % 1440 === 0) return `${minutes / 1440}d`;
+  if (minutes % 60 === 0) return `${minutes / 60}h`;
+  return `${minutes}m`;
+}
+
 function lastSyncLabel(cfg: ConnectorConfig): string {
   if (!cfg.lastSyncedAt) return "Never synced automatically yet.";
   const when = timeAgo(cfg.lastSyncedAt);
@@ -513,8 +529,15 @@ export default function WorkforcePage() {
   });
 
   const configMut = useMutation({
-    mutationFn: ({ adapter, enabled }: { adapter: string; enabled: boolean }) =>
-      api.setWorkforceConnectorConfig(adapter, { enabled }),
+    mutationFn: ({
+      adapter,
+      enabled,
+      intervalMinutes,
+    }: {
+      adapter: string;
+      enabled: boolean;
+      intervalMinutes?: number;
+    }) => api.setWorkforceConnectorConfig(adapter, { enabled, intervalMinutes }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/workforce/connector-configs"] });
     },
@@ -749,7 +772,7 @@ export default function WorkforcePage() {
                           }`}
                           data-testid={`status-schedule-${cfg.adapter}`}
                         >
-                          {cfg.enabled ? `Every ${cfg.intervalMinutes}m` : "Off"}
+                          {cfg.enabled ? `Every ${cadenceLabel(cfg.intervalMinutes)}` : "Off"}
                         </span>
                       </div>
                       <p
@@ -759,28 +782,60 @@ export default function WorkforcePage() {
                         {lastSyncLabel(cfg)}
                       </p>
                     </div>
-                    <button
-                      disabled={
-                        (!cfg.enabled && !cfg.configured) ||
-                        (configMut.isPending && configMut.variables?.adapter === cfg.adapter)
-                      }
-                      onClick={() =>
-                        configMut.mutate({ adapter: cfg.adapter, enabled: !cfg.enabled })
-                      }
-                      className={`flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${
-                        cfg.enabled
-                          ? "border border-border/60 text-muted-foreground hover:text-foreground"
-                          : "bg-primary text-primary-foreground"
-                      }`}
-                      data-testid={`button-schedule-toggle-${cfg.adapter}`}
-                    >
-                      {configMut.isPending && configMut.variables?.adapter === cfg.adapter ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Clock className="h-3.5 w-3.5" />
+                    <div className="flex shrink-0 items-center gap-2">
+                      {cfg.enabled && (
+                        <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <span className="hidden sm:inline">Every</span>
+                          <select
+                            value={cfg.intervalMinutes}
+                            disabled={
+                              configMut.isPending && configMut.variables?.adapter === cfg.adapter
+                            }
+                            onChange={(e) =>
+                              configMut.mutate({
+                                adapter: cfg.adapter,
+                                enabled: true,
+                                intervalMinutes: Number(e.target.value),
+                              })
+                            }
+                            className="rounded-md border border-border/60 bg-background/60 px-2 py-1 text-xs text-foreground disabled:opacity-50"
+                            data-testid={`select-schedule-interval-${cfg.adapter}`}
+                          >
+                            {SYNC_INTERVAL_OPTIONS.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
                       )}
-                      {cfg.enabled ? "Disable auto-sync" : "Enable auto-sync"}
-                    </button>
+                      <button
+                        disabled={
+                          (!cfg.enabled && !cfg.configured) ||
+                          (configMut.isPending && configMut.variables?.adapter === cfg.adapter)
+                        }
+                        onClick={() =>
+                          configMut.mutate({
+                            adapter: cfg.adapter,
+                            enabled: !cfg.enabled,
+                            intervalMinutes: cfg.intervalMinutes,
+                          })
+                        }
+                        className={`flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${
+                          cfg.enabled
+                            ? "border border-border/60 text-muted-foreground hover:text-foreground"
+                            : "bg-primary text-primary-foreground"
+                        }`}
+                        data-testid={`button-schedule-toggle-${cfg.adapter}`}
+                      >
+                        {configMut.isPending && configMut.variables?.adapter === cfg.adapter ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Clock className="h-3.5 w-3.5" />
+                        )}
+                        {cfg.enabled ? "Disable auto-sync" : "Enable auto-sync"}
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
