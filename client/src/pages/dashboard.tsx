@@ -49,8 +49,18 @@ interface AssessmentData {
   upskillingPlans: unknown[];
   pivotOpportunities: unknown[];
   transferabilityVectors: unknown[];
+  sourcesUsed?: string[] | null;
+  completeness?: number | null;
   createdAt?: string;
 }
+
+// Human labels for the intake sources that fed the cumulative ARK profile.
+const SOURCE_LABELS: Record<string, string> = {
+  resume: "Resume",
+  self: "Self-Assessment",
+  linkedin: "LinkedIn",
+  quiz: "Archetype Quiz",
+};
 
 // Plain-English glossary for the dashboard's house jargon. Surfaced via the
 // little (i) buttons next to section headings so first-time users aren't
@@ -309,6 +319,45 @@ export default function Dashboard() {
                 </span>
               )}
             </p>
+
+            {/* Cumulative-profile attribution: which intake sources fed this
+                report + how complete the picture is. Grows as the user layers
+                in resume / self-assessment / LinkedIn. */}
+            {(assessment.sourcesUsed?.length || assessment.completeness != null) && (
+              <div className="mt-4 flex flex-wrap items-center gap-2" data-testid="strip-sources-used">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                  Built from
+                </span>
+                {(assessment.sourcesUsed ?? []).map((s) => (
+                  <span
+                    key={s}
+                    data-testid={`badge-source-${s}`}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-primary/30 bg-primary/5 text-primary font-mono text-[10px] uppercase tracking-wider"
+                  >
+                    <CheckCircle2 className="w-3 h-3" />
+                    {SOURCE_LABELS[s] ?? s}
+                  </span>
+                ))}
+                {!assessment.sourcesUsed?.length && (
+                  <span className="text-[10px] font-mono text-muted-foreground/60">single assessment</span>
+                )}
+                {assessment.completeness != null && (
+                  <span
+                    className="ml-1 text-[10px] font-mono uppercase tracking-widest text-secondary"
+                    data-testid="text-dashboard-completeness"
+                  >
+                    · {assessment.completeness}% complete
+                  </span>
+                )}
+                <Link
+                  href="/upload"
+                  data-testid="link-add-source"
+                  className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors inline-flex items-center gap-1"
+                >
+                  Add a source <ArrowUpRight className="w-3 h-3" />
+                </Link>
+              </div>
+            )}
           </div>
 
           <div className="flex md:flex-col gap-3 md:items-end">

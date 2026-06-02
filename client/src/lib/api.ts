@@ -290,13 +290,21 @@ export const api = {
     return res.json();
   },
 
-  // Self-assessment + LinkedIn intake. Server pipes both through the same
-  // analyze→persist→recalc pipeline as /api/resume/upload, just from raw text.
-  submitAssessmentText: (input: { text: string; source: "self" | "linkedin" }) =>
+  // Self-assessment + LinkedIn + archetype-quiz intake. Server pipes all
+  // through the same cumulative analyze→persist→recalc pipeline as
+  // /api/resume/upload, merging every contributed source into one ARK profile.
+  submitAssessmentText: (input: { text: string; source: "self" | "linkedin" | "quiz" }) =>
     apiRequest("/api/assessment/text", {
       method: "POST",
       body: JSON.stringify(input),
     }),
+
+  // Which intake sources the user has contributed + the completeness meter.
+  getAssessmentSources: (): Promise<{
+    sources: Array<{ source: string; label: string; present: boolean; primary: boolean; updatedAt: string | null }>;
+    completeness: number;
+    sourcesUsed: string[];
+  }> => apiRequest("/api/assessment/sources"),
 
   // ── M5 — Matrix Forge Lab (.docx) ──
   runForgeLab: async (

@@ -4,6 +4,7 @@ import { guestAssessments, type InsertGuestAssessment, type GuestAssessment } fr
 import {
   users, type User, type InsertUser, type UpdateUser,
   assessments, type Assessment, type InsertAssessment,
+  assessmentSources, type AssessmentSource, type AssessmentSourceKey,
   type ContextCraftLevel, type CcgeTier, type KcseBreakdown,
   upskillingPlans, type UpskillingPlan, type InsertUpskillingPlan,
   pivotOpportunities, type PivotOpportunity, type InsertPivotOpportunity,
@@ -44,6 +45,9 @@ export interface IStorage {
   createAssessment(assessment: InsertAssessment): Promise<Assessment>;
   getAssessment(id: string): Promise<Assessment | undefined>;
   getAssessmentsByUser(userId: string): Promise<Assessment[]>;
+
+  upsertAssessmentSource(userId: string, source: AssessmentSourceKey, content: string): Promise<AssessmentSource>;
+  getAssessmentSources(userId: string): Promise<AssessmentSource[]>;
 
   createGuestAssessment(row: InsertGuestAssessment): Promise<GuestAssessment>;
   countGuestAssessments(): Promise<number>;
@@ -253,6 +257,26 @@ export class DatabaseStorage implements IStorage {
 
   async getAssessmentsByUser(userId: string): Promise<Assessment[]> {
     return db.select().from(assessments).where(eq(assessments.userId, userId));
+  }
+
+  async upsertAssessmentSource(
+    userId: string,
+    source: AssessmentSourceKey,
+    content: string,
+  ): Promise<AssessmentSource> {
+    const [row] = await db
+      .insert(assessmentSources)
+      .values({ userId, source, content })
+      .onConflictDoUpdate({
+        target: [assessmentSources.userId, assessmentSources.source],
+        set: { content, updatedAt: sql`now()` },
+      })
+      .returning();
+    return row;
+  }
+
+  async getAssessmentSources(userId: string): Promise<AssessmentSource[]> {
+    return db.select().from(assessmentSources).where(eq(assessmentSources.userId, userId));
   }
 
   async getLatestAssessment(userId: string): Promise<Assessment | undefined> {

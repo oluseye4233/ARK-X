@@ -16,7 +16,7 @@ import { analyzeResume } from "./resumeAnalyzer";
 import { requireAuth, requireSelf, requireInstructor, currentUserId, loginSession } from "./auth";
 import { requireFeature, getResolvedFeatures, isFeatureEnabled } from "./featureFlags";
 import { STAGE } from "@shared/featureFlags";
-import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, type SubscriptionPlan, CCGE_TIERS, type CcgeTier, jcseToTier, ALL_CARD_PILLARS, SPC_MIN_CERT_TO_PUBLISH, SPC_PRICE_MIN, SPC_PRICE_MAX, SPC_STATUSES, SPC_SCOPES, CERT_LEVEL_RANK, ARK_SCORE_DELTAS, type CardPillar, type SpcStatus } from "@shared/schema";
+import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, type SubscriptionPlan, CCGE_TIERS, type CcgeTier, jcseToTier, ALL_CARD_PILLARS, SPC_MIN_CERT_TO_PUBLISH, SPC_PRICE_MIN, SPC_PRICE_MAX, SPC_STATUSES, SPC_SCOPES, CERT_LEVEL_RANK, ARK_SCORE_DELTAS, type CardPillar, type SpcStatus, ASSESSMENT_SOURCES, PRIMARY_ASSESSMENT_SOURCES, ASSESSMENT_SOURCE_LABELS, type AssessmentSourceKey } from "@shared/schema";
 import { dealHand, scoreSession } from "./ccge";
 import { orchestrator } from "./orchestrator";
 import { recalcArkForUser } from "./arkRecalc";
@@ -792,7 +792,7 @@ export async function registerRoutes(
       }
 
       const userId = currentUserId(req)!;
-      const payload = await runAssessmentFromText(userId, resumeText, "resume.upload");
+      const payload = await contributeSource(userId, "resume", resumeText);
       return res.status(201).json(payload);
     } catch (err: any) {
       console.error("Resume upload error:", err);
@@ -944,7 +944,9 @@ export async function registerRoutes(
   app.post("/api/assessment/text", requireAuth, async (req, res) => {
     try {
       const { text, source } = req.body ?? {};
-      const allowedSources = ["self", "linkedin"] as const;
+      // Text-intake sources are the non-file primary sources plus the
+      // archetype quiz. "resume" arrives via the file-upload route only.
+      const allowedSources = ["self", "linkedin", "quiz"] as const;
       if (typeof text !== "string" || text.trim().length < 50) {
         return res.status(400).json({
           message: "Please provide at least 50 characters of profile content so we can build a meaningful assessment.",
@@ -954,8 +956,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Invalid assessment source." });
       }
       const userId = currentUserId(req)!;
-      const sourceTag = source === "self" ? "self.assessment" : "linkedin.import";
-      const payload = await runAssessmentFromText(userId, text, sourceTag);
+      const payload = await contributeSource(userId, source as AssessmentSourceKey, text);
       return res.status(201).json(payload);
     } catch (err: any) {
       console.error("[/api/assessment/text] error:", err);
@@ -963,19 +964,89 @@ export async function registerRoutes(
     }
   });
 
-  // Helper extracted from the original /api/resume/upload body — runs the
-  // full analyze→persist→recalc→narrative pipeline against arbitrary text
-  // input. Used by both the file upload route and the text intake route so
-  // self-assessments and LinkedIn imports behave identically to CV uploads.
-  async function runAssessmentFromText(
+  // Sources contributed so far + the resulting completeness/confidence meter.
+  // Powers the additive intake UI (which cards are "done") and the dashboard /
+  // report attribution surfaces.
+  app.get("/api/assessment/sources", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const rows = await storage.getAssessmentSources(userId);
+      const present = new Set(rows.map((r) => r.source));
+      const sources = ASSESSMENT_SOURCES.map((key) => {
+        const row = rows.find((r) => r.source === key);
+        return {
+          source: key,
+          label: ASSESSMENT_SOURCE_LABELS[key],
+          present: present.has(key),
+          primary: (PRIMARY_ASSESSMENT_SOURCES as readonly string[]).includes(key),
+          updatedAt: row?.updatedAt ?? null,
+        };
+      });
+      const completeness = computeCompleteness(present);
+      return res.json({
+        sources,
+        completeness,
+        sourcesUsed: ASSESSMENT_SOURCES.filter((k) => present.has(k)),
+      });
+    } catch (err: any) {
+      console.error("[/api/assessment/sources] error:", err);
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Completeness/confidence meter: share of the three PRIMARY intake sources
+  // (resume / self / linkedin) the user has contributed, as a 0-100 percentage.
+  // The archetype quiz refines the profile but doesn't count toward the meter.
+  function computeCompleteness(present: Set<string>): number {
+    const primaryPresent = PRIMARY_ASSESSMENT_SOURCES.filter((k) => present.has(k)).length;
+    return Math.round((primaryPresent / PRIMARY_ASSESSMENT_SOURCES.length) * 100);
+  }
+
+  // Persist one source's raw text then rebuild the user's single evolving ARK
+  // profile from EVERY source they've contributed. This is what makes the three
+  // intake methods cumulative rather than mutually exclusive: re-submitting one
+  // source updates only its row and preserves the others.
+  async function contributeSource(
     userId: string,
-    resumeText: string,
-    sourceTag: string,
+    source: AssessmentSourceKey,
+    content: string,
+  ): Promise<any> {
+    await storage.upsertAssessmentSource(userId, source, content);
+    return runCumulativeAssessment(userId, source);
+  }
+
+  // Gather all of a user's contributed source texts, concatenate them into one
+  // combined document (with per-source headers so the keyword analyzer reads
+  // them coherently), and run the full analyze→persist→recalc→narrative
+  // pipeline once over the merged input. Records which sources fed the result
+  // (`sourcesUsed`) and the completeness meter on the persisted assessment.
+  async function runCumulativeAssessment(
+    userId: string,
+    primarySource: AssessmentSourceKey,
   ): Promise<any> {
       const user = await storage.getUser(userId);
       const certLevel = (user?.contextCraftCertLevel as ContextCraftLevel) || "NONE";
       const userPlan = (user?.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
 
+      const sourceRows = await storage.getAssessmentSources(userId);
+      const present = new Set(sourceRows.map((r) => r.source));
+      // Canonical order so the combined document and sourcesUsed list are stable
+      // regardless of the order sources were contributed in.
+      const sourcesUsed = ASSESSMENT_SOURCES.filter((k) => present.has(k));
+      const completeness = computeCompleteness(present);
+      const sourceTag = `cumulative:${primarySource}`;
+
+      const combinedText = sourcesUsed
+        .map((key) => {
+          const row = sourceRows.find((r) => r.source === key);
+          const body = (row?.content ?? "").trim();
+          if (!body) return "";
+          return `=== ${ASSESSMENT_SOURCE_LABELS[key]} ===\n${body}`;
+        })
+        .filter(Boolean)
+        .join("\n\n");
+
+      const resumeText = combinedText;
       const analysis = analyzeResume(resumeText, certLevel);
 
       // PDD §3.4 J.3 — derive 7-pillar CCMI vector from fresh resume signals
@@ -1000,6 +1071,8 @@ export async function registerRoutes(
       const created = await storage.createAssessment({
         ...analysis.assessment,
         userId,
+        sourcesUsed,
+        completeness,
       });
 
       const [plans, pivots, vectors] = await Promise.all([
@@ -1063,6 +1136,8 @@ export async function registerRoutes(
         pivotOpportunities: pivots,
         transferabilityVectors: vectors,
         extractedTextLength: resumeText.length,
+        sourcesUsed,
+        completeness,
         identity: recalc
           ? {
               arkScore: recalc.snapshot.arkScore,

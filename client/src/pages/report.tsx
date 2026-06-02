@@ -147,6 +147,18 @@ export const ArkReportSheet = forwardRef<HTMLDivElement, ArkReportSheetProps>(fu
     ? ([1, 2, 3, 4, 5, 6, 7] as const).map((i) => ({ k: `P${i}`, v: pillars[`P${i}`] ?? 0 }))
     : [];
 
+  // Cumulative-profile attribution: which intake sources fed this report and
+  // how complete the picture is. Mirrors the dashboard strip.
+  const SOURCE_LABELS: Record<string, string> = {
+    resume: "Resume",
+    self: "Self-Assessment",
+    linkedin: "LinkedIn",
+    quiz: "Archetype Quiz",
+  };
+  const sourcesUsed: string[] = Array.isArray(a.sourcesUsed) ? a.sourcesUsed : [];
+  const completeness: number | null =
+    typeof a.completeness === "number" ? a.completeness : null;
+
   return (
     <div
       ref={ref}
@@ -191,6 +203,39 @@ export const ArkReportSheet = forwardRef<HTMLDivElement, ArkReportSheetProps>(fu
             {role || "Professional"} · Profile: {typology}
             {vmst ? ` · Mitigation ${vmst}` : ""}
           </div>
+          {sourcesUsed.length > 0 && (
+            <div
+              style={{ marginTop: 8, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}
+              data-testid="report-sources-used"
+            >
+              <span style={{ fontSize: 9.5, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 1, color: ATANDA.sub }}>
+                Built from
+              </span>
+              {sourcesUsed.map((s) => (
+                <span
+                  key={s}
+                  data-testid={`report-badge-source-${s}`}
+                  style={{
+                    fontSize: 9.5,
+                    fontFamily: "monospace",
+                    textTransform: "uppercase",
+                    letterSpacing: 0.5,
+                    color: ATANDA.blue,
+                    border: `1px solid ${ATANDA.line}`,
+                    borderRadius: 999,
+                    padding: "2px 8px",
+                  }}
+                >
+                  {SOURCE_LABELS[s] ?? s}
+                </span>
+              ))}
+              {completeness != null && (
+                <span style={{ fontSize: 9.5, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 0.5, color: ATANDA.sub }}>
+                  · {completeness}% complete
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Hero ARK score */}

@@ -411,12 +411,49 @@ export const assessments = pgTable("assessments", {
   jstRawJobs: integer("jst_raw_jobs"),
   jstRawSkills: integer("jst_raw_skills"),
   jstRawTalent: integer("jst_raw_talent"),
+  // ── Task #24 (Cumulative ARK Profile) ──
+  // Which intake sources contributed to this merged assessment (e.g. ["resume","self","linkedin"])
+  // and the completeness % (0-100) derived from the primary intake sources present.
+  sourcesUsed: text("sources_used").array(),
+  completeness: integer("completeness").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const insertAssessmentSchema = createInsertSchema(assessments).omit({ id: true, createdAt: true });
 export type InsertAssessment = z.infer<typeof insertAssessmentSchema>;
 export type Assessment = typeof assessments.$inferSelect;
+
+// ── Task #24 — Cumulative ARK Profile: per-user, per-source raw intake ──
+// One row per (userId, source). Re-submitting a source REPLACES its content so a
+// user builds ONE evolving profile; the merge engine concatenates all present
+// source texts into a single analysis run. `quiz` is an optional archetype-signal
+// source contributed by the Context Craft archetype questionnaire.
+export const ASSESSMENT_SOURCES = ["resume", "self", "linkedin", "quiz"] as const;
+export type AssessmentSourceKey = (typeof ASSESSMENT_SOURCES)[number];
+// The three primary intake sources surfaced on the /upload builder; drive the
+// completeness meter. `quiz` is a bonus refinement, not counted toward the 3.
+export const PRIMARY_ASSESSMENT_SOURCES = ["resume", "self", "linkedin"] as const;
+
+export const ASSESSMENT_SOURCE_LABELS: Record<AssessmentSourceKey, string> = {
+  resume: "Resume",
+  self: "Self-Assessment",
+  linkedin: "LinkedIn",
+  quiz: "Archetype Quiz",
+};
+
+export const assessmentSources = pgTable("assessment_sources", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  source: text("source").notNull(),
+  content: text("content").notNull().default(""),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => [
+  uniqueIndex("assessment_sources_user_source_uniq").on(t.userId, t.source),
+]);
+
+export const insertAssessmentSourceSchema = createInsertSchema(assessmentSources).omit({ id: true, updatedAt: true });
+export type InsertAssessmentSource = z.infer<typeof insertAssessmentSourceSchema>;
+export type AssessmentSource = typeof assessmentSources.$inferSelect;
 
 export const upskillingPlans = pgTable("upskilling_plans", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
