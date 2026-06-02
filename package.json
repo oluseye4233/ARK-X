@@ -12,7 +12,8 @@
     "db:push": "drizzle-kit push",
     "test:scoring": "tsx --test server/__tests__/scoring.test.ts",
     "test:revenue": "tsx --test server/__tests__/revenueGuardrail.test.ts",
-    "test:merge": "tsx --test server/__tests__/cumulativeMerge.test.ts"
+    "test:merge": "tsx --test server/__tests__/cumulativeMerge.test.ts",
+    "test:hr-connectors": "tsx --test server/__tests__/hrConnectors.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
