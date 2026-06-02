@@ -19,6 +19,7 @@ import { CcmiPillars, type CcmiPillarData } from "@/components/dashboard/CcmiPil
 import { JstCcmiDoughnuts } from "@/components/dashboard/JstCcmiDoughnuts";
 import { FlywheelCard, type FlywheelCta } from "@/components/dashboard/FlywheelCard";
 import { FEATURES } from "@shared/featureFlags";
+import { isEmptyProfile } from "@shared/assessmentMerge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -241,6 +242,31 @@ export default function Dashboard() {
             Take the 60-second tour
           </button>
         </div>
+      </div>
+    );
+  }
+
+  // Empty-profile state: the user removed every contributed source, so the
+  // server rebuilt the profile over empty input and persisted an honest zeroed
+  // assessment. Show an explicit "no sources" guide instead of the misleading
+  // floor-baseline scores. Re-adding any source restores the normal hub.
+  if (isEmptyProfile(assessment.sourcesUsed, assessment.completeness)) {
+    return (
+      <div className="w-full max-w-3xl mx-auto min-h-[60vh] flex flex-col items-center justify-center text-center" data-testid="dashboard-no-sources">
+        <div className="h-14 w-14 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center mb-5">
+          <UploadIcon className="h-6 w-6 text-primary" />
+        </div>
+        <h2 className="text-2xl font-display font-bold text-white mb-2">No sources contributed yet</h2>
+        <p className="text-sm text-muted-foreground font-sans max-w-md mb-6 leading-relaxed">
+          You've removed every source that fed your ARK profile, so there's nothing to score right now. Add a résumé, self-assessment or LinkedIn profile to rebuild your reading.
+        </p>
+        <Link
+          href="/upload"
+          data-testid="button-add-source-empty"
+          className="inline-flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-mono uppercase tracking-wider px-6 py-3 text-sm font-medium rounded-md transition-all hover:scale-[1.02]"
+        >
+          <UploadIcon className="h-4 w-4" /> Add a source
+        </Link>
       </div>
     );
   }

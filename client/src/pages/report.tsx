@@ -6,6 +6,8 @@ import { api } from "@/lib/api";
 import { useSubscription } from "@/lib/useSubscription";
 import UpgradeGate from "@/components/UpgradeGate";
 import { reportFileStamp, exportReportImage, exportReportPdf } from "@/lib/arkReportExport";
+import { isEmptyProfile } from "@shared/assessmentMerge";
+import { Link } from "wouter";
 import atandaLogo from "@assets/WEB_LEARNING_SYSTEMS_(1920_x_1280_px)_(2)_1779729580194.png";
 
 /* ATANDA brand palette (explicit hex for export fidelity) */
@@ -477,6 +479,28 @@ export default function ReportPage() {
     return (
       <div className="w-full max-w-4xl mx-auto min-h-[60vh] flex flex-col items-center justify-center">
         <p className="font-mono text-sm text-muted-foreground uppercase">No assessment data found. Upload a CV first.</p>
+      </div>
+    );
+  }
+
+  // Empty-profile state: the user removed every contributed source, so the
+  // persisted assessment is an honest zeroed "no profile" row. Render an
+  // explicit empty state instead of a branded report full of floor-baseline
+  // zeros — there's nothing to export until a source is re-added.
+  if (assessment && isEmptyProfile(assessment.sourcesUsed, assessment.completeness)) {
+    return (
+      <div className="w-full max-w-4xl mx-auto min-h-[60vh] flex flex-col items-center justify-center text-center" data-testid="report-no-sources">
+        <h2 className="text-2xl font-display font-bold text-white mb-2">No sources to report on</h2>
+        <p className="text-sm text-muted-foreground font-sans max-w-md mb-6 leading-relaxed">
+          You've removed every source that fed your ARK profile, so there's nothing to summarise yet. Add a résumé, self-assessment or LinkedIn profile and your ARK Report will rebuild automatically.
+        </p>
+        <Link
+          href="/upload"
+          data-testid="button-report-add-source"
+          className="inline-flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-mono uppercase tracking-wider px-6 py-3 text-sm font-medium rounded-md transition-all hover:scale-[1.02]"
+        >
+          Add a source
+        </Link>
       </div>
     );
   }

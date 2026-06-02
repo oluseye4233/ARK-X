@@ -1085,6 +1085,91 @@ export async function registerRoutes(
 
       const combinedText = buildCombinedText(sourceRows);
 
+      // Empty-input branch: the user has removed every contributed source.
+      // Running the keyword analyzer over an empty document clamps to misleading
+      // "floor baseline" JST/ARK scores, implying a weak-but-real profile when
+      // in truth NO source feeds it. Persist an honest zeroed assessment
+      // (sourcesUsed=[] / completeness=0) and sync ARK identity downward so the
+      // dashboard and ARK Report can render an explicit "no sources contributed
+      // yet" empty state. Re-adding any source returns to the full pipeline.
+      if (sourceRows.length === 0) {
+        const shell = analyzeResume("", certLevel);
+        const created = await storage.createAssessment({
+          ...shell.assessment,
+          userId,
+          jstTotal: 0,
+          jstJobs: 0,
+          jstSkills: 0,
+          jstTalent: 0,
+          jstRawTotal: 0,
+          jstRawJobs: 0,
+          jstRawSkills: 0,
+          jstRawTalent: 0,
+          vulnerabilityLevel: 0,
+          riskModifiers: [],
+          matchedCardIds: [],
+          automationMilestones: [],
+          sourcesUsed,
+          completeness,
+        });
+
+        let emptyRecalc: Awaited<ReturnType<typeof recalcArkForUser>> | null = null;
+        try {
+          emptyRecalc = await recalcArkForUser({
+            userId,
+            trigger: "assessment.completed",
+            triggerMeta: { assessmentId: created.id, source: sourceTag },
+            freshScores: {
+              categoryScores: {
+                technical: 0,
+                leadership: 0,
+                analytical: 0,
+                communication: 0,
+                innovation: 0,
+                ai_adjacent: 0,
+              },
+              avgAutomation: 0,
+            },
+          });
+        } catch (recalcErr) {
+          console.error(`[${sourceTag}] empty-input recalc failed (best-effort):`, recalcErr);
+        }
+
+        await orchestrator.emit(userId, "assessment.completed", {
+          assessmentId: created.id,
+          jstTotal: 0,
+        }, 0);
+
+        return {
+          ...created,
+          upskillingPlans: [],
+          pivotOpportunities: [],
+          transferabilityVectors: [],
+          extractedTextLength: 0,
+          sourcesUsed,
+          completeness,
+          empty: true,
+          identity: emptyRecalc
+            ? {
+                arkScore: emptyRecalc.snapshot.arkScore,
+                jstIndex: emptyRecalc.snapshot.jstIndex,
+                ccmi: emptyRecalc.snapshot.ccmi,
+                ccmiTier: emptyRecalc.snapshot.ccmiTier,
+                ccmiTierLabel: emptyRecalc.snapshot.ccmiTierLabel,
+                ccmiMultiplier: emptyRecalc.snapshot.ccmiMultiplier,
+                ccmiPillars: emptyRecalc.snapshot.ccmiPillars,
+                vmstLevel: emptyRecalc.snapshot.vmstLevel,
+                vmstLabel: emptyRecalc.snapshot.vmstLabel,
+                arkTier: emptyRecalc.snapshot.arkTierKey,
+                arkIdString: emptyRecalc.snapshot.arkIdString,
+                typology: emptyRecalc.snapshot.typology,
+                resumeReplacementPct: emptyRecalc.snapshot.resumeReplacementPct,
+              }
+            : null,
+          narrative: null,
+        };
+      }
+
       const resumeText = combinedText;
       const analysis = analyzeResume(resumeText, certLevel);
 

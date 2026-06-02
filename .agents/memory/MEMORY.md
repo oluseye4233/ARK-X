@@ -5,3 +5,4 @@
 - [PDD PDF rendering](pdd-rendering.md) — renderPdd.ts needs PUPPETEER_EXECUTABLE_PATH set to nix chromium; puppeteer can't auto-resolve the browser.
 - [Background procs die between bash calls](bash-background-procs.md) — a `&` server from one bash call is dead in the next; start+test+kill in ONE call, never pkill the workflow.
 - [HR connector adapters](hr-connectors.md) — file adapters impl `parse`, API adapters impl async `fetchRecords`; roster sync is on-demand (session-scoped) not a global scheduler (no per-tenant config).
+- [Empty profile state](empty-profile-state.md) — removing all sources persists a zeroed assessment (`sourcesUsed=[]`, completeness 0), NOT floor scores; guard surfaces with `isEmptyProfile` (empty array ≠ null legacy rows).

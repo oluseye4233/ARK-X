@@ -32,6 +32,20 @@ export function canonicalSourcesUsed(present: Set<string>): AssessmentSourceKey[
   return ASSESSMENT_SOURCES.filter((k) => present.has(k));
 }
 
+// True when a persisted assessment represents the cumulative "no sources"
+// state: the user has removed every contributed source, so the profile is
+// rebuilt over empty input. We persist sourcesUsed=[] + completeness=0 (an
+// explicit empty array, NOT null) in that case, which distinguishes it from a
+// legacy single-assessment row that never tracked sources (sourcesUsed=null).
+// Surfaces use this to show an honest "no sources contributed yet" empty state
+// instead of the analyzer's misleading floor-baseline scores.
+export function isEmptyProfile(
+  sourcesUsed: readonly string[] | null | undefined,
+  completeness: number | null | undefined,
+): boolean {
+  return Array.isArray(sourcesUsed) && sourcesUsed.length === 0 && completeness === 0;
+}
+
 // Concatenate every present source's raw text into one combined document with
 // per-source headers so the downstream keyword analyzer reads them coherently.
 // Empty/whitespace-only sources are skipped. Output order is canonical.
