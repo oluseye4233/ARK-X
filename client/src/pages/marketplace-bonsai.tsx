@@ -3,7 +3,9 @@
 // links subscribers to the ATANDA Command Centre (a separate, API-linked project
 // with its own dashboard features). The target project is not yet hosted, so the
 // launch action is a PLACEHOLDER until the deployment URL is wired in.
+import { useState } from "react";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -12,14 +14,13 @@ import {
   Plug,
   RefreshCw,
   ShieldCheck,
+  Loader2,
   Lock,
 } from "lucide-react";
 import { useAuth } from "@/lib/useAuth";
+import { useSubscription } from "@/lib/useSubscription";
+import { apiRequest } from "@/lib/queryClient";
 import commandCentreBg from "@assets/1_1780428420784.mp4";
-
-// When the ATANDA Command Centre project is hosted, set this to its URL (or wire
-// it to an API-provided endpoint). Empty string = not yet connected → placeholder.
-const ATANDA_COMMAND_CENTRE_URL = "";
 
 const FEATURES = [
   {
@@ -41,7 +42,35 @@ const FEATURES = [
 
 export function CommandCentrePage() {
   const { user } = useAuth();
-  const isConnected = ATANDA_COMMAND_CENTRE_URL.trim().length > 0;
+  const { plan } = useSubscription();
+  const [launching, setLaunching] = useState(false);
+  const [launchError, setLaunchError] = useState<string | null>(null);
+
+  const { data: config } = useQuery<{ connected: boolean }>({
+    queryKey: ["/api/command-centre/config"],
+    enabled: !!user,
+  });
+
+  const isConnected = !!config?.connected;
+  const isSubscriber = plan !== "INDIVIDUAL_FREE";
+
+  async function handleLaunch() {
+    setLaunchError(null);
+    setLaunching(true);
+    try {
+      const res = await apiRequest("POST", "/api/command-centre/launch");
+      const { url } = (await res.json()) as { url: string };
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err: any) {
+      setLaunchError(
+        typeof err?.message === "string"
+          ? err.message.replace(/^\d+:\s*/, "")
+          : "Failed to launch the ATANDA Command Centre."
+      );
+    } finally {
+      setLaunching(false);
+    }
+  }
 
   if (!user) {
     return (
@@ -111,16 +140,32 @@ export function CommandCentrePage() {
           </p>
 
           <div className="flex flex-wrap items-center gap-3 pt-2">
-            {isConnected ? (
-              <a
-                href={ATANDA_COMMAND_CENTRE_URL}
-                target="_blank"
-                rel="noopener noreferrer"
+            {isConnected && isSubscriber ? (
+              <button
+                type="button"
+                onClick={handleLaunch}
+                disabled={launching}
                 data-testid="button-launch-command-centre"
-                className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-3 font-mono text-xs uppercase tracking-wider text-background font-bold hover:bg-primary/90 transition-all shadow-[0_0_24px_rgba(34,211,238,0.45)]"
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-3 font-mono text-xs uppercase tracking-wider text-background font-bold hover:bg-primary/90 transition-all shadow-[0_0_24px_rgba(34,211,238,0.45)] disabled:opacity-70 disabled:cursor-wait"
               >
-                Launch Command Centre <ArrowUpRight className="h-4 w-4" />
-              </a>
+                {launching ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Opening
+                  </>
+                ) : (
+                  <>
+                    Launch Command Centre <ArrowUpRight className="h-4 w-4" />
+                  </>
+                )}
+              </button>
+            ) : isConnected && !isSubscriber ? (
+              <Link
+                href="/subscription"
+                data-testid="button-launch-command-centre"
+                className="inline-flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-5 py-3 font-mono text-xs uppercase tracking-wider text-primary font-bold hover:bg-primary/20 transition-all"
+              >
+                <Lock className="h-4 w-4" /> Subscribe to Unlock
+              </Link>
             ) : (
               <div className="relative inline-block">
                 <button
@@ -147,6 +192,25 @@ export function CommandCentrePage() {
               {isConnected ? "Connected" : "Placeholder · Awaiting Deployment"}
             </span>
           </div>
+
+          {launchError && (
+            <p
+              className="font-mono text-[11px] text-destructive max-w-xl"
+              data-testid="text-command-centre-error"
+            >
+              {launchError}
+            </p>
+          )}
+
+          {isConnected && !isSubscriber && (
+            <p
+              className="font-mono text-[11px] text-white/60 max-w-xl"
+              data-testid="text-command-centre-subscribe-note"
+            >
+              The ATANDA Command Centre is available to active subscribers. Upgrade your plan to
+              open your control hub.
+            </p>
+          )}
 
           {!isConnected && (
             <p

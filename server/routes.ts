@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
+import { createHmac } from "crypto";
 import { createRequire } from "module";
 import { fileURLToPath } from "url";
 
@@ -116,6 +117,28 @@ const csvUpload = multer({
   },
 });
 
+// ── ATANDA Command Centre — runtime config + secure identity handoff ──
+// The Command Centre lives in a separate, API-linked project. Its deployment
+// URL is supplied at runtime via the ATANDA_COMMAND_CENTRE_URL env var so the
+// integration can be activated without a code edit. Empty = not yet connected.
+function commandCentreBaseUrl(): string {
+  return (process.env.ATANDA_COMMAND_CENTRE_URL || "").trim();
+}
+
+function handoffSecret(): string {
+  return process.env.SESSION_SECRET || "ark-dev-only-secret-DO-NOT-USE-IN-PROD";
+}
+
+// Builds a short-lived, HMAC-signed identity assertion. Carries only the
+// subscriber's id/name/plan — never ARK credentials, passwords, or session
+// cookies — so the browser never sees anything sensitive. The ATANDA project
+// verifies the signature with the shared SESSION_SECRET.
+function signCommandCentreHandoff(payload: Record<string, unknown>): string {
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const sig = createHmac("sha256", handoffSecret()).update(body).digest("base64url");
+  return `${body}.${sig}`;
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -169,6 +192,57 @@ export async function registerRoutes(
       return res.json(events);
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── ATANDA Command Centre ─────────────────────────────
+  // Runtime connection state — the client uses this to flip the launch button
+  // from "Launching soon" to active once the env var is set. Does NOT leak the
+  // raw URL; the actual destination is minted server-side on launch.
+  app.get("/api/command-centre/config", requireAuth, async (req, res) => {
+    return res.json({ connected: commandCentreBaseUrl().length > 0 });
+  });
+
+  // Secure launch — verifies an active subscription, mints a short-lived signed
+  // identity assertion, and returns the destination URL with the handoff token
+  // attached. ARK credentials never reach the browser.
+  app.post("/api/command-centre/launch", requireAuth, async (req, res) => {
+    try {
+      const base = commandCentreBaseUrl();
+      if (!base) {
+        return res.status(503).json({ message: "ATANDA Command Centre is not yet connected." });
+      }
+      const userId = currentUserId(req)!;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const plan = (user.subscriptionPlan || "INDIVIDUAL_FREE") as SubscriptionPlan;
+      const isActiveSubscriber = plan !== "INDIVIDUAL_FREE" && (user.subscriptionStatus || "active") === "active";
+      if (!isActiveSubscriber) {
+        return res.status(403).json({ message: "An active subscription is required to open the ATANDA Command Centre." });
+      }
+
+      const now = Date.now();
+      const token = signCommandCentreHandoff({
+        sub: user.id,
+        name: user.name ?? user.username ?? null,
+        plan,
+        iat: now,
+        exp: now + 5 * 60 * 1000,
+      });
+
+      let url: string;
+      try {
+        const u = new URL(base);
+        u.searchParams.set("sso", token);
+        url = u.toString();
+      } catch {
+        return res.status(500).json({ message: "ATANDA Command Centre URL is misconfigured." });
+      }
+
+      return res.json({ url });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Failed to launch Command Centre" });
     }
   });
 
