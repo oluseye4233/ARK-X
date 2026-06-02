@@ -13,6 +13,7 @@ const _require = createRequire(_filename);
 const { PDFParse } = _require("pdf-parse") as { PDFParse: new (opts: { data: Uint8Array }) => { getText: () => Promise<{ text: string }> } };
 import { storage } from "./storage";
 import { analyzeResume } from "./resumeAnalyzer";
+import { extractProfileBio, EMPTY_BIO, type ProfileBio } from "./profileExtract";
 import { requireAuth, requireSelf, requireInstructor, requireInstitutionAdmin, currentUserId, loginSession } from "./auth";
 import { getHrConnector, listHrConnectors } from "./hrConnectors";
 import { runHrConnectionTest } from "./workforceConnectionTest";
@@ -1181,6 +1182,15 @@ export async function registerRoutes(
       const resumeText = combinedText;
       const analysis = analyzeResume(resumeText, certLevel);
 
+      // Scrape biographical facts (name, employer, role, qualifications) for the
+      // "resume killer" ARK Report header. Best-effort — never blocks scoring.
+      let bio: ProfileBio = { ...EMPTY_BIO };
+      try {
+        bio = await extractProfileBio(resumeText);
+      } catch (bioErr) {
+        console.error(`[${sourceTag}] bio extraction failed (best-effort):`, bioErr);
+      }
+
       // PDD §3.4 J.3 — derive 7-pillar CCMI vector from fresh resume signals
       // (proxied off the JST sub-scores we just computed against the same text).
       const { derivePillarsFromResume } = await import("./ccmiDerivation");
@@ -1205,6 +1215,11 @@ export async function registerRoutes(
         userId,
         sourcesUsed,
         completeness,
+        candidateName: bio.candidateName,
+        currentEmployer: bio.currentEmployer,
+        currentRole: bio.currentRole,
+        professionalQuals: bio.professionalQuals,
+        academicQuals: bio.academicQuals,
       });
 
       const [plans, pivots, vectors] = await Promise.all([

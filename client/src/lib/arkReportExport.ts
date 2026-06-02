@@ -62,11 +62,18 @@ export async function exportReportPdf(el: HTMLElement, fileBase: string) {
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
   const imgWidth = pageWidth;
+  // The ARK Report is a multi-page (A4-proportioned) sheet. Render the capture
+  // at full page width and slice it across as many A4 pages as its height needs.
   const imgHeight = (canvas.height * imgWidth) / canvas.width;
-  // Scale to fit a single page (the report is designed to be one page).
-  const renderHeight = Math.min(imgHeight, pageHeight);
-  const renderWidth = (canvas.width * renderHeight) / canvas.height;
-  const x = (pageWidth - renderWidth) / 2;
-  pdf.addImage(imgData, "PNG", x, 0, renderWidth, renderHeight);
+  let heightLeft = imgHeight;
+  let position = 0;
+  pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+  heightLeft -= pageHeight;
+  while (heightLeft > 0.5) {
+    position -= pageHeight;
+    pdf.addPage();
+    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+  }
   pdf.save(`${fileBase}.pdf`);
 }

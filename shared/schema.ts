@@ -416,6 +416,15 @@ export const assessments = pgTable("assessments", {
   // and the completeness % (0-100) derived from the primary intake sources present.
   sourcesUsed: text("sources_used").array(),
   completeness: integer("completeness").notNull().default(0),
+  // ── ARK Report "resume killer" bio fields ──
+  // Scraped from the combined resume/LinkedIn intake text (best-effort). Drive
+  // the biographical header of the 2-page ARK Report. Nullable: extraction is
+  // best-effort and older assessments predate these columns.
+  candidateName: text("candidate_name"),
+  currentEmployer: text("current_employer"),
+  currentRole: text("current_role"),
+  professionalQuals: text("professional_quals").array(),
+  academicQuals: text("academic_quals").array(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

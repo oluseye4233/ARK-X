@@ -19,3 +19,12 @@ migration file lands in `migrations/` but is not executed.
 `CREATE UNIQUE INDEX IF NOT EXISTS`). Run the relevant one directly:
 `psql "$DATABASE_URL" -f migrations/<file>.sql`, then verify with `\d <table>`
 and an `information_schema.columns` check. Safe to re-run.
+
+**Naming:** migration files use a monotonic, unique 4-digit prefix. Before
+creating one, `ls migrations/*.sql` and take max prefix + 1 — never reuse an
+existing ordinal (e.g. a second `0001_*`), even with idempotent SQL, because
+duplicate prefixes create ambiguous ordering in tooling.
+
+**Gotcha:** `current_role` is a Postgres reserved word — quote it
+(`"current_role"`) in raw SQL. Drizzle auto-quotes, so the schema definition
+needs no special handling.

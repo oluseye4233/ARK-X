@@ -38,10 +38,9 @@ const TYPOLOGY: Record<string, string> = { A: "Architect", O: "Orchestrator", C:
 const LIGHT_HEX: Record<string, string> = { green: ATANDA.green, amber: ATANDA.yellow, red: ATANDA.red };
 
 /* Hand-drawn SVG radar — reliable in html2canvas (no recharts/foreignObject) */
-function RadarMini({ vectors }: { vectors: Array<{ subject: string; score: number }> }) {
-  const size = 230;
+function RadarMini({ vectors, size = 230 }: { vectors: Array<{ subject: string; score: number }>; size?: number }) {
   const c = size / 2;
-  const R = 78;
+  const R = size * 0.34;
   const n = vectors.length || 1;
   const angle = (i: number) => (-90 + (360 / n) * i) * (Math.PI / 180);
   const pt = (i: number, r: number) => [c + Math.cos(angle(i)) * r, c + Math.sin(angle(i)) * r];
@@ -58,19 +57,19 @@ function RadarMini({ vectors }: { vectors: Array<{ subject: string; score: numbe
       })}
       <polygon points={poly} fill="rgba(27,111,181,0.22)" stroke={ATANDA.blue} strokeWidth={2} />
       {vectors.map((v, i) => {
-        const [x, y] = pt(i, R + 11);
+        const [x, y] = pt(i, R + size * 0.055);
         return (
           <text
             key={i}
             x={x}
             y={y}
-            fontSize={7.5}
+            fontSize={Math.max(7.5, size * 0.034)}
             fill={ATANDA.sub}
             textAnchor={Math.abs(x - c) < 6 ? "middle" : x > c ? "start" : "end"}
             dominantBaseline="middle"
             style={{ fontFamily: "monospace" }}
           >
-            {String(v.subject).slice(0, 12)}
+            {String(v.subject).slice(0, 16)}
           </text>
         );
       })}
@@ -108,6 +107,43 @@ function MetricCard({
       </div>
       <div style={{ marginTop: 10 }}>{children}</div>
       <div style={{ fontSize: 10.5, color: ATANDA.sub, marginTop: 10, lineHeight: 1.35 }}>{meaning}</div>
+    </div>
+  );
+}
+
+/* Labelled biographical field for the resume-killer profile block. */
+function BioField({ label, value, testId }: { label: string; value?: string | null; testId?: string }) {
+  return (
+    <div data-testid={testId}>
+      <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 1.2, textTransform: "uppercase", color: ATANDA.blue, marginBottom: 4 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 14, fontWeight: 600, color: ATANDA.ink, lineHeight: 1.3 }}>{value || "—"}</div>
+    </div>
+  );
+}
+
+/* Chip list for professional / academic qualifications. */
+function QualBlock({ label, items, testId }: { label: string; items: string[]; testId?: string }) {
+  return (
+    <div data-testid={testId}>
+      <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 1.2, textTransform: "uppercase", color: ATANDA.blue, marginBottom: 6 }}>
+        {label}
+      </div>
+      {items.length > 0 ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {items.map((q, i) => (
+            <span
+              key={i}
+              style={{ fontSize: 11, color: ATANDA.ink, background: "#fff", border: `1px solid ${ATANDA.line}`, borderRadius: 8, padding: "4px 9px", lineHeight: 1.25 }}
+            >
+              {q}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <div style={{ fontSize: 12, color: ATANDA.sub }}>Not detected on file</div>
+      )}
     </div>
   );
 }
@@ -161,22 +197,37 @@ export const ArkReportSheet = forwardRef<HTMLDivElement, ArkReportSheetProps>(fu
   const completeness: number | null =
     typeof a.completeness === "number" ? a.completeness : null;
 
-  return (
-    <div
-      ref={ref}
-      data-testid="ark-report-sheet"
-      style={{
-        background: "#ffffff",
-        color: ATANDA.ink,
-        borderRadius: 14,
-        overflow: "hidden",
-        boxShadow: "0 24px 60px rgba(0,0,0,0.45)",
-        fontFamily: "'Space Grotesk', system-ui, sans-serif",
-      }}
-    >
-      <div style={{ height: 6, background: BRAND_BAR }} />
+  // ── "Resume killer" bio (scraped from resume/LinkedIn; falls back to account) ──
+  const displayName = a.candidateName || name || "—";
+  const jobRole = a.currentRole || role || "Professional";
+  const employer = a.currentEmployer || null;
+  const proQuals: string[] = Array.isArray(a.professionalQuals) ? a.professionalQuals : [];
+  const acadQuals: string[] = Array.isArray(a.academicQuals) ? a.academicQuals : [];
+  // Single generation instant shared by both pages (date + time stamp).
+  const generatedAt = new Date();
+  const stampDate = generatedAt.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+  const stampTime = generatedAt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 
-      <div style={{ padding: 28 }}>
+  const PAGE_W = 794;
+  const FONT = "'Space Grotesk', system-ui, sans-serif";
+  const pageStyle: React.CSSProperties = {
+    width: PAGE_W,
+    minHeight: 1123,
+    background: "#ffffff",
+    color: ATANDA.ink,
+    display: "flex",
+    flexDirection: "column",
+    boxSizing: "border-box",
+    overflow: "hidden",
+  };
+
+  return (
+    <div ref={ref} data-testid="ark-report-sheet" style={{ width: PAGE_W, margin: "0 auto", fontFamily: FONT, color: ATANDA.ink }}>
+      {/* ─────────────  PAGE 1 — Profile & Core Scores  ───────────── */}
+      <div data-testid="report-page-1" style={pageStyle}>
+        <div style={{ height: 6, background: BRAND_BAR }} />
+
+        <div style={{ padding: 28, flex: 1, display: "flex", flexDirection: "column" }}>
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -191,7 +242,8 @@ export const ArkReportSheet = forwardRef<HTMLDivElement, ArkReportSheetProps>(fu
             </div>
           </div>
           <div style={{ textAlign: "right", fontSize: 10, fontFamily: "monospace", color: ATANDA.sub, lineHeight: 1.7 }}>
-            <div>{new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}</div>
+            <div data-testid="text-report-timestamp">{stampDate}</div>
+            <div>{stampTime}</div>
             <div>ARK-ID: {arkId}</div>
           </div>
         </div>
@@ -199,10 +251,10 @@ export const ArkReportSheet = forwardRef<HTMLDivElement, ArkReportSheetProps>(fu
         {/* Subject */}
         <div style={{ marginTop: 18, paddingBottom: 14, borderBottom: `1px solid ${ATANDA.line}` }}>
           <div style={{ fontSize: 30, fontWeight: 800, color: ATANDA.ink, lineHeight: 1.05 }} data-testid="text-report-name">
-            {name || "—"}
+            {displayName}
           </div>
-          <div style={{ fontSize: 12, color: ATANDA.sub, marginTop: 4, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 1 }}>
-            {role || "Professional"} · Profile: {typology}
+          <div style={{ fontSize: 12, color: ATANDA.sub, marginTop: 4, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 1 }} data-testid="text-report-role">
+            {jobRole}{employer ? ` · ${employer}` : ""} · Profile: {typology}
             {vmst ? ` · Mitigation ${vmst}` : ""}
           </div>
           {sourcesUsed.length > 0 && (
@@ -238,6 +290,26 @@ export const ArkReportSheet = forwardRef<HTMLDivElement, ArkReportSheetProps>(fu
               )}
             </div>
           )}
+        </div>
+
+        {/* Professional profile — resume-killer bio block */}
+        <div
+          data-testid="card-report-bio"
+          style={{
+            marginTop: 14,
+            border: `1px solid ${ATANDA.line}`,
+            borderRadius: 12,
+            background: ATANDA.panel,
+            padding: 16,
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 14,
+          }}
+        >
+          <BioField label="Current Place of Work" value={employer} testId="text-report-employer" />
+          <BioField label="Job Role" value={jobRole} testId="text-report-jobrole" />
+          <QualBlock label="Professional Qualifications" items={proQuals} testId="report-pro-quals" />
+          <QualBlock label="Academic Qualifications" items={acadQuals} testId="report-academic-quals" />
         </div>
 
         {/* Hero ARK score */}
@@ -363,35 +435,11 @@ export const ArkReportSheet = forwardRef<HTMLDivElement, ArkReportSheetProps>(fu
           </MetricCard>
         </div>
 
-        {/* Archetype + Transferability */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1.1fr", gap: 12, marginTop: 12 }}>
-          <MetricCard title="Archetype Handicap" meaning="Your dominant way of working with AI. Bars show the weighted mix." testId="card-report-archetype">
-            <div style={{ marginTop: 2 }}>
-              {arch.map((r) => (
-                <div key={r.label} style={{ marginBottom: 9 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 3 }}>
-                    <span style={{ color: ATANDA.ink, fontWeight: 600 }}>{r.label}</span>
-                    <span style={{ color: ATANDA.sub, fontFamily: "monospace" }}>{Math.round(r.v)}%</span>
-                  </div>
-                  <Bar value={r.v} max={100} color={r.color} />
-                </div>
-              ))}
-            </div>
-          </MetricCard>
+        {/* spacer pushes the page-1 footer to the sheet floor */}
+        <div style={{ flex: 1, minHeight: 8 }} />
 
-          <MetricCard title="12-Vector Transferability" meaning="How easily your skills move across 12 career directions." testId="card-report-transfer">
-            {vectors.length > 0 ? (
-              <RadarMini vectors={vectors} />
-            ) : (
-              <div style={{ fontSize: 11, color: ATANDA.sub, padding: "24px 0", textAlign: "center" }}>
-                Transferability radar populates after your first CV upload.
-              </div>
-            )}
-          </MetricCard>
-        </div>
-
-        {/* Footer */}
-        <div style={{ marginTop: 18, paddingTop: 12, borderTop: `1px solid ${ATANDA.line}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        {/* Page 1 footer */}
+        <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${ATANDA.line}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <img src={atandaLogo} alt="ATANDA" crossOrigin="anonymous" style={{ width: 22, height: 22, objectFit: "contain" }} />
             <span style={{ fontSize: 9, fontFamily: "monospace", color: ATANDA.sub, textTransform: "uppercase", letterSpacing: 1.5 }}>
@@ -399,11 +447,114 @@ export const ArkReportSheet = forwardRef<HTMLDivElement, ArkReportSheetProps>(fu
             </span>
           </div>
           <span style={{ fontSize: 9, fontFamily: "monospace", color: ATANDA.sub, textTransform: "uppercase", letterSpacing: 1 }}>
-            Confidential · {arkId}
+            Page 1 of 2 · {stampDate} {stampTime}
           </span>
         </div>
+        </div>
+        <div style={{ height: 6, background: BRAND_BAR }} />
       </div>
-      <div style={{ height: 6, background: BRAND_BAR }} />
+
+      {/* ─────────────  PAGE 2 — Career Mobility & Operating Mix  ───────────── */}
+      <div data-testid="report-page-2" style={pageStyle}>
+        <div style={{ height: 6, background: BRAND_BAR }} />
+
+        <div style={{ padding: 28, flex: 1, display: "flex", flexDirection: "column" }}>
+          {/* Page 2 header */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", paddingBottom: 14, borderBottom: `1px solid ${ATANDA.line}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <img src={atandaLogo} alt="ATANDA" crossOrigin="anonymous" style={{ width: 44, height: 44, objectFit: "contain" }} />
+              <div>
+                <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 2, color: ATANDA.ink, lineHeight: 1 }}>
+                  CAREER MOBILITY
+                </div>
+                <div style={{ fontSize: 10, letterSpacing: 2, textTransform: "uppercase", color: ATANDA.sub, marginTop: 4 }}>
+                  ARK Report · Page 2
+                </div>
+              </div>
+            </div>
+            <div style={{ textAlign: "right", fontSize: 10, fontFamily: "monospace", color: ATANDA.sub, lineHeight: 1.7 }}>
+              <div style={{ fontWeight: 700, color: ATANDA.ink, fontFamily: FONT }}>{displayName}</div>
+              <div>ARK-ID: {arkId}</div>
+            </div>
+          </div>
+
+          {/* 12-Vector radar (large) */}
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: ATANDA.blue }}>
+              12-Vector Transferability Radar
+            </div>
+            <div style={{ fontSize: 10.5, color: ATANDA.sub, marginTop: 4 }}>
+              How easily your skills move across 12 career directions. A wider shape means broader mobility.
+            </div>
+            <div style={{ marginTop: 8, border: `1px solid ${ATANDA.line}`, borderRadius: 12, padding: 12, background: "#fff", display: "flex", justifyContent: "center" }}>
+              {vectors.length > 0 ? (
+                <RadarMini vectors={vectors} size={360} />
+              ) : (
+                <div style={{ fontSize: 12, color: ATANDA.sub, padding: "60px 0", textAlign: "center" }}>
+                  Transferability radar populates after your first CV upload.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Vector transferability detail */}
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: ATANDA.blue, marginBottom: 8 }}>
+              Vector Transferability · Detail
+            </div>
+            {vectors.length > 0 ? (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 22, rowGap: 8 }} data-testid="report-vector-list">
+                {vectors.map((v, i) => (
+                  <div key={i}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, marginBottom: 3 }}>
+                      <span style={{ color: ATANDA.ink, fontWeight: 600 }}>{v.subject}</span>
+                      <span style={{ color: ATANDA.sub, fontFamily: "monospace" }}>{Math.round(v.score)}</span>
+                    </div>
+                    <Bar value={v.score} max={100} color={ATANDA.teal} />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, color: ATANDA.sub }}>No transferability vectors on file yet.</div>
+            )}
+          </div>
+
+          {/* Archetype handicap */}
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: ATANDA.blue }}>
+              Archetype Handicap
+            </div>
+            <div style={{ fontSize: 10.5, color: ATANDA.sub, marginTop: 4, marginBottom: 10 }}>
+              Your dominant way of working with AI. Bars show the weighted mix across the three operating archetypes.
+            </div>
+            <div data-testid="card-report-archetype">
+              {arch.map((r) => (
+                <div key={r.label} style={{ marginBottom: 11 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+                    <span style={{ color: ATANDA.ink, fontWeight: 600 }}>{r.label}</span>
+                    <span style={{ color: ATANDA.sub, fontFamily: "monospace" }}>{Math.round(r.v)}%</span>
+                  </div>
+                  <Bar value={r.v} max={100} color={r.color} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* spacer pushes the page-2 footer to the sheet floor */}
+          <div style={{ flex: 1, minHeight: 8 }} />
+
+          {/* Page 2 footer */}
+          <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${ATANDA.line}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 9, fontFamily: "monospace", color: ATANDA.sub, textTransform: "uppercase", letterSpacing: 1.5 }}>
+              Powered by ATANDA · ARK Synthesized Intelligence
+            </span>
+            <span style={{ fontSize: 9, fontFamily: "monospace", color: ATANDA.sub, textTransform: "uppercase", letterSpacing: 1 }}>
+              Page 2 of 2 · Confidential · {arkId}
+            </span>
+          </div>
+        </div>
+        <div style={{ height: 6, background: BRAND_BAR }} />
+      </div>
     </div>
   );
 });
