@@ -228,6 +228,32 @@ export default function WorkforcePage() {
     },
   });
 
+  // Read-only connection test — keyed per adapter so each card shows its own
+  // success (record count) / failure (reason) without writing any data.
+  const [testResults, setTestResults] = useState<
+    Record<string, { ok: boolean; message: string }>
+  >({});
+  const testMut = useMutation({
+    mutationFn: (adapter: string) => api.testWorkforceConnector(adapter),
+    onSuccess: (res: any) => {
+      setTestResults((prev) => ({
+        ...prev,
+        [res.adapter]: {
+          ok: true,
+          message: `Connected — ${res.validRows} record${res.validRows === 1 ? "" : "s"} found${
+            res.errorRows > 0 ? `, ${res.errorRows} skipped` : ""
+          }.`,
+        },
+      }));
+    },
+    onError: (err: Error, adapter: string) => {
+      setTestResults((prev) => ({
+        ...prev,
+        [adapter]: { ok: false, message: err.message || "Connection test failed." },
+      }));
+    },
+  });
+
   const apiConnectors = (connectorsQ.data?.connectors ?? []).filter((c) => c.isApi);
 
   function handleFile(f: File | null) {
@@ -333,19 +359,44 @@ export default function WorkforcePage() {
                       Needs: {c.requiredSecrets.join(", ")}
                     </p>
                   )}
-                  <button
-                    disabled={!c.configured || syncMut.isPending}
-                    onClick={() => syncMut.mutate(c.key)}
-                    className="flex items-center justify-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50"
-                    data-testid={`button-sync-${c.key}`}
-                  >
-                    {syncMut.isPending && syncMut.variables === c.key ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Activity className="h-3.5 w-3.5" />
-                    )}
-                    Sync now
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      disabled={!c.configured || testMut.isPending}
+                      onClick={() => testMut.mutate(c.key)}
+                      className="neon-border flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold hover:bg-primary/10 disabled:opacity-50"
+                      data-testid={`button-test-${c.key}`}
+                    >
+                      {testMut.isPending && testMut.variables === c.key ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      )}
+                      Test connection
+                    </button>
+                    <button
+                      disabled={!c.configured || syncMut.isPending}
+                      onClick={() => syncMut.mutate(c.key)}
+                      className="flex flex-1 items-center justify-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+                      data-testid={`button-sync-${c.key}`}
+                    >
+                      {syncMut.isPending && syncMut.variables === c.key ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Activity className="h-3.5 w-3.5" />
+                      )}
+                      Sync now
+                    </button>
+                  </div>
+                  {testResults[c.key] && (
+                    <p
+                      className={`text-[11px] ${
+                        testResults[c.key].ok ? "text-emerald-300" : "text-destructive"
+                      }`}
+                      data-testid={`text-test-result-${c.key}`}
+                    >
+                      {testResults[c.key].message}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>

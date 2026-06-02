@@ -1870,6 +1870,58 @@ export async function registerRoutes(
     }
   });
 
+  // Lightweight "Test connection" for a LIVE HR API connector. Authenticates
+  // and counts records via the adapter's `fetchRecords` but NEVER upserts into
+  // staff_records or creates an import batch — pure read-only feedback so an
+  // admin can verify credentials while wiring up a new HR system. Reuses the
+  // same `isConfigured` / `fetchRecords` contract as the sync route.
+  app.post("/api/workforce/test-connection", ...workforceGate, async (req, res) => {
+    try {
+      const adapterKey = (req.body?.adapter as string) || "";
+      const adapter = getHrConnector(adapterKey);
+      if (!adapter) {
+        return res.status(400).json({ message: `Unknown HR connector "${adapterKey}".` });
+      }
+      if (!adapter.fetchRecords) {
+        return res.status(400).json({
+          message: `The "${adapter.label}" connector does not support API sync. Use the file import instead.`,
+        });
+      }
+      if (adapter.isConfigured && !adapter.isConfigured()) {
+        const missing = (adapter.requiredSecrets ?? []).join(", ");
+        return res.status(400).json({
+          message: `The "${adapter.label}" connector is not configured. Ask an admin to set its credentials${missing ? ` (${missing})` : ""}.`,
+        });
+      }
+
+      // Pull + normalize from the live API to confirm credentials + reachability.
+      // fetchRecords throws on auth/network failure; surface as 502 (upstream).
+      let result;
+      try {
+        result = await adapter.fetchRecords();
+      } catch (err: any) {
+        console.error(`[/api/workforce/test-connection] ${adapterKey} fetch failed:`, err);
+        return res.status(502).json({
+          ok: false,
+          message: err?.message ?? `${adapter.label} connection test failed.`,
+        });
+      }
+
+      // Read-only: deliberately no createImportBatch / upsertStaffRecords here.
+      return res.json({
+        ok: true,
+        adapter: result.adapter,
+        label: adapter.label,
+        totalRows: result.totalRows,
+        validRows: result.records.length,
+        errorRows: result.errors.length,
+      });
+    } catch (err: any) {
+      console.error("[/api/workforce/test-connection] error:", err);
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
   // Staff roster joined with each member's ARK identity + assessment status.
   app.get("/api/workforce/staff", ...workforceGate, async (req, res) => {
     try {

@@ -282,6 +282,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ adapter }),
     }),
+  // Read-only connection test — authenticates + counts records, never writes.
+  testWorkforceConnector: (adapter: string) =>
+    apiRequest("/api/workforce/test-connection", {
+      method: "POST",
+      body: JSON.stringify({ adapter }),
+    }),
   previewWorkforceImport: async (
     file: File,
     opts?: { adapter?: string; columnMapping?: Record<string, string> },
