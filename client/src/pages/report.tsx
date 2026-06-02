@@ -5,26 +5,12 @@ import { useAuth } from "@/lib/useAuth";
 import { api } from "@/lib/api";
 import { useSubscription } from "@/lib/useSubscription";
 import UpgradeGate from "@/components/UpgradeGate";
-import { reportFileStamp, exportReportImage, exportReportPdf } from "@/lib/arkReportExport";
+import { reportFileStamp, adviserFileStamp, exportReportImage, exportReportPdf } from "@/lib/arkReportExport";
 import { isEmptyProfile } from "@shared/assessmentMerge";
 import { Link } from "wouter";
+import { ATANDA, BRAND_BAR, Bar } from "@/lib/arkReportTheme";
+import { ArkAdviserSheet } from "@/pages/adviser-report";
 import atandaLogo from "@assets/WEB_LEARNING_SYSTEMS_(1920_x_1280_px)_(2)_1779729580194.png";
-
-/* ATANDA brand palette (explicit hex for export fidelity) */
-const ATANDA = {
-  ink: "#0B1B33",
-  sub: "#5B6B82",
-  line: "#E4E8EF",
-  panel: "#F6F8FB",
-  blue: "#1B6FB5",
-  yellow: "#F2C230",
-  red: "#E2231A",
-  teal: "#00A3C4",
-  green: "#2BB673",
-  purple: "#8E44AD",
-  orange: "#FF6B4A",
-};
-const BRAND_BAR = `linear-gradient(90deg, ${ATANDA.yellow} 0%, ${ATANDA.orange} 20%, ${ATANDA.red} 40%, ${ATANDA.teal} 60%, ${ATANDA.green} 80%, ${ATANDA.purple} 100%)`;
 
 const VULN_LEVELS: Record<number, { name: string; label: string; color: string }> = {
   0: { name: "Critical", label: "Critical Exposure", color: ATANDA.red },
@@ -74,15 +60,6 @@ function RadarMini({ vectors, size = 230 }: { vectors: Array<{ subject: string; 
         );
       })}
     </svg>
-  );
-}
-
-function Bar({ value, max, color }: { value: number; max: number; color: string }) {
-  const pct = Math.max(0, Math.min(100, (value / max) * 100));
-  return (
-    <div style={{ height: 8, background: ATANDA.line, borderRadius: 999, overflow: "hidden" }}>
-      <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 999 }} />
-    </div>
   );
 }
 
@@ -567,6 +544,8 @@ export default function ReportPage() {
   const [lhcs, setLhcs] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const reportRef = useRef<HTMLDivElement>(null);
+  const adviserRef = useRef<HTMLDivElement>(null);
+  const [view, setView] = useState<"report" | "adviser">("report");
   const [exporting, setExporting] = useState<null | "pdf" | "png" | "jpeg">(null);
 
   useEffect(() => {
@@ -584,11 +563,18 @@ export default function ReportPage() {
       .finally(() => setLoading(false));
   }, [user]);
 
+  // Both documents share the same fetched data, so each view exports the sheet
+  // that is currently on screen with its own filename stamp.
+  const activeEl = () => (view === "adviser" ? adviserRef.current : reportRef.current);
+  const activeBase = () =>
+    view === "adviser" ? adviserFileStamp(user?.name) : reportFileStamp(user?.name);
+
   const handleExportImage = async (type: "png" | "jpeg") => {
-    if (!reportRef.current) return;
+    const el = activeEl();
+    if (!el) return;
     setExporting(type);
     try {
-      await exportReportImage(reportRef.current, type, reportFileStamp(user?.name));
+      await exportReportImage(el, type, activeBase());
     } catch (err) {
       console.error("Image export failed:", err);
     } finally {
@@ -597,10 +583,11 @@ export default function ReportPage() {
   };
 
   const handleExportPDF = async () => {
-    if (!reportRef.current) return;
+    const el = activeEl();
+    if (!el) return;
     setExporting("pdf");
     try {
-      await exportReportPdf(reportRef.current, reportFileStamp(user?.name));
+      await exportReportPdf(el, activeBase());
     } catch (err) {
       console.error("PDF export failed:", err);
       window.print();
@@ -684,9 +671,13 @@ export default function ReportPage() {
     <div className="w-full max-w-[860px] mx-auto space-y-6 animate-in fade-in duration-700 pb-20">
       <div className="flex flex-wrap gap-3 justify-between items-center pb-6 border-b border-white/10 print:hidden">
         <div>
-          <h2 className="text-2xl font-display font-bold text-white uppercase tracking-wider">ARK Report</h2>
+          <h2 className="text-2xl font-display font-bold text-white uppercase tracking-wider">
+            {view === "adviser" ? "Career Adviser Report" : "ARK Report"}
+          </h2>
           <p className="text-muted-foreground font-mono text-sm mt-1">
-            One-page executive summary · branded · export-ready.
+            {view === "adviser"
+              ? "Plain-English guide to every metric · stays in sync with your ARK Report."
+              : "One-page executive summary · branded · export-ready."}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -696,14 +687,55 @@ export default function ReportPage() {
         </div>
       </div>
 
-      <ArkReportSheet
-        ref={reportRef}
-        name={user?.name}
-        role={user?.role}
-        identity={identity}
-        lhcs={lhcs}
-        assessment={assessment}
-      />
+      {/* Document switcher — the Career Adviser Report accompanies the ARK Report */}
+      <div className="flex gap-2 print:hidden" data-testid="report-view-toggle">
+        <button
+          type="button"
+          onClick={() => setView("report")}
+          disabled={exporting !== null}
+          data-testid="button-view-report"
+          className={`flex-1 sm:flex-none px-5 py-2.5 rounded-md font-mono uppercase tracking-widest text-xs transition-all border ${
+            view === "report"
+              ? "bg-primary text-primary-foreground border-primary"
+              : "bg-transparent text-muted-foreground border-white/15 hover:border-primary/50 hover:text-white"
+          }`}
+        >
+          ARK Report
+        </button>
+        <button
+          type="button"
+          onClick={() => setView("adviser")}
+          disabled={exporting !== null}
+          data-testid="button-view-adviser"
+          className={`flex-1 sm:flex-none px-5 py-2.5 rounded-md font-mono uppercase tracking-widest text-xs transition-all border ${
+            view === "adviser"
+              ? "bg-primary text-primary-foreground border-primary"
+              : "bg-transparent text-muted-foreground border-white/15 hover:border-primary/50 hover:text-white"
+          }`}
+        >
+          Career Adviser
+        </button>
+      </div>
+
+      {view === "report" ? (
+        <ArkReportSheet
+          ref={reportRef}
+          name={user?.name}
+          role={user?.role}
+          identity={identity}
+          lhcs={lhcs}
+          assessment={assessment}
+        />
+      ) : (
+        <ArkAdviserSheet
+          ref={adviserRef}
+          name={user?.name}
+          role={user?.role}
+          identity={identity}
+          lhcs={lhcs}
+          assessment={assessment}
+        />
+      )}
     </div>
   );
 }

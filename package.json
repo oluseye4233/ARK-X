@@ -15,7 +15,8 @@
     "test:merge": "tsx --test server/__tests__/cumulativeMerge.test.ts",
     "test:hr-connectors": "tsx --test server/__tests__/hrConnectors.test.ts",
     "test:hr-test-connection": "tsx --test server/__tests__/workforceTestConnection.test.ts",
-    "test:hr-scheduler": "tsx --test server/__tests__/hrScheduler.test.ts"
+    "test:hr-scheduler": "tsx --test server/__tests__/hrScheduler.test.ts",
+    "test:adviser": "tsx --test server/__tests__/adviserNarrative.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
