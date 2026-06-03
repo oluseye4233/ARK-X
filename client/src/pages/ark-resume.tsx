@@ -362,6 +362,13 @@ export default function ArkResumePage() {
   const skillConf = (cardId: string) => skillByKey.get(cardId.toLowerCase()) ?? null;
   const certConf = (label: string) =>
     certConfs.find((c) => certMatches(label, String(c.targetRef))) ?? null;
+  // Generic lookup for the Confirmation Requests panel: index every confirmation
+  // by `${type}:${targetRef}` so a claim can show whether a request already
+  // resolved (the candidate's own view; badge rendering uses the tolerant maps above).
+  const confByKey = new Map<string, any>();
+  for (const c of allConfs) {
+    confByKey.set(`${c.type}:${String(c.targetRef).toLowerCase()}`, c);
+  }
 
   return (
     <>

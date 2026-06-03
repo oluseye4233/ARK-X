@@ -329,50 +329,50 @@ export default function Dashboard() {
           on hover. Hero + live strip stay visible across all three tabs. */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-8">
         <TabsList className="w-full grid grid-cols-3 gap-2 bg-transparent border-0 h-auto p-0" data-testid="tabs-dashboard">
-          <Tooltip delayDuration={150}>
-            <TooltipTrigger asChild>
-              <TabsTrigger
-                value="profile"
-                data-testid="tab-profile"
-                className={`font-mono text-xs sm:text-sm uppercase tracking-widest py-3 rounded-md border transition-colors data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:border-primary/50 data-[state=inactive]:text-muted-foreground ${activeTab !== "profile" ? "animate-throb-glow !text-primary bg-primary/10 border-primary/50" : ""}`}
-              >
-                1. Your Profile
-              </TabsTrigger>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="max-w-xs bg-card text-foreground border border-primary/30 leading-snug">
-              Your ARK identity at a glance — score breakdown (JST + CCMI pillars), your archetype handicap, and the FORGE primitive cards matched to you.
-            </TooltipContent>
-          </Tooltip>
+          <TabsTrigger
+            value="profile"
+            data-testid="tab-profile"
+            className={`font-mono text-xs sm:text-sm uppercase tracking-widest py-3 rounded-md border transition-colors data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:border-primary/50 data-[state=inactive]:text-muted-foreground ${activeTab !== "profile" ? "animate-throb-glow !text-primary bg-primary/10 border-primary/50" : ""}`}
+          >
+            <Tooltip delayDuration={150}>
+              <TooltipTrigger asChild>
+                <span className="block w-full">1. Your Profile</span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs bg-card text-foreground border border-primary/30 leading-snug">
+                Your ARK identity at a glance — score breakdown (JST + CCMI pillars), your archetype handicap, and the FORGE primitive cards matched to you.
+              </TooltipContent>
+            </Tooltip>
+          </TabsTrigger>
 
-          <Tooltip delayDuration={150}>
-            <TooltipTrigger asChild>
-              <TabsTrigger
-                value="risk"
-                data-testid="tab-risk"
-                className={`font-mono text-xs sm:text-sm uppercase tracking-widest py-3 rounded-md border transition-colors data-[state=active]:bg-destructive/15 data-[state=active]:text-destructive data-[state=active]:border-destructive/50 data-[state=inactive]:text-muted-foreground ${activeTab !== "risk" ? "animate-throb-glow-crimson !text-destructive bg-destructive/10 border-destructive/50" : ""}`}
-              >
-                2. Your Risk
-              </TabsTrigger>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="max-w-xs bg-card text-foreground border border-destructive/30 leading-snug">
-              Your AI-automation exposure — vulnerability level, a task-by-task automation heatmap, and the timeline of when your role is most at risk.
-            </TooltipContent>
-          </Tooltip>
+          <TabsTrigger
+            value="risk"
+            data-testid="tab-risk"
+            className={`font-mono text-xs sm:text-sm uppercase tracking-widest py-3 rounded-md border transition-colors data-[state=active]:bg-destructive/15 data-[state=active]:text-destructive data-[state=active]:border-destructive/50 data-[state=inactive]:text-muted-foreground ${activeTab !== "risk" ? "animate-throb-glow-crimson !text-destructive bg-destructive/10 border-destructive/50" : ""}`}
+          >
+            <Tooltip delayDuration={150}>
+              <TooltipTrigger asChild>
+                <span className="block w-full">2. Your Risk</span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs bg-card text-foreground border border-destructive/30 leading-snug">
+                Your AI-automation exposure — vulnerability level, a task-by-task automation heatmap, and the timeline of when your role is most at risk.
+              </TooltipContent>
+            </Tooltip>
+          </TabsTrigger>
 
-          <Tooltip delayDuration={150}>
-            <TooltipTrigger asChild>
-              <TabsTrigger
-                value="path"
-                data-testid="tab-path"
-                className={`font-mono text-xs sm:text-sm uppercase tracking-widest py-3 rounded-md border transition-colors data-[state=active]:bg-secondary/15 data-[state=active]:text-secondary data-[state=active]:border-secondary/50 data-[state=inactive]:text-muted-foreground ${activeTab !== "path" ? "animate-throb-glow-emerald !text-secondary bg-secondary/10 border-secondary/50" : ""}`}
-              >
-                3. Your Path
-              </TabsTrigger>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="max-w-xs bg-card text-foreground border border-secondary/30 leading-snug">
-              Your forward plan — readiness signal, your highest-leverage next move, suggested training providers, and your score history.
-            </TooltipContent>
-          </Tooltip>
+          <TabsTrigger
+            value="path"
+            data-testid="tab-path"
+            className={`font-mono text-xs sm:text-sm uppercase tracking-widest py-3 rounded-md border transition-colors data-[state=active]:bg-secondary/15 data-[state=active]:text-secondary data-[state=active]:border-secondary/50 data-[state=inactive]:text-muted-foreground ${activeTab !== "path" ? "animate-throb-glow-emerald !text-secondary bg-secondary/10 border-secondary/50" : ""}`}
+          >
+            <Tooltip delayDuration={150}>
+              <TooltipTrigger asChild>
+                <span className="block w-full">3. Your Path</span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs bg-card text-foreground border border-secondary/30 leading-snug">
+                Your forward plan — readiness signal, your highest-leverage next move, suggested training providers, and your score history.
+              </TooltipContent>
+            </Tooltip>
+          </TabsTrigger>
         </TabsList>
 
       {/* Hero: the single answer */}
