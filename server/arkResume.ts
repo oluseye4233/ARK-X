@@ -21,6 +21,7 @@ import {
   type Assessment,
 } from "@shared/schema";
 import { CODEC_BY_ID, type CodecPrimitive } from "@shared/codec-primitives";
+import { companyMatches } from "@shared/claimMatch";
 import { getAnthropic, isClaudeAvailable, MODELS } from "./ai/client";
 
 const SILVER_PLUS = new Set(["Silver", "Gold", "Platinum"]);
@@ -402,16 +403,19 @@ export async function buildArkResume(userId: string): Promise<ArkResumePayload |
   const mapping = await aiMapCardsToCompanies(workHistoryRaw, verifiedDeck);
   const deckById = new Map(verifiedDeck.map((c) => [c.cardId, c]));
 
-  // Index confirmations by (type:targetRef) for quick attach.
-  const confByKey = new Map<string, SkillConfirmation>();
-  for (const c of confirmations) confByKey.set(`${c.type}:${c.targetRef.toLowerCase()}`, c);
+  // Employment confirmations attach via tolerant company-name matching (Inc/LLC
+  // suffixes, punctuation, casing, minor typos) so a confirmation issued against
+  // a reasonable variant of a company name still renders. The first confirmation
+  // matching a given company wins.
+  const employmentConfs = confirmations.filter((c) => c.type === "EMPLOYMENT");
 
   const workHistory: ResumeWorkEntry[] = workHistoryRaw.map((entry, idx) => ({
     ...entry,
     mappedCards: (mapping[idx] ?? [])
       .map((id) => deckById.get(id))
       .filter((x): x is VerifiedCard => !!x),
-    confirmation: confByKey.get(`EMPLOYMENT:${entry.company.toLowerCase()}`) ?? null,
+    confirmation:
+      employmentConfs.find((c) => companyMatches(entry.company, c.targetRef)) ?? null,
   }));
 
   const ats = a

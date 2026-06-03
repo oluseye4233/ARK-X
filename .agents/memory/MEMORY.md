@@ -8,3 +8,4 @@
 - [HR connector adapters](hr-connectors.md) — file adapters impl `parse`, API adapters impl async `fetchRecords`; roster sync is on-demand (session-scoped) not a global scheduler (no per-tenant config).
 - [Empty profile state](empty-profile-state.md) — removing all sources persists a zeroed assessment (`sourcesUsed=[]`, completeness 0), NOT floor scores; guard surfaces with `isEmptyProfile` (empty array ≠ null legacy rows).
 - [db:push is interactive](db-push-interactive.md) — drizzle push hangs on TTY prompts; apply DDL via psql AND write an idempotent migrations/*.sql or prod breaks.
+- [Resume claim matching](resume-claim-matching.md) — confirmations attach via shared/claimMatch.ts; SKILL exact (card id), EMPLOYMENT/CERTIFICATION fuzzy; 3 sites must stay in lockstep.

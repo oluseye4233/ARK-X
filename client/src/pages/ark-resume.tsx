@@ -11,6 +11,7 @@ import {
   exportResumeImage,
   type ResumeExportData,
 } from "@/lib/arkResumeExport";
+import { certMatches } from "@shared/claimMatch";
 import atandaLogo from "@assets/WEB_LEARNING_SYSTEMS_(1920_x_1280_px)_(2)_1779729580194.png";
 
 const TIER_HEX: Record<string, string> = {
@@ -273,15 +274,21 @@ export default function ArkResumePage() {
 
   const headshot = data.user.headshotDataUrl as string | null;
 
-  // Index every confirmation by `TYPE:targetRef` (lowercased) so the trust layer
-  // renders across ALL claim types — employment, skill, and certification — using
-  // the same key the server matches on. Missing → rendered as "Unverified".
-  const confByKey = new Map<string, any>();
-  for (const c of (data.confirmations ?? [])) {
-    confByKey.set(`${c.type}:${String(c.targetRef).toLowerCase()}`, c);
+  // SKILL confirmations match on the stable CODEC card id, so they index by an
+  // exact lowercased key. CERTIFICATION confirmations match tolerantly (the SAME
+  // comparison the server uses) so a badge issued against a reasonable variant of
+  // a certification label still renders instead of silently orphaning. Missing →
+  // rendered as "Unverified".
+  const allConfs = (data.confirmations ?? []) as any[];
+  const skillByKey = new Map<string, any>();
+  const certConfs: any[] = [];
+  for (const c of allConfs) {
+    if (c.type === "SKILL") skillByKey.set(String(c.targetRef).toLowerCase(), c);
+    else if (c.type === "CERTIFICATION") certConfs.push(c);
   }
-  const skillConf = (cardId: string) => confByKey.get(`SKILL:${cardId.toLowerCase()}`) ?? null;
-  const certConf = (label: string) => confByKey.get(`CERTIFICATION:${label.toLowerCase()}`) ?? null;
+  const skillConf = (cardId: string) => skillByKey.get(cardId.toLowerCase()) ?? null;
+  const certConf = (label: string) =>
+    certConfs.find((c) => certMatches(label, String(c.targetRef))) ?? null;
 
   return (
     <div className="w-full max-w-5xl mx-auto pb-16">

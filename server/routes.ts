@@ -30,6 +30,7 @@ import { requireFeature, getResolvedFeatures, isFeatureEnabled } from "./feature
 import { STAGE } from "@shared/featureFlags";
 import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, F1000_PROMO, type SubscriptionPlan, CCGE_TIERS, type CcgeTier, jcseToTier, ALL_CARD_PILLARS, SPC_MIN_CERT_TO_PUBLISH, SPC_PRICE_MIN, SPC_PRICE_MAX, SPC_STATUSES, SPC_SCOPES, CERT_LEVEL_RANK, ARK_SCORE_DELTAS, type CardPillar, type SpcStatus, ASSESSMENT_SOURCES, PRIMARY_ASSESSMENT_SOURCES, ASSESSMENT_SOURCE_LABELS, type AssessmentSourceKey } from "@shared/schema";
 import { computeCompleteness, canonicalSourcesUsed, buildCombinedText } from "@shared/assessmentMerge";
+import { companyMatches, certMatches } from "@shared/claimMatch";
 import { dealHand, scoreSession, evaluateCustomCard, blendCraftIntoFinal } from "./ccge";
 import { buildVerificationQuest, scoreVerificationPrompt, aggregateVerification } from "./cardVerification";
 import { orchestrator } from "./orchestrator";
@@ -1916,16 +1917,21 @@ export async function registerRoutes(
         storage.getLatestAssessment(subject.id),
         storage.getCardVerifications(subject.id),
       ]);
+      // SKILL stays an exact card-id match (ids are stable). EMPLOYMENT and
+      // CERTIFICATION use tolerant matching (suffixes, punctuation, casing,
+      // minor typos) — the SAME comparison the resume builder uses on read — so
+      // a confirmation against a reasonable variant of a claim is accepted and
+      // later renders instead of silently orphaning.
       let claimExists = false;
       if (parsed.data.type === "SKILL") {
         claimExists = subjectVerifications.some((v) => v.cardId.toLowerCase() === ref.toLowerCase());
       } else if (parsed.data.type === "EMPLOYMENT") {
         const companies = ((subjectAssessment?.workHistory ?? []) as { company?: string }[])
-          .map((w) => (w.company ?? "").toLowerCase());
-        claimExists = companies.includes(ref.toLowerCase());
+          .map((w) => w.company ?? "");
+        claimExists = companies.some((c) => companyMatches(c, ref));
       } else if (parsed.data.type === "CERTIFICATION") {
-        const certs = (subjectAssessment?.professionalQuals ?? []).map((c) => c.toLowerCase());
-        claimExists = certs.includes(ref.toLowerCase());
+        const certs = subjectAssessment?.professionalQuals ?? [];
+        claimExists = certs.some((c) => certMatches(c, ref));
       }
       if (!claimExists) {
         return res.status(422).json({
