@@ -39,7 +39,8 @@ import { recalcArkForUser } from "./arkRecalc";
 import { computeLhcsForUser } from "./lhcs";
 import { pickFlywheelCta, rankAllCtas } from "./flywheelCta";
 import { backfillAllUsers } from "./arkBackfill";
-import { sendMail, isMailConfigured, MailNotConfiguredError } from "./mail";
+import { sendMail, isMailConfigured } from "./mail";
+import { deliverConfirmationInvite } from "./confirmationInviteEmail";
 import { scoreSessionWithClaude } from "./ai/kcse";
 import { generateResumeNarrative, ProTierRequiredError } from "./ai/narrative";
 import { CODEC_PRIMITIVES, CODEC_BY_ID } from "@shared/codec-primitives";
@@ -2137,26 +2138,12 @@ export async function registerRoutes(
 
       // Attempt real delivery. The invite + tokenised link already exist, so on
       // any send failure we keep the invite and return the link as a manual
-      // fallback alongside a clear error — never a silent success.
-      try {
-        await sendMail({ to: invite.recipientEmail, subject, text: body });
-        return res.json({ invite, path, link, emailSent: true });
-      } catch (mailErr: any) {
-        const reason =
-          mailErr instanceof MailNotConfiguredError
-            ? "Email delivery isn't connected yet, so no email was sent. Copy the link below and send it to your confirmer."
-            : `We couldn't email this invite (${mailErr.message}). Copy the link below and send it to your confirmer.`;
-        // 200 with emailSent:false (not an HTTP error): the invite + link are
-        // valid and the UI must keep the fallback link, but we never claim the
-        // email went out — the warning is shown explicitly.
-        return res.json({
-          invite,
-          path,
-          link,
-          emailSent: false,
-          emailError: reason,
-        });
-      }
+      // fallback alongside a clear error — never a silent success. The
+      // send/fallback contract lives in `deliverConfirmationInvite` (unit
+      // tested); a 200 with emailSent:false is intentional (not an HTTP error)
+      // so the UI keeps the fallback link and shows the warning explicitly.
+      const result = await deliverConfirmationInvite({ invite, path, link, subject, body });
+      return res.json(result);
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
