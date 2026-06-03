@@ -10,6 +10,7 @@ export interface ResumeExportCard {
   name: string;
   tier: string | null;
   category: string;
+  standards?: string[];
 }
 export interface ResumeExportWork {
   company: string;
@@ -18,7 +19,7 @@ export interface ResumeExportWork {
   endDate?: string | null;
   location?: string | null;
   highlights?: string[];
-  mappedCards: { name: string; tier: string | null }[];
+  mappedCards: { name: string; tier: string | null; standards?: string[] }[];
   confirmation: { status: string; confirmerOrg?: string | null } | null;
 }
 export interface ResumeExportData {
@@ -212,7 +213,10 @@ export async function exportResumePdf(data: ResumeExportData, fileBase: string) 
       }
       if (w.mappedCards.length) {
         const cards = w.mappedCards
-          .map((c) => `${c.name} (${c.tier ? c.tier : "Yet to verify"})`)
+          .map((c) => {
+            const std = (c.standards ?? []).length ? ` [${(c.standards ?? []).join("; ")}]` : "";
+            return `${c.name} (${c.tier ? c.tier : "Yet to verify"})${std}`;
+          })
           .join(", ");
         wrapped(`Verified skills here: ${cards}`, M + 2, contentW - 2, 8, "bold", blue);
       }
@@ -237,7 +241,8 @@ export async function exportResumePdf(data: ResumeExportData, fileBase: string) 
     sectionHeading("Skills");
     for (const c of data.verifiedDeck) {
       const tier = c.tier ? ` — ${c.tier} Verified` : " — Yet to verify";
-      wrapped(`• ${c.name}${tier}  (${c.category})`, M, contentW, 9.5, "normal");
+      const std = (c.standards ?? []).length ? `  [${(c.standards ?? []).join("; ")}]` : "";
+      wrapped(`• ${c.name}${tier}  (${c.category})${std}`, M, contentW, 9.5, "normal");
     }
   }
 

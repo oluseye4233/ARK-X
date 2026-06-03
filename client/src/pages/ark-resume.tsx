@@ -113,6 +113,18 @@ function TierChip({ tier }: { tier: string | null }) {
   );
 }
 
+// Concise O*NET / WEF / SFIA standards labels for a mapped Primitive Card. Takes
+// the first label from each framework so the living layer is explicitly tied to
+// recognized skill standards (a core ARK RESUME requirement).
+function standardsLabels(mappings: any, max = 3): string[] {
+  if (!mappings) return [];
+  const out: string[] = [];
+  if (mappings.onet?.[0]) out.push(`O*NET: ${mappings.onet[0]}`);
+  if (mappings.wef?.[0]) out.push(`WEF: ${mappings.wef[0]}`);
+  if (mappings.sfia?.[0]) out.push(`SFIA: ${mappings.sfia[0]}`);
+  return out.slice(0, max);
+}
+
 export default function ArkResumePage() {
   const { user } = useAuth();
   const [data, setData] = useState<any>(null);
@@ -154,7 +166,7 @@ export default function ArkResumePage() {
     arkScore: data.user.arkScore,
     jst: data.jst,
     ats: { score: data.ats.score, band: data.ats.band },
-    verifiedDeck: data.verifiedDeck.map((c: any) => ({ name: c.name, tier: c.tier, category: c.category })),
+    verifiedDeck: data.verifiedDeck.map((c: any) => ({ name: c.name, tier: c.tier, category: c.category, standards: standardsLabels(c.mappings) })),
     workHistory: data.workHistory.map((w: any) => ({
       company: w.company,
       role: w.role,
@@ -162,7 +174,7 @@ export default function ArkResumePage() {
       endDate: w.endDate,
       location: w.location,
       highlights: w.highlights,
-      mappedCards: w.mappedCards.map((c: any) => ({ name: c.name, tier: c.tier })),
+      mappedCards: w.mappedCards.map((c: any) => ({ name: c.name, tier: c.tier, standards: standardsLabels(c.mappings) })),
       confirmation: w.confirmation ? { status: w.confirmation.status, confirmerOrg: w.confirmation.confirmerOrg } : null,
     })),
     education: data.education,
@@ -416,6 +428,11 @@ export default function ArkResumePage() {
                     <div>
                       <div style={{ fontSize: 11, fontWeight: 700 }}>{c.name}</div>
                       <div style={{ fontSize: 9, color: ATANDA.sub }}>{c.category}</div>
+                      {standardsLabels(c.mappings).length > 0 && (
+                        <div style={{ fontSize: 8.5, color: ATANDA.sub, marginTop: 1 }} data-testid={`text-standards-${c.cardId}`}>
+                          {standardsLabels(c.mappings).join(" · ")}
+                        </div>
+                      )}
                     </div>
                     <TierChip tier={c.tier} />
                     {(() => { const sc = skillConf(c.cardId); return sc ? <StatusBadge status={sc.status} org={sc.confirmerOrg} logoUrl={sc.confirmerLogoUrl} /> : null; })()}
@@ -460,9 +477,15 @@ export default function ArkResumePage() {
                       {w.mappedCards.map((c: any) => (
                         <span
                           key={c.cardId}
+                          title={standardsLabels(c.mappings, 6).join(" · ")}
                           style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 600, color: ATANDA.blue, background: ATANDA.panel, border: `1px solid ${ATANDA.line}`, borderRadius: 999, padding: "1px 8px" }}
                         >
                           {c.emoji} {c.name}
+                          {standardsLabels(c.mappings, 1)[0] && (
+                            <span style={{ fontSize: 8.5, fontWeight: 500, color: ATANDA.sub }}>
+                              {standardsLabels(c.mappings, 1)[0]}
+                            </span>
+                          )}
                           <TierChip tier={c.tier} />
                         </span>
                       ))}
