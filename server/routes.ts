@@ -28,7 +28,7 @@ import {
 } from "@shared/schema";
 import { requireFeature, getResolvedFeatures, isFeatureEnabled } from "./featureFlags";
 import { STAGE } from "@shared/featureFlags";
-import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, type SubscriptionPlan, CCGE_TIERS, type CcgeTier, jcseToTier, ALL_CARD_PILLARS, SPC_MIN_CERT_TO_PUBLISH, SPC_PRICE_MIN, SPC_PRICE_MAX, SPC_STATUSES, SPC_SCOPES, CERT_LEVEL_RANK, ARK_SCORE_DELTAS, type CardPillar, type SpcStatus, ASSESSMENT_SOURCES, PRIMARY_ASSESSMENT_SOURCES, ASSESSMENT_SOURCE_LABELS, type AssessmentSourceKey } from "@shared/schema";
+import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, F1000_PROMO, type SubscriptionPlan, CCGE_TIERS, type CcgeTier, jcseToTier, ALL_CARD_PILLARS, SPC_MIN_CERT_TO_PUBLISH, SPC_PRICE_MIN, SPC_PRICE_MAX, SPC_STATUSES, SPC_SCOPES, CERT_LEVEL_RANK, ARK_SCORE_DELTAS, type CardPillar, type SpcStatus, ASSESSMENT_SOURCES, PRIMARY_ASSESSMENT_SOURCES, ASSESSMENT_SOURCE_LABELS, type AssessmentSourceKey } from "@shared/schema";
 import { computeCompleteness, canonicalSourcesUsed, buildCombinedText } from "@shared/assessmentMerge";
 import { dealHand, scoreSession, evaluateCustomCard, blendCraftIntoFinal } from "./ccge";
 import { buildVerificationQuest, scoreVerificationPrompt, aggregateVerification } from "./cardVerification";
@@ -94,6 +94,16 @@ const bookBadgeLimiter = rateLimit({
   standardHeaders: "draft-7",
   legacyHeaders: false,
   message: { message: "Too many badge renders, please slow down." },
+});
+
+// F1000 claim is a one-shot, account-binding mutation — keep it tight to blunt
+// any scripted attempt to burn through the 1000-code pool.
+const f1000ClaimLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 10,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { message: "Too many F1000 claim attempts, please slow down." },
 });
 
 const upload = multer({
@@ -536,8 +546,62 @@ export async function registerRoutes(
   // ── Subscription Plans ─────────────────────────────────
   const validSubscriptionPlans = z.enum(Object.keys(SUBSCRIPTION_PLANS) as [string, ...string[]]);
 
-  app.get("/api/subscription/plans", (_req, res) => {
+  app.get("/api/subscription/plans", async (req, res) => {
+    // Base catalogue is public. For a signed-in F1000 member we annotate the
+    // capped promo price + raised AI allowance so the client can render it.
+    const uid = currentUserId(req);
+    if (uid && isFeatureEnabled("f1000Promo")) {
+      const u = await storage.getUser(uid);
+      if (u?.f1000Member) {
+        return res.json({
+          plans: SUBSCRIPTION_PLANS,
+          f1000: {
+            member: true,
+            priceUsd: F1000_PROMO.priceUsd,
+            aiCostBudgetCents: F1000_PROMO.aiCostBudgetCents,
+          },
+        });
+      }
+    }
     return res.json(SUBSCRIPTION_PLANS);
+  });
+
+  // ── F1000 (First 1000) soft-launch promo ───────────────────────
+  // Public scarcity counter for the landing / book QR offer.
+  app.get("/api/f1000/stats", requireFeature("f1000Promo"), async (_req, res) => {
+    try {
+      return res.json(await storage.getF1000Stats());
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Claim (or re-fetch) this account's single-use F1000 code. Idempotent.
+  app.post("/api/f1000/claim", requireFeature("f1000Promo"), f1000ClaimLimiter, requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const result = await storage.allocateF1000Invite(userId);
+      if (result.status === "sold_out") {
+        return res.status(409).json({ status: "sold_out", message: "All 1000 F1000 codes have been claimed.", ...(await storage.getF1000Stats()) });
+      }
+      const stats = await storage.getF1000Stats();
+      return res.status(result.status === "claimed" ? 201 : 200).json({ status: result.status, invite: result.invite, stats });
+    } catch (err: any) {
+      console.error("F1000 claim error:", err);
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // This account's F1000 standing (code if claimed) + the live pool counter.
+  app.get("/api/f1000/me", requireFeature("f1000Promo"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const invite = await storage.getF1000InviteByUser(userId);
+      const stats = await storage.getF1000Stats();
+      return res.json({ member: !!invite, invite: invite ?? null, stats });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
   });
 
   // Legacy direct-update endpoint — ADMIN ONLY (ENTERPRISE custom-deal provisioning).
@@ -623,7 +687,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Institution name required for School plan." });
       }
 
-      const amountCents = priceCentsForPlan(plan);
+      const amountCents = priceCentsForPlan(plan, user.f1000Member);
       const session = await storage.createCheckoutSession({
         userId,
         plan,
@@ -756,7 +820,7 @@ export async function registerRoutes(
         await storage.updateUser(target.id, { subscriptionStatus: "past_due" } as any);
         await storage.createBillingEvent({
           userId: target.id, type: "payment.failed", fromPlan, toPlan: fromPlan,
-          amountCents: priceCentsForPlan(fromPlan), externalId: target.stripeSubscriptionId,
+          amountCents: priceCentsForPlan(fromPlan, target.f1000Member), externalId: target.stripeSubscriptionId,
           payload: { simulated: true, source: "admin.webhook" },
         });
         await orchestrator.emit(target.id, "billing.payment.failed", { plan: fromPlan }, 0);

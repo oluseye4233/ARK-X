@@ -80,6 +80,11 @@ export const api = {
 
   getSubscriptionPlans: () => apiRequest("/api/subscription/plans"),
 
+  // F1000 (First 1000) soft-launch promo
+  getF1000Stats: () => apiRequest("/api/f1000/stats"),
+  getF1000Me: () => apiRequest("/api/f1000/me"),
+  claimF1000: () => apiRequest("/api/f1000/claim", { method: "POST" }),
+
   updateSubscription: (userId: string, plan: string, institution?: string) =>
     apiRequest(`/api/users/${userId}/subscription`, {
       method: "PUT",

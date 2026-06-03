@@ -36,6 +36,7 @@ import SharedReportPage from "@/pages/shared-report";
 import TrainingPage from "@/pages/training";
 import TrainingProviderDetailPage from "@/pages/training-provider-detail";
 import TrainingRegisterPage from "@/pages/training-register";
+import F1000Page from "@/pages/f1000";
 
 function Router() {
   return (
@@ -81,6 +82,7 @@ function Router() {
         {FEATURES.trainingProviders && <Route path="/training/register" component={TrainingRegisterPage} />}
         {FEATURES.trainingProviders && <Route path="/training/p/:slug" component={TrainingProviderDetailPage} />}
         {FEATURES.trainingProviders && <Route path="/training" component={TrainingPage} />}
+        {FEATURES.f1000Promo && <Route path="/f1000" component={F1000Page} />}
 
         {/* Fallback to 404 */}
         <Route component={NotFound} />

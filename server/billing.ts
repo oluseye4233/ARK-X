@@ -1,8 +1,13 @@
-import { SUBSCRIPTION_PLANS, type SubscriptionPlan } from "@shared/schema";
+import { SUBSCRIPTION_PLANS, F1000_PROMO, type SubscriptionPlan } from "@shared/schema";
 
 export const BILLING_PERIOD_DAYS = 30;
 
-export function priceCentsForPlan(plan: SubscriptionPlan): number {
+export function priceCentsForPlan(plan: SubscriptionPlan, f1000 = false): number {
+  // F1000 members get a price cap on the paid individual/school plans
+  // (PRO $10, SCHOOL $9). All other plans bill at their standard price.
+  if (f1000 && F1000_PROMO.priceUsd[plan] != null) {
+    return F1000_PROMO.priceUsd[plan] * 100;
+  }
   return SUBSCRIPTION_PLANS[plan].price * 100;
 }
 

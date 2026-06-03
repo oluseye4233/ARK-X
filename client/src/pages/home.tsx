@@ -3,8 +3,10 @@ import { ArrowRight, ShieldAlert, Target, Zap, Crown, GraduationCap, User, Build
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { SUBSCRIPTION_PLANS } from "@shared/schema";
+import { FEATURES } from "@shared/featureFlags";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
+import { F1000QrCard } from "@/components/f1000/F1000QrCard";
 import heroBgVideo from "@assets/hero_wave_dark_compressed.mp4";
 import masterclassVideo from "@assets/ark_onecraft_masterclass.mp4";
 import masterclassPoster from "@assets/ark_onecraft_masterclass_poster.jpg";
@@ -12,13 +14,15 @@ import guideCover from "@assets/ark_onecraft_subscription_guide_cover.jpg";
 import guidePdf from "@assets/ARK_Onecraft_Subscription_Guide_1780266946261.pdf";
 
 function ScarcityBadge() {
+  const f1000On = FEATURES.f1000Promo;
   const { data } = useQuery<{ claimed: number; limit: number; remaining: number }>({
-    queryKey: ["/api/free-assessment/spots"],
-    queryFn: () => api.getFreeAssessmentSpots(),
+    queryKey: [f1000On ? "/api/f1000/stats" : "/api/free-assessment/spots"],
+    queryFn: () => (f1000On ? api.getF1000Stats() : api.getFreeAssessmentSpots()),
     refetchOnWindowFocus: false,
   });
-  const remaining = data?.remaining ?? 100;
-  const limit = data?.limit ?? 100;
+  const fallback = f1000On ? 1000 : 100;
+  const remaining = data?.remaining ?? fallback;
+  const limit = data?.limit ?? fallback;
   const soldOut = remaining <= 0;
   return (
     <div
@@ -26,7 +30,13 @@ function ScarcityBadge() {
       data-testid="badge-home-spots"
     >
       <Sparkles className="h-3.5 w-3.5" />
-      {soldOut ? (
+      {f1000On ? (
+        soldOut ? (
+          <span data-testid="text-home-spots-remaining">All {limit} F1000 seats claimed — still free to try</span>
+        ) : (
+          <>F1000 free with this QR · <span className="font-bold text-white" data-testid="text-home-spots-remaining">{remaining}</span>/{limit} left</>
+        )
+      ) : soldOut ? (
         <span data-testid="text-home-spots-remaining">All {limit} free spots claimed — still free to try</span>
       ) : (
         <>First 100 Free · <span className="font-bold text-white" data-testid="text-home-spots-remaining">{remaining}</span>/{limit} spots left</>
@@ -144,6 +154,22 @@ export default function Home() {
             to a secondary link below so user attention lands on the free funnel. */}
         <div className="flex flex-col items-center gap-4 pt-6">
           <ScarcityBadge />
+          {FEATURES.f1000Promo && (
+            <div className="flex flex-col items-center gap-2 pt-1" data-testid="home-f1000-qr">
+              <F1000QrCard
+                url={typeof window !== "undefined" ? `${window.location.origin}/f1000` : "/f1000"}
+                size={132}
+                caption="Scan to join the First 1000"
+              />
+              <Link
+                href="/f1000"
+                data-testid="link-home-f1000"
+                className="text-xs font-mono uppercase tracking-wider text-primary hover:text-primary/80 transition-colors"
+              >
+                Claim your free F1000 seat →
+              </Link>
+            </div>
+          )}
           <div className="relative group">
             {/* Outer pulse ring */}
             <span

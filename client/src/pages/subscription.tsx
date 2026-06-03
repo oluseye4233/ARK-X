@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { FEATURES } from "@shared/featureFlags";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/useAuth";
 import { api } from "@/lib/api";
-import { SUBSCRIPTION_PLANS, type SubscriptionPlan } from "@shared/schema";
+import { SUBSCRIPTION_PLANS, F1000_PROMO, type SubscriptionPlan } from "@shared/schema";
 import {
   Crown,
   GraduationCap,
@@ -37,6 +38,20 @@ export default function SubscriptionPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
   const [institution, setInstitution] = useState("");
+
+  const f1000Query = useQuery<{ member: boolean }>({
+    queryKey: ["/api/f1000/me"],
+    queryFn: () => api.getF1000Me(),
+    enabled: FEATURES.f1000Promo && !!user,
+    refetchOnWindowFocus: false,
+  });
+  const isF1000 = !!f1000Query.data?.member;
+  const promoPriceFor = (key: SubscriptionPlan): number | null =>
+    isF1000 && F1000_PROMO.priceUsd[key] != null ? F1000_PROMO.priceUsd[key] : null;
+  const promoAiUsdFor = (key: SubscriptionPlan): number | null =>
+    isF1000 && F1000_PROMO.aiCostBudgetCents[key] != null
+      ? Math.round(F1000_PROMO.aiCostBudgetCents[key] / 100)
+      : null;
 
   useEffect(() => {
     if (user?.subscriptionPlan) {
@@ -240,12 +255,35 @@ export default function SubscriptionPage() {
                         {isEnterprise ? "Custom" : "Free"}
                       </span>
                     </div>
-                  ) : (
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-3xl font-display font-black text-white">${planData.price}</span>
-                      <span className="text-sm text-muted-foreground font-mono">/{planData.period}</span>
-                    </div>
-                  )}
+                  ) : (() => {
+                    const promo = promoPriceFor(key);
+                    const aiUsd = promoAiUsdFor(key);
+                    return (
+                      <div className="space-y-1">
+                        <div className="flex items-baseline gap-1 flex-wrap">
+                          <span className="text-3xl font-display font-black text-white">
+                            ${promo ?? planData.price}
+                          </span>
+                          <span className="text-sm text-muted-foreground font-mono">/{planData.period}</span>
+                          {promo != null && (
+                            <>
+                              <span className="ml-2 text-sm text-muted-foreground/60 font-mono line-through" data-testid={`text-original-price-${key.toLowerCase()}`}>
+                                ${planData.price}
+                              </span>
+                              <span className="ml-1 text-[10px] font-mono uppercase tracking-widest text-primary" data-testid={`badge-f1000-price-${key.toLowerCase()}`}>
+                                F1000
+                              </span>
+                            </>
+                          )}
+                        </div>
+                        {aiUsd != null && (
+                          <span className="text-[10px] font-mono uppercase tracking-widest text-secondary">
+                            incl. ${aiUsd}/mo AI allowance
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="space-y-2.5 mb-6 flex-1">

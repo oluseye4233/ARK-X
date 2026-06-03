@@ -61,7 +61,11 @@ export type FeatureKey =
   // ── Suggested Training Providers (freemium · Explorer tier) — JST-matched
   //    provider directory + self-serve registration + sponsored/affiliate
   //    revenue. Launched live as an Explorer-tier freemium feature. ──
-  | "trainingProviders"; // /training + /api/training/* + provider portal
+  | "trainingProviders" // /training + /api/training/* + provider portal
+  // ── F1000 (First 1000) soft-launch promo — QR-driven invite codes (1..1000)
+  //    granting EXPLORER free + capped PRO $10 / SCHOOL $9 upgrade pricing.
+  //    Launched ON for go-live; flip OFF once the 1000 codes are exhausted. ──
+  | "f1000Promo"; // /f1000 + /api/f1000/* + landing QR offer
 
 /**
  * MVP defaults — every CLASS C surface is OFF.
@@ -89,6 +93,7 @@ export const MVP_FEATURES: Readonly<Record<FeatureKey, boolean>> = Object.freeze
   bookCompanion: false,
   cardVerification: true,
   trainingProviders: true,
+  f1000Promo: true,
 });
 
 /**

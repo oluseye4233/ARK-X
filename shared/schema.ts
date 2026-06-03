@@ -413,6 +413,11 @@ export const users = pgTable("users", {
   lcisScore: integer("lcis_score").notNull().default(0),
   lhcsStatus: text("lhcs_status").notNull().default("red"),
   resumeReplacementPct: integer("resume_replacement_pct").notNull().default(0),
+  // ── F1000 soft-launch promo ──
+  // True once the user has redeemed an F1000 invite code. Drives promo
+  // pricing (PRO $10 / SCHOOL $9) + raised AI allowances. Server-controlled
+  // only — never written from a client body.
+  f1000Member: boolean("f1000_member").notNull().default(false),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({
@@ -437,6 +442,7 @@ export const insertUserSchema = createInsertSchema(users).omit({
   lcisScore: true,
   lhcsStatus: true,
   resumeReplacementPct: true,
+  f1000Member: true,
 });
 export type InsertUser = z.infer<typeof insertUserSchema>;
 // UpdateUser is the type used by storage.updateUser for server-side patches.
@@ -447,6 +453,53 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 // untrusted client bodies without their own auth + validation.
 export type UpdateUser = Partial<typeof users.$inferInsert>;
 export type User = typeof users.$inferSelect;
+
+// ── F1000 (First 1000) soft-launch promo ──────────────────────
+// The first 1000 invite codes, strictly numbered 1..1000. A code is
+// allocated when a signed-in user "activates" the shared QR. Each code is
+// a complex single-use token bound to ONE account (seq + random hex), so
+// the public QR can't be drained by guessing or scripting. Redeemers land
+// on EXPLORER (free); if they upgrade, PRO is price-capped at $10/mo with a
+// $29/mo AI allowance and SCHOOL/STUDENT is $9/mo with a $9/mo AI allowance.
+export const F1000_PROMO = {
+  limit: 1000,
+  defaultPlan: "INDIVIDUAL_EXPLORER" as SubscriptionPlan,
+  // Promo monthly price (USD) — caps the normal plan price for F1000 members.
+  priceUsd: {
+    INDIVIDUAL_PRO: 10,
+    SCHOOL_STUDENT: 9,
+  } as Record<string, number>,
+  // Raised AI cost allowance (cents/mo) — "$29" for PRO, "$9" for SCHOOL.
+  aiCostBudgetCents: {
+    INDIVIDUAL_PRO: 2900,
+    SCHOOL_STUDENT: 900,
+  } as Record<string, number>,
+  // Raised monthly token caps, scaled to match the cost allowance (~10× the
+  // standard tier) so the token gate doesn't bind before the $ allowance.
+  aiMonthlyTokens: {
+    INDIVIDUAL_PRO: 5_000_000,
+    SCHOOL_STUDENT: 2_000_000,
+  } as Record<string, number>,
+} as const;
+
+export const f1000Invites = pgTable("f1000_invites", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // Strict 1..1000 sequence — unique, the human-readable "Nth of 1000".
+  seq: integer("seq").notNull().unique(),
+  // Complex single-use token, e.g. F1000-0042-7F3A9C2E1B6D.
+  code: text("code").notNull().unique(),
+  // The account this code is bound to — one code per user (idempotent claim).
+  userId: varchar("user_id").notNull().unique(),
+  // Flipped true the first time the member actually upgrades on promo pricing.
+  promoApplied: boolean("promo_applied").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export const insertF1000InviteSchema = createInsertSchema(f1000Invites).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertF1000Invite = z.infer<typeof insertF1000InviteSchema>;
+export type F1000Invite = typeof f1000Invites.$inferSelect;
 
 export const assessments = pgTable("assessments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

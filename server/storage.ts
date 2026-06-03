@@ -3,6 +3,7 @@ import { db } from "./db";
 import { eq, sql, desc, and, inArray, isNull } from "drizzle-orm";
 import { guestAssessments, type InsertGuestAssessment, type GuestAssessment } from "@shared/schema";
 import { reportShares, type ReportShare } from "@shared/schema";
+import { f1000Invites, type F1000Invite, F1000_PROMO } from "@shared/schema";
 import {
   users, type User, type InsertUser, type UpdateUser,
   assessments, type Assessment, type InsertAssessment,
@@ -94,6 +95,11 @@ export interface IStorage {
 
   createGuestAssessment(row: InsertGuestAssessment): Promise<GuestAssessment>;
   countGuestAssessments(): Promise<number>;
+
+  // ── F1000 promo ──
+  allocateF1000Invite(userId: string): Promise<{ status: "claimed" | "existing" | "sold_out"; invite?: F1000Invite }>;
+  getF1000InviteByUser(userId: string): Promise<F1000Invite | undefined>;
+  getF1000Stats(): Promise<{ claimed: number; limit: number; remaining: number }>;
   getLatestAssessment(userId: string): Promise<Assessment | undefined>;
   updateAssessmentScore(id: string, data: Partial<Pick<Assessment, "jstTotal" | "jstJobs" | "jstSkills" | "jstTalent">>): Promise<Assessment | undefined>;
 
@@ -389,6 +395,74 @@ export class DatabaseStorage implements IStorage {
   async countGuestAssessments(): Promise<number> {
     const [r] = await db.select({ c: sql<number>`count(*)` }).from(guestAssessments);
     return Number(r?.c ?? 0);
+  }
+
+  // ── F1000 promo ──────────────────────────────────────────────
+  async getF1000InviteByUser(userId: string): Promise<F1000Invite | undefined> {
+    const [row] = await db.select().from(f1000Invites).where(eq(f1000Invites.userId, userId));
+    return row;
+  }
+
+  async getF1000Stats(): Promise<{ claimed: number; limit: number; remaining: number }> {
+    const [r] = await db.select({ c: sql<number>`count(*)::int` }).from(f1000Invites);
+    const claimed = Number(r?.c ?? 0);
+    return { claimed, limit: F1000_PROMO.limit, remaining: Math.max(0, F1000_PROMO.limit - claimed) };
+  }
+
+  /**
+   * Atomically allocate the next F1000 invite code (strictly 1..1000) to a
+   * signed-in user. Idempotent — a user who already holds a code gets it back
+   * ("existing"). Returns "sold_out" once all 1000 are claimed. The unique
+   * constraints on (seq, user_id, code) make this race-safe; a concurrent
+   * seq collision (23505) is retried. On a fresh claim the user is flipped to
+   * f1000Member and, if still on the free default, bumped to EXPLORER.
+   */
+  async allocateF1000Invite(
+    userId: string,
+  ): Promise<{ status: "claimed" | "existing" | "sold_out"; invite?: F1000Invite }> {
+    const existing = await this.getF1000InviteByUser(userId);
+    if (existing) return { status: "existing", invite: existing };
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        return await db.transaction(async (tx) => {
+          const [already] = await tx
+            .select()
+            .from(f1000Invites)
+            .where(eq(f1000Invites.userId, userId));
+          if (already) return { status: "existing" as const, invite: already };
+
+          const [m] = await tx
+            .select({ max: sql<number>`COALESCE(MAX(${f1000Invites.seq}), 0)::int` })
+            .from(f1000Invites);
+          const seq = Number(m?.max ?? 0) + 1;
+          if (seq > F1000_PROMO.limit) return { status: "sold_out" as const };
+
+          const code = `F1000-${String(seq).padStart(4, "0")}-${randomBytes(6)
+            .toString("hex")
+            .toUpperCase()}`;
+          const [invite] = await tx
+            .insert(f1000Invites)
+            .values({ seq, code, userId })
+            .returning();
+
+          const [u] = await tx.select().from(users).where(eq(users.id, userId));
+          const patch: UpdateUser = { f1000Member: true };
+          if (!u?.subscriptionPlan || u.subscriptionPlan === "INDIVIDUAL_FREE") {
+            patch.subscriptionPlan = F1000_PROMO.defaultPlan;
+          }
+          await tx.update(users).set(patch).where(eq(users.id, userId));
+
+          return { status: "claimed" as const, invite };
+        });
+      } catch (e) {
+        const code = (e as { code?: string })?.code;
+        const isUnique = code === "23505" || /duplicate key|unique constraint/i.test(String(e));
+        if (isUnique && attempt < 4) continue; // lost the seq race — retry
+        throw e;
+      }
+    }
+    throw new Error("F1000 allocation failed after repeated contention");
   }
 
   async getAssessment(id: string): Promise<Assessment | undefined> {

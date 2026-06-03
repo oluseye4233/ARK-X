@@ -1,6 +1,8 @@
 import { db } from "../db";
 import {
   aiUsage,
+  users,
+  F1000_PROMO,
   AI_PRICING_PER_MTOK,
   AI_TIER_MONTHLY_TOKENS,
   AI_TIER_DAILY_QUOTA,
@@ -13,12 +15,22 @@ import {
 import { eq, and, gte, sql } from "drizzle-orm";
 import { isFeatureEnabled } from "../featureFlags";
 
+/** Is this user an F1000 promo member? Resolved per-call so AI call sites
+ * need not thread the flag through. */
+async function isF1000Member(userId: string): Promise<boolean> {
+  const [u] = await db.select({ f: users.f1000Member }).from(users).where(eq(users.id, userId));
+  return !!u?.f;
+}
+
 /**
  * Phase O — pick V1 (legacy) vs V2 (rebalanced) budgets based on the
  * `revenueGuardrail` flag. With the flag OFF the engine returns the exact
  * same numbers as before Phase O — no behaviour change on merge.
  */
-function tierTokenCap(plan: SubscriptionPlan): number {
+function tierTokenCap(plan: SubscriptionPlan, f1000 = false): number {
+  if (f1000 && F1000_PROMO.aiMonthlyTokens[plan as keyof typeof F1000_PROMO.aiMonthlyTokens] != null) {
+    return F1000_PROMO.aiMonthlyTokens[plan as keyof typeof F1000_PROMO.aiMonthlyTokens];
+  }
   const table = isFeatureEnabled("revenueGuardrail")
     ? AI_TIER_MONTHLY_TOKENS_V2
     : AI_TIER_MONTHLY_TOKENS;
@@ -32,7 +44,10 @@ function tierDailyQuotas(plan: SubscriptionPlan): Record<string, number> {
   return (table[plan as keyof typeof table] ?? table.INDIVIDUAL_FREE) as Record<string, number>;
 }
 
-function tierCostCapCents(plan: SubscriptionPlan): number {
+function tierCostCapCents(plan: SubscriptionPlan, f1000 = false): number {
+  if (f1000 && F1000_PROMO.aiCostBudgetCents[plan as keyof typeof F1000_PROMO.aiCostBudgetCents] != null) {
+    return F1000_PROMO.aiCostBudgetCents[plan as keyof typeof F1000_PROMO.aiCostBudgetCents];
+  }
   return (
     AI_TIER_COST_BUDGET_CENTS[plan as keyof typeof AI_TIER_COST_BUDGET_CENTS] ??
     AI_TIER_COST_BUDGET_CENTS.INDIVIDUAL_FREE
@@ -95,7 +110,7 @@ export class AiBudgetExceededError extends Error {
 }
 
 export async function enforceBudget(userId: string, plan: SubscriptionPlan): Promise<void> {
-  const budget = tierTokenCap(plan);
+  const budget = tierTokenCap(plan, await isF1000Member(userId));
   const { total } = await getMonthlyTokens(userId);
   if (total >= budget) throw new AiBudgetExceededError(total, budget);
 }
@@ -118,7 +133,7 @@ export class AiCostBudgetExceededError extends Error {
  */
 export async function enforceCostBudget(userId: string, plan: SubscriptionPlan): Promise<void> {
   if (!isFeatureEnabled("revenueGuardrail")) return;
-  const cap = tierCostCapCents(plan);
+  const cap = tierCostCapCents(plan, await isF1000Member(userId));
   const { costCents } = await getMonthlyTokens(userId);
   if (costCents >= cap) throw new AiCostBudgetExceededError(costCents, cap);
 }
@@ -165,8 +180,9 @@ export async function getTierStatus(userId: string, plan: SubscriptionPlan): Pro
   guardrailActive: boolean;
 }> {
   const usage = await getMonthlyTokens(userId);
-  const tokenCap = tierTokenCap(plan);
-  const costCapCents = tierCostCapCents(plan);
+  const f1000 = await isF1000Member(userId);
+  const tokenCap = tierTokenCap(plan, f1000);
+  const costCapCents = tierCostCapCents(plan, f1000);
   const tokenPct = tokenCap > 0 ? (usage.total / tokenCap) * 100 : 0;
   const costPct = costCapCents > 0 ? (usage.costCents / costCapCents) * 100 : 0;
   const ratioPct = Math.round(Math.max(tokenPct, costPct));
