@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto";
 import { db } from "./db";
-import { eq, sql, desc, and, inArray, isNull } from "drizzle-orm";
+import { eq, sql, desc, and, inArray, isNull, isNotNull } from "drizzle-orm";
 import { guestAssessments, type InsertGuestAssessment, type GuestAssessment } from "@shared/schema";
 import { reportShares, type ReportShare } from "@shared/schema";
 import { f1000Invites, type F1000Invite, F1000_PROMO } from "@shared/schema";
@@ -48,6 +48,9 @@ import {
   trainingCourses, type TrainingCourse, type InsertTrainingCourse,
   trainingClicks, type TrainingClick, type InsertTrainingClick,
   skillConfirmations, type SkillConfirmation, type InsertSkillConfirmation,
+  opportunities, type Opportunity, type InsertOpportunity,
+  opportunityRequirements, type OpportunityRequirement, type InsertOpportunityRequirement,
+  opportunityApplications, type OpportunityApplication, type InsertOpportunityApplication,
 } from "@shared/schema";
 import { or } from "drizzle-orm";
 
@@ -353,7 +356,32 @@ export interface IStorage {
   deleteTrainingCourse(id: string): Promise<void>;
   recordTrainingClick(input: InsertTrainingClick): Promise<TrainingClick>;
   getTrainingClickStats(): Promise<Record<string, { views: number; clicks: number }>>;
+
+  // ── ARK Matchmaking Engine ──────────────────────────────────────────
+  createOpportunity(
+    input: InsertOpportunity,
+    requirements: Omit<InsertOpportunityRequirement, "opportunityId">[],
+  ): Promise<{ opportunity: Opportunity; requirements: OpportunityRequirement[] }>;
+  listOpportunities(filter?: { type?: string; status?: string }): Promise<Opportunity[]>;
+  getOpportunity(id: string): Promise<{ opportunity: Opportunity; requirements: OpportunityRequirement[] } | undefined>;
+  getRequirementsForOpportunities(opportunityIds: string[]): Promise<OpportunityRequirement[]>;
+  upsertApplication(input: InsertOpportunityApplication): Promise<OpportunityApplication>;
+  getApplicationsForUser(userId: string): Promise<OpportunityApplication[]>;
+  getVerifiedCards(userId: string): Promise<{ cardId: string; tier: string }[]>;
+  getCandidatePool(): Promise<MatchCandidateRow[]>;
 }
+
+/** A candidate row for team formation — user identity + dominant archetype
+ *  inputs + their banked verifications (tier ≥ Bronze). */
+export type MatchCandidateRow = {
+  userId: string;
+  name: string;
+  jstIndex: number;
+  archetypeArchitect: number;
+  archetypeOrchestrator: number;
+  archetypeConductor: number;
+  verifications: { cardId: string; tier: string }[];
+};
 
 export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
@@ -2388,6 +2416,151 @@ export class DatabaseStorage implements IStorage {
       else bucket.clicks += r.n;
     }
     return out;
+  }
+
+  // ── ARK Matchmaking Engine ──────────────────────────────────────────
+  async createOpportunity(
+    input: InsertOpportunity,
+    requirements: Omit<InsertOpportunityRequirement, "opportunityId">[],
+  ): Promise<{ opportunity: Opportunity; requirements: OpportunityRequirement[] }> {
+    return await db.transaction(async (tx) => {
+      const [opportunity] = await tx.insert(opportunities).values(input).returning();
+      let reqs: OpportunityRequirement[] = [];
+      if (requirements.length > 0) {
+        reqs = await tx
+          .insert(opportunityRequirements)
+          .values(requirements.map((r) => ({ ...r, opportunityId: opportunity.id })))
+          .returning();
+      }
+      return { opportunity, requirements: reqs };
+    });
+  }
+
+  async listOpportunities(filter?: { type?: string; status?: string }): Promise<Opportunity[]> {
+    const conds = [];
+    if (filter?.type) conds.push(eq(opportunities.type, filter.type));
+    if (filter?.status) conds.push(eq(opportunities.status, filter.status));
+    const where = conds.length ? and(...conds) : undefined;
+    return await db
+      .select()
+      .from(opportunities)
+      .where(where as any)
+      .orderBy(desc(opportunities.createdAt));
+  }
+
+  async getOpportunity(
+    id: string,
+  ): Promise<{ opportunity: Opportunity; requirements: OpportunityRequirement[] } | undefined> {
+    const [opportunity] = await db.select().from(opportunities).where(eq(opportunities.id, id));
+    if (!opportunity) return undefined;
+    const reqs = await db
+      .select()
+      .from(opportunityRequirements)
+      .where(eq(opportunityRequirements.opportunityId, id));
+    return { opportunity, requirements: reqs };
+  }
+
+  async getRequirementsForOpportunities(opportunityIds: string[]): Promise<OpportunityRequirement[]> {
+    if (opportunityIds.length === 0) return [];
+    return await db
+      .select()
+      .from(opportunityRequirements)
+      .where(inArray(opportunityRequirements.opportunityId, opportunityIds));
+  }
+
+  async upsertApplication(input: InsertOpportunityApplication): Promise<OpportunityApplication> {
+    const [row] = await db
+      .insert(opportunityApplications)
+      .values(input)
+      .onConflictDoUpdate({
+        target: [opportunityApplications.opportunityId, opportunityApplications.userId],
+        set: { matchScore: input.matchScore ?? 0, status: input.status ?? "INTERESTED" },
+      })
+      .returning();
+    return row;
+  }
+
+  async getApplicationsForUser(userId: string): Promise<OpportunityApplication[]> {
+    return await db
+      .select()
+      .from(opportunityApplications)
+      .where(eq(opportunityApplications.userId, userId))
+      .orderBy(desc(opportunityApplications.createdAt));
+  }
+
+  async getVerifiedCards(userId: string): Promise<{ cardId: string; tier: string }[]> {
+    const rows = await db
+      .select({ cardId: cardVerifications.cardId, tier: cardVerifications.tier })
+      .from(cardVerifications)
+      .where(and(eq(cardVerifications.userId, userId), isNotNull(cardVerifications.tier)));
+    return rows
+      .filter((r): r is { cardId: string; tier: string } => !!r.tier)
+      .map((r) => ({ cardId: r.cardId, tier: r.tier }));
+  }
+
+  /** Build the candidate pool for team formation: every user who holds at
+   *  least one banked verification, with their JST snapshot, archetype inputs
+   *  (from their latest assessment) and verified cards. */
+  async getCandidatePool(): Promise<MatchCandidateRow[]> {
+    const verRows = await db
+      .select({ userId: cardVerifications.userId, cardId: cardVerifications.cardId, tier: cardVerifications.tier })
+      .from(cardVerifications)
+      .where(isNotNull(cardVerifications.tier));
+    if (verRows.length === 0) return [];
+
+    const byUser = new Map<string, { cardId: string; tier: string }[]>();
+    for (const r of verRows) {
+      if (!r.tier) continue;
+      if (!byUser.has(r.userId)) byUser.set(r.userId, []);
+      byUser.get(r.userId)!.push({ cardId: r.cardId, tier: r.tier });
+    }
+    const userIds = Array.from(byUser.keys());
+
+    const userRows = await db
+      .select({ id: users.id, name: users.name, jstIndex: users.jstIndex })
+      .from(users)
+      .where(inArray(users.id, userIds));
+    const userById = new Map(userRows.map((u) => [u.id, u]));
+
+    // Latest assessment per user (for archetype inputs). Newest first; first seen wins.
+    const aRows = await db
+      .select({
+        userId: assessments.userId,
+        architect: assessments.archetypeArchitect,
+        orchestrator: assessments.archetypeOrchestrator,
+        conductor: assessments.archetypeConductor,
+        createdAt: assessments.createdAt,
+      })
+      .from(assessments)
+      .where(inArray(assessments.userId, userIds))
+      .orderBy(desc(assessments.createdAt));
+    const archByUser = new Map<string, { architect: number; orchestrator: number; conductor: number }>();
+    for (const a of aRows) {
+      if (!archByUser.has(a.userId)) {
+        archByUser.set(a.userId, {
+          architect: a.architect ?? 0,
+          orchestrator: a.orchestrator ?? 0,
+          conductor: a.conductor ?? 0,
+        });
+      }
+    }
+
+    const pool: MatchCandidateRow[] = [];
+    for (const uid of userIds) {
+      const u = userById.get(uid);
+      if (!u) continue;
+      const arch = archByUser.get(uid) ?? { architect: 0, orchestrator: 0, conductor: 0 };
+      pool.push({
+        userId: uid,
+        name: u.name,
+        jstIndex: u.jstIndex ?? 0,
+        archetypeArchitect: arch.architect,
+        archetypeOrchestrator: arch.orchestrator,
+        archetypeConductor: arch.conductor,
+        verifications: byUser.get(uid) ?? [],
+      });
+    }
+    return pool;
   }
 }
 

@@ -16,7 +16,9 @@
     "test:hr-connectors": "tsx --test server/__tests__/hrConnectors.test.ts",
     "test:hr-test-connection": "tsx --test server/__tests__/workforceTestConnection.test.ts",
     "test:hr-scheduler": "tsx --test server/__tests__/hrScheduler.test.ts",
-    "test:adviser": "tsx --test server/__tests__/adviserNarrative.test.ts"
+    "test:adviser": "tsx --test server/__tests__/adviserNarrative.test.ts",
+    "test:claim-match": "tsx --test server/__tests__/claimMatch.test.ts",
+    "test:matchmaking": "tsx --test server/__tests__/matchmaking.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",

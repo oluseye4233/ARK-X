@@ -66,7 +66,11 @@ export type FeatureKey =
   // ── F1000 (First 1000) soft-launch promo — QR-driven invite codes (1..1000)
   //    granting EXPLORER free + capped PRO $10 / SCHOOL $9 upgrade pricing.
   //    Launched ON for go-live; flip OFF once the 1000 codes are exhausted. ──
-  | "f1000Promo"; // /f1000 + /api/f1000/* + landing QR offer
+  | "f1000Promo" // /f1000 + /api/f1000/* + landing QR offer
+  // ── ARK Matchmaking Engine — the Cognitive Talent Exchange. Matches people
+  //    to jobs/projects and assembles project teams scored PURELY on VERIFIED
+  //    PRIMITIVE CARDS (+ JST + archetype). Launched ON. ──
+  | "matchmaking"; // /matchmaking + /api/matchmaking/* + opportunity posting
 
 /**
  * MVP defaults — every CLASS C surface is OFF.
@@ -96,6 +100,7 @@ export const MVP_FEATURES: Readonly<Record<FeatureKey, boolean>> = Object.freeze
   cardVerification: true,
   trainingProviders: true,
   f1000Promo: true,
+  matchmaking: true,
 });
 
 /**

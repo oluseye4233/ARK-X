@@ -43,6 +43,22 @@ import { generateResumeNarrative, ProTierRequiredError } from "./ai/narrative";
 import { CODEC_PRIMITIVES, CODEC_BY_ID } from "@shared/codec-primitives";
 import { generateScenario } from "./ai/scenarioGen";
 import { buildArkResume } from "./arkResume";
+import {
+  scoreUserForOpportunity,
+  skillGapForOpportunity,
+  assembleTeam,
+  dominantArchetype,
+  type CandidateProfile,
+  type OpportunityInput,
+} from "./matchmaking";
+import {
+  OPPORTUNITY_TYPES,
+  OPPORTUNITY_STATUSES,
+  ARCHETYPES,
+  type Archetype,
+  type InsertOpportunity,
+  type InsertOpportunityRequirement,
+} from "@shared/schema";
 import { CONFIRMATION_TYPES, CONFIRMATION_STATUSES } from "@shared/schema";
 import { getTierStatus } from "./ai/usage";
 import { isClaudeAvailable, resolveUseClaude } from "./ai/client";
@@ -3105,6 +3121,228 @@ export async function registerRoutes(
     }
   });
 
+  // ── ARK Matchmaking Engine — the Cognitive Talent Exchange ────────────
+  // Matches people to opportunities (jobs & projects) and assembles project
+  // teams, scored PURELY on VERIFIED PRIMITIVE CARDS (+ JST + archetype).
+  // requireFeature gates BEFORE requireAuth so the whole surface 404s while OFF.
+
+  // Build the signed-in user's candidate profile from verified evidence only.
+  async function buildSelfCandidate(userId: string): Promise<CandidateProfile> {
+    const user = await storage.getUser(userId);
+    const verifications = await storage.getVerifiedCards(userId);
+    const assessment = await storage.getLatestAssessment(userId);
+    const archetype = assessment
+      ? dominantArchetype(
+          assessment.archetypeArchitect ?? 0,
+          assessment.archetypeOrchestrator ?? 0,
+          assessment.archetypeConductor ?? 0,
+        )
+      : null;
+    return {
+      userId,
+      name: user?.name ?? "You",
+      jstIndex: user?.jstIndex ?? 0,
+      archetype,
+      verifications,
+    };
+  }
+
+  function toOpportunityInput(
+    opportunity: { jstFloor: number; archetypePreference: string | null },
+    requirements: { cardId: string; minTier: string; weight: number; roleLabel: string | null }[],
+  ): OpportunityInput {
+    return {
+      jstFloor: opportunity.jstFloor,
+      archetypePreference: (opportunity.archetypePreference as Archetype | null) ?? null,
+      requirements: requirements.map((r) => ({
+        cardId: r.cardId,
+        minTier: r.minTier,
+        weight: r.weight,
+        roleLabel: r.roleLabel,
+      })),
+    };
+  }
+
+  // List opportunities, each annotated with the signed-in user's match score.
+  app.get("/api/matchmaking/opportunities", requireFeature("matchmaking"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const type = typeof req.query.type === "string" ? req.query.type : undefined;
+      const status = typeof req.query.status === "string" ? req.query.status : "OPEN";
+      const opps = await storage.listOpportunities({ type, status });
+      const reqRows = await storage.getRequirementsForOpportunities(opps.map((o) => o.id));
+      const reqByOpp = new Map<string, typeof reqRows>();
+      for (const r of reqRows) {
+        if (!reqByOpp.has(r.opportunityId)) reqByOpp.set(r.opportunityId, []);
+        reqByOpp.get(r.opportunityId)!.push(r);
+      }
+      const me = await buildSelfCandidate(userId);
+      const result = opps.map((o) => {
+        const reqs = reqByOpp.get(o.id) ?? [];
+        const match = scoreUserForOpportunity(me, toOpportunityInput(o, reqs));
+        return { opportunity: o, requirementCount: reqs.length, match };
+      });
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // The signed-in user's top opportunity matches (ranked).
+  app.get("/api/matchmaking/my-matches", requireFeature("matchmaking"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const opps = await storage.listOpportunities({ status: "OPEN" });
+      const reqRows = await storage.getRequirementsForOpportunities(opps.map((o) => o.id));
+      const reqByOpp = new Map<string, typeof reqRows>();
+      for (const r of reqRows) {
+        if (!reqByOpp.has(r.opportunityId)) reqByOpp.set(r.opportunityId, []);
+        reqByOpp.get(r.opportunityId)!.push(r);
+      }
+      const me = await buildSelfCandidate(userId);
+      const ranked = opps
+        .map((o) => ({
+          opportunity: o,
+          match: scoreUserForOpportunity(me, toOpportunityInput(o, reqByOpp.get(o.id) ?? [])),
+        }))
+        .sort((a, b) => b.match.matchScore - a.match.matchScore)
+        .slice(0, 10);
+      return res.json(ranked);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // The signed-in user's applications.
+  app.get("/api/matchmaking/my-applications", requireFeature("matchmaking"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const rows = await storage.getApplicationsForUser(userId);
+      return res.json(rows);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // A single opportunity: match breakdown + skill gap (+ team formation for PROJECTs).
+  app.get("/api/matchmaking/opportunities/:id", requireFeature("matchmaking"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const found = await storage.getOpportunity(String(req.params.id));
+      if (!found) return res.status(404).json({ message: "Opportunity not found." });
+      const { opportunity, requirements } = found;
+      const input = toOpportunityInput(opportunity, requirements);
+      const me = await buildSelfCandidate(userId);
+      const match = scoreUserForOpportunity(me, input);
+      const skillGap = skillGapForOpportunity(me, input);
+
+      let team = null;
+      if (opportunity.type === "PROJECT") {
+        const poolRows = await storage.getCandidatePool();
+        const pool: CandidateProfile[] = poolRows.map((p) => ({
+          userId: p.userId,
+          name: p.userId === userId ? `${p.name} (you)` : p.name,
+          jstIndex: p.jstIndex,
+          archetype: dominantArchetype(
+            p.archetypeArchitect,
+            p.archetypeOrchestrator,
+            p.archetypeConductor,
+          ),
+          verifications: p.verifications,
+        }));
+        team = assembleTeam(input, pool);
+      }
+
+      return res.json({ opportunity, requirements, match, skillGap, team });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Post a new opportunity (any authenticated user can post).
+  const createOpportunitySchema = z.object({
+    type: z.enum(OPPORTUNITY_TYPES as unknown as [string, ...string[]]).default("JOB"),
+    title: z.string().trim().min(3).max(160),
+    organization: z.string().trim().min(2).max(160),
+    description: z.string().trim().max(4000).default(""),
+    location: z.string().trim().max(160).optional().nullable(),
+    remote: z.boolean().default(true),
+    archetypePreference: z.enum(ARCHETYPES as unknown as [string, ...string[]]).optional().nullable(),
+    jstFloor: z.number().int().min(0).max(300).default(0),
+    requirements: z
+      .array(
+        z.object({
+          cardId: z.string().trim().min(1),
+          minTier: z.enum(CCGE_TIERS as unknown as [string, ...string[]]).default("Bronze"),
+          weight: z.number().int().min(1).max(5).default(1),
+          roleLabel: z.string().trim().max(80).optional().nullable(),
+        }),
+      )
+      .min(1)
+      .max(20),
+  });
+
+  app.post("/api/matchmaking/opportunities", requireFeature("matchmaking"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const parsed = createOpportunitySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid opportunity.", issues: parsed.error.issues });
+      }
+      const d = parsed.data;
+      // Reject requirements that reference unknown CODEC primitives.
+      const unknown = d.requirements.filter((r) => !CODEC_BY_ID[r.cardId]);
+      if (unknown.length > 0) {
+        return res.status(400).json({
+          message: `Unknown primitive card(s): ${unknown.map((u) => u.cardId).join(", ")}`,
+        });
+      }
+      const created = await storage.createOpportunity(
+        {
+          type: d.type,
+          title: d.title,
+          organization: d.organization,
+          description: d.description,
+          location: d.location ?? null,
+          remote: d.remote,
+          archetypePreference: d.archetypePreference ?? null,
+          jstFloor: d.jstFloor,
+          status: "OPEN",
+          createdBy: userId,
+        },
+        d.requirements.map((r) => ({
+          cardId: r.cardId,
+          minTier: r.minTier,
+          weight: r.weight,
+          roleLabel: r.roleLabel ?? null,
+        })),
+      );
+      return res.status(201).json(created);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Express interest in an opportunity (snapshots the current match score).
+  app.post("/api/matchmaking/opportunities/:id/apply", requireFeature("matchmaking"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const found = await storage.getOpportunity(String(req.params.id));
+      if (!found) return res.status(404).json({ message: "Opportunity not found." });
+      const me = await buildSelfCandidate(userId);
+      const match = scoreUserForOpportunity(me, toOpportunityInput(found.opportunity, found.requirements));
+      const application = await storage.upsertApplication({
+        opportunityId: found.opportunity.id,
+        userId,
+        matchScore: match.matchScore,
+        status: "INTERESTED",
+      });
+      return res.json({ application, match });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
   // ── SPHINX Marketplace ────────────────────────────────
   const hivePrecheckSchema = z.object({
     title: z.string(),
@@ -4890,6 +5128,196 @@ export async function registerRoutes(
         trainingProvidersSeeded += 1;
       }
 
+      // ===== ARK Matchmaking — opportunities + a verified candidate pool =====
+      // The Cognitive Talent Exchange only matches on banked verifications, so
+      // we seed a small bench of users each with finalized card verifications
+      // (plus an assessment carrying archetype weights) and a handful of JOB /
+      // PROJECT opportunities whose requirements reference real CODEC ids.
+      let matchmakingSeeded = { opportunities: 0, candidates: 0 };
+      const existingOpps = await storage.listOpportunities();
+      if (existingOpps.length === 0) {
+        const poster = await storage.getUserByUsername("analyst@enterprise.com");
+        if (poster) {
+          // Verified bench. Each entry → a user + assessment (archetype mix) +
+          // finalized verifications so team formation has real people to place.
+          const bench: Array<{
+            username: string;
+            name: string;
+            role: string;
+            jst: number;
+            arch: [number, number, number]; // architect, orchestrator, conductor
+            verifs: Array<{ cardId: string; tier: "Bronze" | "Silver" | "Gold" | "Platinum"; score: number }>;
+          }> = [
+            {
+              username: "nadia.matchmaker@example.com",
+              name: "Nadia Okonkwo",
+              role: "Principal Systems Architect",
+              jst: 252,
+              arch: [62, 24, 14],
+              verifs: [
+                { cardId: "codec-platform", tier: "Platinum", score: 93 },
+                { cardId: "codec-business-processes", tier: "Gold", score: 84 },
+                { cardId: "codec-innovation", tier: "Silver", score: 72 },
+              ],
+            },
+            {
+              username: "diego.matchmaker@example.com",
+              name: "Diego Santos",
+              role: "Growth & Revenue Lead",
+              jst: 231,
+              arch: [18, 58, 24],
+              verifs: [
+                { cardId: "codec-revenue", tier: "Gold", score: 86 },
+                { cardId: "codec-target-mass", tier: "Gold", score: 81 },
+                { cardId: "codec-loyalty", tier: "Silver", score: 74 },
+              ],
+            },
+            {
+              username: "mei.matchmaker@example.com",
+              name: "Mei Lin",
+              role: "Product & Experience Conductor",
+              jst: 244,
+              arch: [22, 20, 58],
+              verifs: [
+                { cardId: "codec-products", tier: "Platinum", score: 91 },
+                { cardId: "codec-services", tier: "Gold", score: 83 },
+                { cardId: "codec-culture", tier: "Silver", score: 70 },
+              ],
+            },
+            {
+              username: "kwame.matchmaker@example.com",
+              name: "Kwame Mensah",
+              role: "Innovation Strategist",
+              jst: 218,
+              arch: [44, 22, 34],
+              verifs: [
+                { cardId: "codec-innovation", tier: "Gold", score: 85 },
+                { cardId: "codec-core-objectives", tier: "Silver", score: 73 },
+                { cardId: "codec-elephant", tier: "Bronze", score: 64 },
+              ],
+            },
+            {
+              username: "sara.matchmaker@example.com",
+              name: "Sara Holt",
+              role: "Operations & Compliance Orchestrator",
+              jst: 207,
+              arch: [20, 56, 24],
+              verifs: [
+                { cardId: "codec-compliance", tier: "Gold", score: 82 },
+                { cardId: "codec-business-processes", tier: "Silver", score: 71 },
+                { cardId: "codec-partners", tier: "Bronze", score: 63 },
+              ],
+            },
+          ];
+
+          for (const b of bench) {
+            let u = await storage.getUserByUsername(b.username);
+            if (!u) {
+              u = await storage.createUser({
+                username: b.username,
+                password: "arkplatform",
+                name: b.name,
+                role: b.role,
+                seniority: "Senior",
+                location: "Global",
+              });
+            }
+            await storage.updateUser(u.id, { jstIndex: b.jst });
+            await storage.createAssessment({
+              userId: u.id,
+              jstTotal: b.jst,
+              jstJobs: Math.round(b.jst * 0.3),
+              jstSkills: Math.round(b.jst * 0.4),
+              jstTalent: Math.round(b.jst * 0.3),
+              archetypeArchitect: b.arch[0],
+              archetypeOrchestrator: b.arch[1],
+              archetypeConductor: b.arch[2],
+            });
+            for (const v of b.verifs) {
+              await storage.finalizeCardVerification({
+                userId: u.id,
+                cardId: v.cardId,
+                score: v.score,
+                tier: v.tier,
+                submissions: [],
+              });
+            }
+            matchmakingSeeded.candidates += 1;
+          }
+
+          const oppSeeds: Array<{
+            opp: Omit<InsertOpportunity, "createdBy">;
+            reqs: Omit<InsertOpportunityRequirement, "opportunityId">[];
+          }> = [
+            {
+              opp: {
+                type: "JOB",
+                title: "Senior Platform Engineer",
+                organization: "Helix Systems",
+                description:
+                  "Own the core platform that powers our analytics suite. We hire on verified evidence — show us banked primitives, not buzzwords.",
+                location: "Remote (Global)",
+                remote: true,
+                archetypePreference: "ARCHITECT",
+                jstFloor: 200,
+                status: "OPEN",
+              },
+              reqs: [
+                { cardId: "codec-platform", minTier: "Gold", weight: 5 },
+                { cardId: "codec-business-processes", minTier: "Silver", weight: 3 },
+                { cardId: "codec-innovation", minTier: "Bronze", weight: 2 },
+              ],
+            },
+            {
+              opp: {
+                type: "JOB",
+                title: "Revenue Growth Lead",
+                organization: "Northwind Commerce",
+                description:
+                  "Drive verified revenue mastery across our enterprise motion. Demonstrated, banked evidence of revenue + demand primitives required.",
+                location: "New York, NY",
+                remote: false,
+                archetypePreference: "ORCHESTRATOR",
+                jstFloor: 180,
+                status: "OPEN",
+              },
+              reqs: [
+                { cardId: "codec-revenue", minTier: "Gold", weight: 5 },
+                { cardId: "codec-target-mass", minTier: "Silver", weight: 3 },
+                { cardId: "codec-loyalty", minTier: "Bronze", weight: 2 },
+              ],
+            },
+            {
+              opp: {
+                type: "PROJECT",
+                title: "Atlas Launch Squad",
+                organization: "ARK Internal",
+                description:
+                  "A cross-functional squad to take Atlas from prototype to GA. Three verified roles: architecture, growth, and product/experience.",
+                location: "Hybrid",
+                remote: true,
+                archetypePreference: null,
+                jstFloor: 0,
+                status: "OPEN",
+              },
+              reqs: [
+                { cardId: "codec-platform", minTier: "Gold", weight: 5, roleLabel: "Architecture Lead" },
+                { cardId: "codec-business-processes", minTier: "Silver", weight: 2, roleLabel: "Architecture Lead" },
+                { cardId: "codec-revenue", minTier: "Gold", weight: 5, roleLabel: "Growth Lead" },
+                { cardId: "codec-target-mass", minTier: "Silver", weight: 2, roleLabel: "Growth Lead" },
+                { cardId: "codec-products", minTier: "Gold", weight: 5, roleLabel: "Product Lead" },
+                { cardId: "codec-services", minTier: "Silver", weight: 2, roleLabel: "Product Lead" },
+              ],
+            },
+          ];
+
+          for (const s of oppSeeds) {
+            await storage.createOpportunity({ ...s.opp, createdBy: poster.id }, s.reqs);
+            matchmakingSeeded.opportunities += 1;
+          }
+        }
+      }
+
       return res.json({
         message: "Seed complete",
         ccgeCards: ccge.cards,
@@ -4900,6 +5328,7 @@ export async function registerRoutes(
         cardSynergies: jng.synergies,
         roundtableSeats: rt.seats.length,
         trainingProviders: trainingProvidersSeeded,
+        matchmaking: matchmakingSeeded,
       });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });

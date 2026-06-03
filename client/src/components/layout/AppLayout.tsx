@@ -20,6 +20,7 @@ import {
   X,
   Shield,
   FileText,
+  Network,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { OnboardingTour } from "@/components/OnboardingTour";
@@ -84,6 +85,12 @@ const ALL_NAV_GROUPS: FlaggedNavGroup[] = [
       { name: "Forge Lab", href: "/marketplace/forge-lab", icon: Upload, hint: "Upload .docx → HIVE pre-check", flag: "forgeLabDocx" },
       { name: "Career Mobility", href: "/pathways", icon: Map, hint: "Pivot opportunities", flag: null },
       { name: "Training Providers", href: "/training", icon: GraduationCap, hint: "JST-matched certifications", flag: "trainingProviders" },
+    ],
+  },
+  {
+    label: "Match",
+    items: [
+      { name: "Talent Exchange", href: "/matchmaking", icon: Network, hint: "Verified job & team matching", flag: "matchmaking" },
     ],
   },
   {

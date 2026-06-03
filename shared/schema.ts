@@ -822,6 +822,109 @@ export const insertCardVerificationSchema = createInsertSchema(cardVerifications
 export type InsertCardVerification = z.infer<typeof insertCardVerificationSchema>;
 export type CardVerification = typeof cardVerifications.$inferSelect;
 
+// ─────────────────────────────────────────────────────────────────────
+// ARK MATCHMAKING ENGINE — the Cognitive Talent Exchange.
+//
+// Opportunities (jobs & projects) are matched to people PURELY on VERIFIED
+// PRIMITIVE CARDS (card_verifications, tier ≥ requirement) plus JST evidence
+// and archetype fit. The question is not "can this person do the job?" but
+// "how much VERIFIED evidence exists that they can?" — so the engine ignores
+// raw resume keywords and self-claims and only counts banked verifications.
+//
+//   • A requirement names a CODEC primitive id + the minimum verified tier
+//     that counts as full evidence (a Silver requirement met by a Gold
+//     verification = full credit; met by a Bronze = partial credit).
+//   • PROJECT opportunities group requirements into team roles (roleLabel);
+//     the Team Formation engine assembles a squad (one person per role) and
+//     scores its Team Exchange Score (TXS) — coverage + archetype diversity
+//     + JST depth.
+// ─────────────────────────────────────────────────────────────────────
+
+export const OPPORTUNITY_TYPES = ["JOB", "PROJECT"] as const;
+export type OpportunityType = typeof OPPORTUNITY_TYPES[number];
+
+export const OPPORTUNITY_STATUSES = ["OPEN", "CLOSED"] as const;
+export type OpportunityStatus = typeof OPPORTUNITY_STATUSES[number];
+
+export const ARCHETYPES = ["ARCHITECT", "ORCHESTRATOR", "CONDUCTOR"] as const;
+export type Archetype = typeof ARCHETYPES[number];
+
+// Verified-tier ordering — drives "does this verification clear the bar?".
+// Mirrors CCGE_TIERS; null/absent verification ranks 0.
+export const TIER_RANK: Record<string, number> = {
+  Bronze: 1,
+  Silver: 2,
+  Gold: 3,
+  Platinum: 4,
+};
+
+export const opportunities = pgTable("opportunities", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: text("type").notNull().default("JOB"), // JOB | PROJECT
+  title: text("title").notNull(),
+  organization: text("organization").notNull(),
+  description: text("description").notNull().default(""),
+  location: text("location"),
+  remote: boolean("remote").notNull().default(true),
+  // Soft archetype preference (full fit when the candidate's dominant
+  // archetype matches; a partial signal otherwise — never a hard filter).
+  archetypePreference: text("archetype_preference"), // ARCHITECT|ORCHESTRATOR|CONDUCTOR|null
+  jstFloor: integer("jst_floor").notNull().default(0), // 0-300 minimum JST evidence
+  status: text("status").notNull().default("OPEN"), // OPEN | CLOSED
+  createdBy: varchar("created_by").notNull(), // poster userId
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertOpportunitySchema = createInsertSchema(opportunities).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertOpportunity = z.infer<typeof insertOpportunitySchema>;
+export type Opportunity = typeof opportunities.$inferSelect;
+
+export const opportunityRequirements = pgTable("opportunity_requirements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  opportunityId: varchar("opportunity_id").notNull(),
+  cardId: varchar("card_id").notNull(), // codec-xxx primitive id
+  minTier: text("min_tier").notNull().default("Bronze"), // Bronze|Silver|Gold|Platinum
+  weight: integer("weight").notNull().default(1), // relative importance (1-5)
+  roleLabel: text("role_label"), // groups reqs into a team role (PROJECT formation)
+});
+
+export const insertOpportunityRequirementSchema = createInsertSchema(
+  opportunityRequirements,
+).omit({ id: true });
+export type InsertOpportunityRequirement = z.infer<
+  typeof insertOpportunityRequirementSchema
+>;
+export type OpportunityRequirement = typeof opportunityRequirements.$inferSelect;
+
+export const opportunityApplications = pgTable(
+  "opportunity_applications",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    opportunityId: varchar("opportunity_id").notNull(),
+    userId: varchar("user_id").notNull(),
+    matchScore: integer("match_score").notNull().default(0), // snapshot at apply time
+    status: text("status").notNull().default("INTERESTED"), // INTERESTED | WITHDRAWN
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("opportunity_applications_opp_user_uidx").on(
+      t.opportunityId,
+      t.userId,
+    ),
+  ],
+);
+
+export const insertOpportunityApplicationSchema = createInsertSchema(
+  opportunityApplications,
+).omit({ id: true, createdAt: true });
+export type InsertOpportunityApplication = z.infer<
+  typeof insertOpportunityApplicationSchema
+>;
+export type OpportunityApplication = typeof opportunityApplications.$inferSelect;
+
 // ── SPHINX Marketplace Tables ────────────────────────────────
 export const spcListings = pgTable("spc_listings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
