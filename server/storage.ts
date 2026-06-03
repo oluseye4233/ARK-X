@@ -44,6 +44,7 @@ import {
   bookLedgerSnapshots, type BookLedgerSnapshot, type InsertBookLedgerSnapshot,
   cardVerifications, type CardVerification, type VerificationSubmission,
   verificationArkDelta,
+  verificationDocuments, type VerificationDocument, type InsertVerificationDocument,
   trainingProviders, type TrainingProvider, type InsertTrainingProvider, type TrainingProviderStatus,
   trainingCourses, type TrainingCourse, type InsertTrainingCourse,
   trainingClicks, type TrainingClick, type InsertTrainingClick,
@@ -205,6 +206,10 @@ export interface IStorage {
     improved: boolean;
     prevTier: CcgeTier | null;
   }>;
+  // Verification documents (DATA-pillar evidence)
+  addVerificationDocument(doc: InsertVerificationDocument): Promise<VerificationDocument>;
+  getVerificationDocuments(userId: string, cardId: string): Promise<VerificationDocument[]>;
+  deleteVerificationDocument(id: string, userId: string): Promise<boolean>;
 
   // SPHINX Marketplace
   createSpcListing(listing: InsertSpcListing & { kcseScore: number; hiveScore: number; status?: string; scope?: string; institution?: string | null }): Promise<SpcListing>;
@@ -1223,6 +1228,28 @@ export class DatabaseStorage implements IStorage {
 
       return { verification, jstBoost, improved, prevTier };
     });
+  }
+
+  // ── Verification documents (DATA-pillar evidence) ───────────
+  async addVerificationDocument(doc: InsertVerificationDocument): Promise<VerificationDocument> {
+    const [created] = await db.insert(verificationDocuments).values(doc).returning();
+    return created;
+  }
+
+  async getVerificationDocuments(userId: string, cardId: string): Promise<VerificationDocument[]> {
+    return await db
+      .select()
+      .from(verificationDocuments)
+      .where(and(eq(verificationDocuments.userId, userId), eq(verificationDocuments.cardId, cardId)))
+      .orderBy(sql`${verificationDocuments.createdAt} DESC`);
+  }
+
+  async deleteVerificationDocument(id: string, userId: string): Promise<boolean> {
+    const result = await db
+      .delete(verificationDocuments)
+      .where(and(eq(verificationDocuments.id, id), eq(verificationDocuments.userId, userId)))
+      .returning({ id: verificationDocuments.id });
+    return result.length > 0;
   }
 
   // ── SPHINX Marketplace ──────────────────────────────────────

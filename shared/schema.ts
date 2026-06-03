@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, real, jsonb, boolean, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, real, jsonb, boolean, timestamp, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -821,6 +821,39 @@ export const insertCardVerificationSchema = createInsertSchema(cardVerifications
 });
 export type InsertCardVerification = z.infer<typeof insertCardVerificationSchema>;
 export type CardVerification = typeof cardVerifications.$inferSelect;
+
+// ── Verification Documents (DATA-pillar evidence) ─────────────
+// Subscribers attach supporting documents and certifications under a CODEC
+// primitive during verification. Uploading ≥1 document SATISFIES the DATA
+// pillar (one of the seven Context-Craft pillars) for that card's verification:
+// the deterministic craft scorer counts "Data" as covered when evidence exists.
+// Stored as a size-capped base64 data URL (mirrors the headshot pattern) so the
+// platform needs no separate object store.
+export const VERIFICATION_DOC_KINDS = ["DOCUMENT", "CERTIFICATION"] as const;
+export type VerificationDocKind = typeof VERIFICATION_DOC_KINDS[number];
+
+export const verificationDocuments = pgTable(
+  "verification_documents",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull(),
+    cardId: varchar("card_id").notNull(), // codec-xxx primitive id
+    kind: text("kind").notNull().default("DOCUMENT"), // DOCUMENT | CERTIFICATION
+    fileName: text("file_name").notNull(),
+    mimeType: text("mime_type").notNull(),
+    label: text("label"), // optional human note (e.g. "AWS SA-Pro, 2025")
+    dataUrl: text("data_url").notNull(), // base64 data URL of the file
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("verification_documents_user_card_idx").on(t.userId, t.cardId)],
+);
+
+export const insertVerificationDocumentSchema = createInsertSchema(verificationDocuments).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertVerificationDocument = z.infer<typeof insertVerificationDocumentSchema>;
+export type VerificationDocument = typeof verificationDocuments.$inferSelect;
 
 // ─────────────────────────────────────────────────────────────────────
 // ARK MATCHMAKING ENGINE — the Cognitive Talent Exchange.

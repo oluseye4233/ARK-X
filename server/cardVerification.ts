@@ -106,6 +106,10 @@ export function buildVerificationQuest(cardId: string): VerificationQuest | null
 export function scoreVerificationPrompt(
   prompt: string,
   challenge: Pick<VerificationChallenge, "label" | "targetPillars" | "tokenBudget">,
+  // When the subscriber has uploaded supporting documents/certifications under
+  // the card, the DATA pillar is satisfied by that real-world evidence — count
+  // it as covered regardless of the prompt text, and surface a signal.
+  dataPillarSatisfied = false,
 ): { craft: number; signals: string[] } {
   const scenario = {
     id: "verification",
@@ -124,7 +128,11 @@ export function scoreVerificationPrompt(
     body: prompt,
     // evaluateCustomCard only reads targetPillars + tokenBudget off the scenario.
     scenario: scenario as Parameters<typeof evaluateCustomCard>[0]["scenario"],
+    forcedPillars: dataPillarSatisfied ? ["Data"] : [],
   });
+  if (dataPillarSatisfied && !signals.includes("Data grounded by evidence")) {
+    signals.push("Data grounded by evidence");
+  }
   return { craft, signals };
 }
 

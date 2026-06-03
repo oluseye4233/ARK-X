@@ -33,6 +33,7 @@ import { computeCompleteness, canonicalSourcesUsed, buildCombinedText } from "@s
 import { companyMatches, certMatches } from "@shared/claimMatch";
 import { dealHand, scoreSession, evaluateCustomCard, blendCraftIntoFinal } from "./ccge";
 import { buildVerificationQuest, scoreVerificationPrompt, aggregateVerification } from "./cardVerification";
+import { VERIFICATION_DOC_KINDS } from "@shared/schema";
 import { orchestrator } from "./orchestrator";
 import { recalcArkForUser } from "./arkRecalc";
 import { computeLhcsForUser } from "./lhcs";
@@ -3329,7 +3330,8 @@ export async function registerRoutes(
       const quest = buildVerificationQuest(cardId);
       if (!quest) return res.status(404).json({ message: "No verification quest for this primitive." });
       const existing = await storage.getCardVerification(userId, cardId);
-      return res.json({ quest, verification: existing ?? null });
+      const documents = await storage.getVerificationDocuments(userId, cardId);
+      return res.json({ quest, verification: existing ?? null, documents });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
@@ -3388,9 +3390,13 @@ export async function registerRoutes(
         });
       }
 
+      // Uploaded documents/certifications under this card satisfy the DATA
+      // pillar — the deterministic scorer counts "Data" as covered when evidence exists.
+      const dataPillarSatisfied = (await storage.getVerificationDocuments(userId, cardId)).length > 0;
+
       const submissions = parsed.data.submissions.map((s) => {
         const challenge = challengeById.get(s.challengeId)!;
-        const { craft, signals } = scoreVerificationPrompt(s.prompt, challenge);
+        const { craft, signals } = scoreVerificationPrompt(s.prompt, challenge, dataPillarSatisfied);
         return {
           challengeId: s.challengeId,
           standard: challenge.standard,
@@ -3441,6 +3447,79 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Verification submit error:", err);
       return res.status(err.status || 500).json({ message: err.message });
+    }
+  });
+
+  // ── Verification Documents — DATA-pillar evidence ────────────────────
+  // Subscribers attach supporting documents / certifications under a primitive.
+  // Uploading >=1 satisfies the DATA pillar for that card's verification.
+  // Evidence-gated (card must be on the user's latest assessment) + flag-gated.
+  async function assertCardOnAssessment(userId: string, cardId: string): Promise<boolean> {
+    const assessment = await storage.getLatestAssessment(userId);
+    return (assessment?.matchedCardIds ?? []).includes(cardId);
+  }
+
+  app.get("/api/verification/:cardId/documents", requireFeature("cardVerification"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const cardId = String(req.params.cardId);
+      if (!(await assertCardOnAssessment(userId, cardId))) {
+        return res.status(403).json({ message: "You can only view evidence for primitives that appear on your assessment." });
+      }
+      const documents = await storage.getVerificationDocuments(userId, cardId);
+      return res.json(documents);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/verification/:cardId/documents", requireFeature("cardVerification"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const cardId = String(req.params.cardId);
+      if (!(await assertCardOnAssessment(userId, cardId))) {
+        return res.status(403).json({ message: "You can only attach evidence to primitives that appear on your assessment." });
+      }
+      const schema = z.object({
+        kind: z.enum(VERIFICATION_DOC_KINDS),
+        fileName: z.string().trim().min(1).max(200),
+        label: z.string().trim().max(200).optional(),
+        dataUrl: z
+          .string()
+          .regex(
+            /^data:(application\/pdf|image\/(png|jpeg|jpg|webp));base64,/,
+            "Must be a PDF, PNG, JPEG, or WebP file.",
+          )
+          .max(900_000, "File too large — please use one under ~650KB."),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid document." });
+      }
+      const mimeType = parsed.data.dataUrl.slice(5, parsed.data.dataUrl.indexOf(";"));
+      const doc = await storage.addVerificationDocument({
+        userId,
+        cardId,
+        kind: parsed.data.kind,
+        fileName: parsed.data.fileName,
+        mimeType,
+        label: parsed.data.label ?? null,
+        dataUrl: parsed.data.dataUrl,
+      });
+      return res.status(201).json(doc);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/verification/documents/:id", requireFeature("cardVerification"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const ok = await storage.deleteVerificationDocument(String(req.params.id), userId);
+      if (!ok) return res.status(404).json({ message: "Document not found." });
+      return res.json({ ok: true });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
     }
   });
 

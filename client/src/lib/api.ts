@@ -167,6 +167,22 @@ export const api = {
       body: JSON.stringify({ submissions }),
     }),
 
+  // DATA-pillar evidence: documents & certifications uploaded under a card.
+  getVerificationDocuments: (cardId: string) =>
+    apiRequest(`/api/verification/${cardId}/documents`),
+
+  addVerificationDocument: (
+    cardId: string,
+    doc: { kind: "DOCUMENT" | "CERTIFICATION"; fileName: string; label?: string; dataUrl: string },
+  ) =>
+    apiRequest(`/api/verification/${cardId}/documents`, {
+      method: "POST",
+      body: JSON.stringify(doc),
+    }),
+
+  deleteVerificationDocument: (id: string) =>
+    apiRequest(`/api/verification/documents/${id}`, { method: "DELETE" }),
+
   hivePrecheck: (data: { title: string; description: string; body: string; pillar: string }) =>
     apiRequest("/api/sphinx/hive-precheck", {
       method: "POST",

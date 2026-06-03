@@ -158,6 +158,10 @@ export function evaluateCustomCard(opts: {
   name: string;
   body: string;
   scenario: CcgeScenario;
+  // Pillars to treat as covered REGARDLESS of the prompt text — used by the
+  // Verification Quest when a card carries uploaded DATA-pillar evidence
+  // (documents / certifications). Defaults to none, so CCGE scoring is unchanged.
+  forcedPillars?: string[];
 }): CustomCardCraft {
   const name = (opts.name || "").trim();
   const body = (opts.body || "").trim();
@@ -187,9 +191,11 @@ export function evaluateCustomCard(opts: {
   }
 
   // Target-pillar coverage (0-10): how many of the scenario's target pillars are
-  // reflected in the authored prompt text.
+  // reflected in the authored prompt text. `forcedPillars` (e.g. Data, when the
+  // verifier has uploaded supporting evidence) count as covered regardless of text.
   const targets = opts.scenario.targetPillars ?? [];
-  const covered = targets.filter((p) => PILLAR_KEYWORDS[p]?.test(body)).length;
+  const forced = new Set(opts.forcedPillars ?? []);
+  const covered = targets.filter((p) => forced.has(p) || PILLAR_KEYWORDS[p]?.test(body)).length;
   const coverage = targets.length > 0 ? (covered / targets.length) * 10 : 7;
   if (covered > 0) signals.push(`Targets ${covered}/${targets.length} pillars`);
 

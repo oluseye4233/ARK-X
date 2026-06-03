@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Database, Link as LinkIcon, Loader2, Layers, Award, Globe2, Eye, EyeOff, ShieldCheck, ShieldQuestion, X, Sparkles, CheckCircle2 } from "lucide-react";
+import { Database, Link as LinkIcon, Loader2, Layers, Award, Globe2, Eye, EyeOff, ShieldCheck, ShieldQuestion, X, Sparkles, CheckCircle2, Paperclip, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { FEATURES } from "@shared/featureFlags";
@@ -31,6 +31,28 @@ interface VerificationQuest {
   category: string;
   persona: string;
   challenges: VerificationChallenge[];
+}
+
+interface VerificationDoc {
+  id: string;
+  cardId: string;
+  kind: "DOCUMENT" | "CERTIFICATION";
+  fileName: string;
+  mimeType: string;
+  label: string | null;
+  dataUrl: string;
+}
+
+const MAX_DOC_BYTES = 650_000; // keep base64 payload under the 1MB body limit
+const ACCEPTED_DOC_TYPES = "application/pdf,image/png,image/jpeg,image/webp";
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("Could not read file."));
+    reader.readAsDataURL(file);
+  });
 }
 
 // Tier → badge styling. Mirrors the cyberpunk palette; Platinum reads as the
@@ -374,15 +396,20 @@ function VerificationModal({
   const [prompts, setPrompts] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ score: number; tier: string | null; jstBoost: number; improved: boolean } | null>(null);
+  const [documents, setDocuments] = useState<VerificationDoc[]>([]);
+  const [docKind, setDocKind] = useState<"DOCUMENT" | "CERTIFICATION">("CERTIFICATION");
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [docError, setDocError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     api
       .getVerificationQuest(cardId)
-      .then((data: { quest: VerificationQuest }) => {
+      .then((data: { quest: VerificationQuest; documents?: VerificationDoc[] }) => {
         if (cancelled) return;
         setQuest(data.quest);
+        setDocuments(data.documents ?? []);
       })
       .catch((e: any) => {
         if (!cancelled) setError(e?.message ?? "Could not load this verification quest.");
@@ -395,9 +422,42 @@ function VerificationModal({
     };
   }, [cardId]);
 
+  const handleUploadDoc = async (file: File | undefined) => {
+    if (!file || uploadingDoc) return;
+    setDocError(null);
+    if (file.size > MAX_DOC_BYTES) {
+      setDocError("File too large — please use one under ~650KB.");
+      return;
+    }
+    setUploadingDoc(true);
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      const created = await api.addVerificationDocument(cardId, {
+        kind: docKind,
+        fileName: file.name,
+        dataUrl,
+      });
+      setDocuments(docs => [created, ...docs]);
+    } catch (e: any) {
+      setDocError(e?.message ?? "Upload failed.");
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
+  const handleDeleteDoc = async (id: string) => {
+    try {
+      await api.deleteVerificationDocument(id);
+      setDocuments(docs => docs.filter(d => d.id !== id));
+    } catch (e: any) {
+      setDocError(e?.message ?? "Could not remove document.");
+    }
+  };
+
   const challenges = quest?.challenges ?? [];
   const allAnswered =
     challenges.length > 0 && challenges.every(c => (prompts[c.id]?.trim().length ?? 0) >= 10);
+  const dataPillarSatisfied = documents.length > 0;
 
   const handleSubmit = async () => {
     if (!allAnswered || submitting) return;
@@ -509,6 +569,82 @@ function VerificationModal({
                 express all seven pillars — System, Role, Instruction, Example, Constraint, Format
                 and Data — to prove you can apply this primitive in production.
               </p>
+
+              <div className="flex flex-col gap-3 rounded-md border border-secondary/30 bg-secondary/5 p-3" data-testid="section-verification-documents">
+                <div className="flex items-center gap-2">
+                  <Paperclip className="h-3.5 w-3.5 text-secondary" />
+                  <span className="text-[11px] font-mono uppercase tracking-widest text-secondary">DATA-pillar evidence</span>
+                </div>
+                <p className="text-[11px] font-sans text-white/70 leading-relaxed">
+                  Attach supporting documents or certifications (PDF / PNG / JPEG / WebP, under ~650KB).
+                  Uploading at least one piece of evidence satisfies the <strong className="text-white/90">Data</strong> pillar
+                  for this primitive — grounding your prompts in real artifacts and lifting your verification score.
+                </p>
+
+                {documents.length > 0 && (
+                  <ul className="flex flex-col gap-1.5" data-testid="list-verification-documents">
+                    {documents.map(doc => (
+                      <li key={doc.id} className="flex items-center justify-between gap-2 rounded bg-background/50 border border-white/10 px-2.5 py-1.5" data-testid={`doc-${doc.id}`}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-secondary/15 text-secondary border border-secondary/30 shrink-0">
+                            {doc.kind === "CERTIFICATION" ? "CERT" : "DOC"}
+                          </span>
+                          <a
+                            href={doc.dataUrl}
+                            download={doc.fileName}
+                            className="text-[11px] font-mono text-white/80 hover:text-primary truncate"
+                            data-testid={`link-doc-${doc.id}`}
+                          >
+                            {doc.fileName}
+                          </a>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteDoc(doc.id)}
+                          data-testid={`button-delete-doc-${doc.id}`}
+                          className="text-white/40 hover:text-destructive transition-colors shrink-0"
+                          aria-label="Remove document"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={docKind}
+                    onChange={e => setDocKind(e.target.value as "DOCUMENT" | "CERTIFICATION")}
+                    data-testid="select-doc-kind"
+                    className="rounded bg-background/60 border border-white/10 focus:border-primary/50 focus:outline-none px-2 py-1.5 text-[11px] font-mono text-white/90"
+                  >
+                    <option value="CERTIFICATION">Certification</option>
+                    <option value="DOCUMENT">Document</option>
+                  </select>
+                  <label
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-secondary/50 text-secondary text-[11px] font-mono uppercase tracking-widest transition-colors ${uploadingDoc ? "opacity-40 cursor-not-allowed" : "hover:bg-secondary/15 cursor-pointer"}`}
+                    data-testid="button-upload-doc"
+                  >
+                    {uploadingDoc ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading…</> : <><Upload className="h-3.5 w-3.5" /> Upload evidence</>}
+                    <input
+                      type="file"
+                      accept={ACCEPTED_DOC_TYPES}
+                      disabled={uploadingDoc}
+                      onChange={e => { handleUploadDoc(e.target.files?.[0]); e.currentTarget.value = ""; }}
+                      className="hidden"
+                      data-testid="input-doc-file"
+                    />
+                  </label>
+                  {dataPillarSatisfied && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-mono text-secondary" data-testid="status-data-pillar">
+                      <ShieldCheck className="h-3 w-3" /> Data pillar satisfied
+                    </span>
+                  )}
+                </div>
+                {docError && <p className="text-[11px] text-destructive" data-testid="text-doc-error">{docError}</p>}
+              </div>
+
               {challenges.map(ch => (
                 <div key={ch.id} className="flex flex-col gap-2" data-testid={`challenge-${ch.id}`}>
                   <div className="flex items-center gap-2">
