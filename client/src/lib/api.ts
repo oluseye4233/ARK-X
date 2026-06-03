@@ -183,6 +183,10 @@ export const api = {
   deleteVerificationDocument: (id: string) =>
     apiRequest(`/api/verification/documents/${id}`, { method: "DELETE" }),
 
+  // Job-role guide: grounds a named role against O*NET / SFIA / WEF as a writing aid.
+  getJobRoleGuide: (role: string) =>
+    apiRequest(`/api/verification/job-role-guide?role=${encodeURIComponent(role)}`),
+
   hivePrecheck: (data: { title: string; description: string; body: string; pillar: string }) =>
     apiRequest("/api/sphinx/hive-precheck", {
       method: "POST",

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Database, Link as LinkIcon, Loader2, Layers, Award, Globe2, Eye, EyeOff, ShieldCheck, ShieldQuestion, X, Sparkles, CheckCircle2, Paperclip, Upload } from "lucide-react";
+import { Database, Link as LinkIcon, Loader2, Layers, Award, Globe2, Eye, EyeOff, ShieldCheck, ShieldQuestion, X, Sparkles, CheckCircle2, Paperclip, Upload, Briefcase } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { FEATURES } from "@shared/featureFlags";
@@ -43,8 +43,21 @@ interface VerificationDoc {
   dataUrl: string;
 }
 
+interface JobRoleGuide {
+  role: string;
+  onet: { code: string; title: string; note: string }[];
+  sfia: { level: number; name: string; control: string }[];
+  wef: { outlook: "ASCENDING" | "DECLINING" | "STABLE"; summary: string; signals: string[] };
+}
+
 const MAX_DOC_BYTES = 650_000; // keep base64 payload under the 1MB body limit
 const ACCEPTED_DOC_TYPES = "application/pdf,image/png,image/jpeg,image/webp";
+
+const WEF_OUTLOOK_TONE: Record<string, { label: string; cls: string }> = {
+  ASCENDING: { label: "Ascending", cls: "text-secondary border-secondary/40 bg-secondary/10" },
+  DECLINING: { label: "Declining", cls: "text-destructive border-destructive/40 bg-destructive/10" },
+  STABLE: { label: "Stable", cls: "text-amber-300 border-amber-500/40 bg-amber-500/10" },
+};
 
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -400,6 +413,26 @@ function VerificationModal({
   const [docKind, setDocKind] = useState<"DOCUMENT" | "CERTIFICATION">("CERTIFICATION");
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [docError, setDocError] = useState<string | null>(null);
+  const [jobRole, setJobRole] = useState("");
+  const [guide, setGuide] = useState<JobRoleGuide | null>(null);
+  const [guideLoading, setGuideLoading] = useState(false);
+  const [guideError, setGuideError] = useState<string | null>(null);
+
+  const handleGuideLookup = async () => {
+    const role = jobRole.trim();
+    if (role.length < 2 || guideLoading) return;
+    setGuideLoading(true);
+    setGuideError(null);
+    try {
+      const g = await api.getJobRoleGuide(role);
+      setGuide(g);
+    } catch (e: any) {
+      setGuide(null);
+      setGuideError(e?.message ?? "Could not load guidance for that role.");
+    } finally {
+      setGuideLoading(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -569,6 +602,92 @@ function VerificationModal({
                 express all seven pillars — System, Role, Instruction, Example, Constraint, Format
                 and Data — to prove you can apply this primitive in production.
               </p>
+
+              <div className="flex flex-col gap-3 rounded-md border border-primary/30 bg-primary/5 p-3" data-testid="section-job-role-guide">
+                <div className="flex items-center gap-2">
+                  <Briefcase className="h-3.5 w-3.5 text-primary" />
+                  <span className="text-[11px] font-mono uppercase tracking-widest text-primary">Name job role</span>
+                </div>
+                <p className="text-[11px] font-sans text-white/70 leading-relaxed">
+                  Name the job role you're writing for (e.g. <span className="text-white/90">Project Manager</span>) to pull a
+                  standards guide — <span className="text-blue-300">O*NET</span> occupations,
+                  the <span className="text-emerald-300">SFIA</span> level of control, and
+                  the <span className="text-amber-300">WEF</span> demand outlook — to steer your seven-pillar prompts.
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="text"
+                    value={jobRole}
+                    maxLength={80}
+                    onChange={e => setJobRole(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") handleGuideLookup(); }}
+                    placeholder="e.g. Project Manager"
+                    data-testid="input-job-role"
+                    className="flex-1 min-w-[180px] rounded bg-background/60 border border-white/10 focus:border-primary/50 focus:outline-none px-2.5 py-1.5 text-[12px] font-mono text-white/90"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleGuideLookup}
+                    disabled={jobRole.trim().length < 2 || guideLoading}
+                    data-testid="button-job-role-guide"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-primary/50 text-primary text-[11px] font-mono uppercase tracking-widest hover:bg-primary/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {guideLoading ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Mapping…</> : <><Sparkles className="h-3.5 w-3.5" /> Get guide</>}
+                  </button>
+                </div>
+                {guideError && <p className="text-[11px] text-destructive" data-testid="text-guide-error">{guideError}</p>}
+
+                {guide && (
+                  <div className="flex flex-col gap-3 mt-1" data-testid="job-role-guide-result">
+                    <div data-testid="guide-onet">
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-blue-300">O*NET occupations</span>
+                      {guide.onet.length > 0 ? (
+                        <ul className="mt-1 flex flex-col gap-1">
+                          {guide.onet.map((o, i) => (
+                            <li key={i} className="text-[11px] font-sans text-white/80 leading-snug">
+                              <span className="font-mono text-white/90">{o.title}</span>
+                              {o.code && <span className="font-mono text-white/40"> · {o.code}</span>}
+                              {o.note && <span className="text-white/50"> — {o.note}</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : <p className="mt-1 text-[11px] text-white/40">No close occupational match.</p>}
+                    </div>
+
+                    <div data-testid="guide-sfia">
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-300">SFIA level of control</span>
+                      {guide.sfia.length > 0 ? (
+                        <ul className="mt-1 flex flex-col gap-1">
+                          {guide.sfia.map((s, i) => (
+                            <li key={i} className="text-[11px] font-sans text-white/80 leading-snug">
+                              <span className="font-mono px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">L{s.level} {s.name}</span>
+                              <span className="text-white/60"> — {s.control}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : <p className="mt-1 text-[11px] text-white/40">No typical level identified.</p>}
+                    </div>
+
+                    <div data-testid="guide-wef">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-amber-300">WEF outlook</span>
+                        <span className={`text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border ${WEF_OUTLOOK_TONE[guide.wef.outlook]?.cls ?? WEF_OUTLOOK_TONE.STABLE.cls}`} data-testid="status-wef-outlook">
+                          {WEF_OUTLOOK_TONE[guide.wef.outlook]?.label ?? guide.wef.outlook}
+                        </span>
+                      </div>
+                      {guide.wef.summary && <p className="mt-1 text-[11px] font-sans text-white/70 leading-snug">{guide.wef.summary}</p>}
+                      {guide.wef.signals.length > 0 && (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {guide.wef.signals.map((sig, i) => (
+                            <span key={i} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-white/60 border border-white/10">{sig}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[10px] font-sans text-white/40 italic">Reference only — AI-generated guidance, not part of your score.</p>
+                  </div>
+                )}
+              </div>
 
               <div className="flex flex-col gap-3 rounded-md border border-secondary/30 bg-secondary/5 p-3" data-testid="section-verification-documents">
                 <div className="flex items-center gap-2">

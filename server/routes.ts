@@ -3523,6 +3523,26 @@ export async function registerRoutes(
     }
   });
 
+  // Job-Role Guide — names the role the author is writing their 7-pillar prompt
+  // for and grounds it against O*NET (occupations), SFIA (level of control) and
+  // WEF (ascending/declining outlook). Cached globally; only misses spend AI budget.
+  app.get("/api/verification/job-role-guide", requireFeature("cardVerification"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const role = String(req.query.role ?? "").trim();
+      if (role.length < 2 || role.length > 80) {
+        return res.status(400).json({ message: "Enter a job role between 2 and 80 characters." });
+      }
+      const user = await storage.getUser(userId);
+      const plan = (user?.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
+      const { getJobRoleGuide } = await import("./ai/jobRoleGuide");
+      const guide = await getJobRoleGuide({ userId, plan, role });
+      return res.json(guide);
+    } catch (err: any) {
+      return res.status(err.status || 500).json({ message: err.message });
+    }
+  });
+
   // ── ARK Matchmaking Engine — the Cognitive Talent Exchange ────────────
   // Matches people to opportunities (jobs & projects) and assembles project
   // teams, scored PURELY on VERIFIED PRIMITIVE CARDS (+ JST + archetype).

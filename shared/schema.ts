@@ -1223,7 +1223,7 @@ export const insertArkEventSchema = createInsertSchema(arkEvents).omit({
 export type InsertArkEvent = z.infer<typeof insertArkEventSchema>;
 export type ArkEvent = typeof arkEvents.$inferSelect;
 
-export const AI_KINDS = ["kcse", "narrative", "scenario_gen"] as const;
+export const AI_KINDS = ["kcse", "narrative", "scenario_gen", "job_role_guide"] as const;
 export type AiKind = typeof AI_KINDS[number];
 
 export const AI_MODELS = {
