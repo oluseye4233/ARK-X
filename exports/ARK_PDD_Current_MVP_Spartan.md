@@ -5,7 +5,7 @@
 
 <h1>ARK Platform<br/>SPARTAN MVP PDD</h1>
 
-<div class="subtitle">Produced by <strong>SPARTAN SI</strong> (ATLAS MVP Compression Engine, DISC&nbsp;DC · WOLF) executing the <strong>7-Step SCM</strong> on the published ARK Platform ATLAS Living PDD (<code>JNGL-ARK-PDD-CUR-2026-011</code>, v11). Every prompt classified CLASS&nbsp;A&nbsp;/&nbsp;B&nbsp;/&nbsp;C; CLASS&nbsp;C deferred with a documented upgrade trigger. 100% feature fidelity, zero bloat — now including the live growth-and-monetization funnel + verification flywheel.</div>
+<div class="subtitle">Produced by <strong>SPARTAN SI</strong> (ATLAS MVP Compression Engine, DISC&nbsp;DC · WOLF) executing the <strong>7-Step SCM</strong> on the published ARK Platform ATLAS Living PDD (<code>JNGL-ARK-PDD-CUR-2026-011</code>, v11). Every prompt classified CLASS&nbsp;A&nbsp;/&nbsp;B&nbsp;/&nbsp;C; CLASS&nbsp;C deferred with a documented upgrade trigger. 100% feature fidelity, zero bloat — now including the live growth-and-monetization funnel, verification flywheel, and the <strong>F1000 (First 1000) soft-launch promo</strong>.</div>
 
 <div class="manifesto">
 <strong>"A Spartan soldier carried only what was needed to win. SPARTAN carries only what the user needs to launch."</strong><br/>
@@ -37,6 +37,7 @@ ATANDA Studio · FORGE Institute
 - **PART 1 · VIBE DJ Analysis** (tool selection)
 - **PART 2 · Architecture Reduction** (Stack Collapse Map)
 - **PART 3 · Compressed MVP ATLAS PDD** (CLASS A retained set)
+  - incl. **Special Block · F1000 Soft-Launch Promo** (First 1000)
 - **PART 4 · ZPOS+5 Optimisation Report**
 - **PART 5 · Session Plan** (single-developer execution sequence)
 - **APPENDIX · Upgrade Path Document** (CLASS C triggers)
@@ -49,7 +50,7 @@ ATANDA Studio · FORGE Institute
 > **Invocation:** `Run SPARTAN on [ARK_PDD_Current_ATLAS.md v11] targeting [AUTO].`
 > **GRO DNA:** SAFE_LIFE · **FORGE Step:** Stage 3 (runs after full PDD exists) · **Input route:** PDD Compression Path (`.md` ATLAS structure detected).
 
-SPARTAN received the published v11 ATLAS Living PDD and compressed it to its minimum-viable, fully-deployable form. The MVP retains 100% of user-facing features that exist *today* — and the deployed surface has **widened** since the v10 compression: the **Suggested Training Providers** funnel, the **INDIVIDUAL_EXPLORER** free tier, the **Primitive Card Verification** flywheel, and the one-page **ARK REPORT** are all live and therefore **promoted into the retained CLASS A set**. Everything still deferred is feature-flagged **off** behind a documented commercial trigger, so no current user loses anything.
+SPARTAN received the published v11 ATLAS Living PDD and compressed it to its minimum-viable, fully-deployable form. The MVP retains 100% of user-facing features that exist *today* — and the deployed surface has **widened** since the v10 compression: the **Suggested Training Providers** funnel, the **INDIVIDUAL_EXPLORER** free tier, the **Primitive Card Verification** flywheel, the one-page **ARK REPORT**, and the **F1000 (First 1000) soft-launch promo** are all live and therefore **promoted into the retained CLASS A set**. Everything still deferred is feature-flagged **off** behind a documented commercial trigger, so no current user loses anything.
 
 ### Honesty Gate (threat_model G3)
 
@@ -59,21 +60,21 @@ SPARTAN's benchmark card cites "90–98% infrastructure cost reduction" and list
 
 | Metric | Source (Full ATLAS PDD v11) |
 |--------|------------------------------|
-| Atomic Prompts | 41 (ARK-001 … ARK-066, non-contiguous) across 6 phases |
-| API endpoints | 133 `/api` routes (69 GET / 52 POST / 6 PUT / 6 DELETE); 135 total incl. 2 non-`/api` |
-| Drizzle tables | 48 · Migrations | 18 (0000–0017) |
-| Client routes | 38 · Feature flags | 21 (**4 ON**: `investorDemo`, `executiveReport`, `cardVerification`, `trainingProviders`) |
+| Atomic Prompts | 45 (ARK-001 … ARK-066 incl. F1000 ARK-058…061, non-contiguous) across 6 phases + 1 special block |
+| API endpoints | 136 `/api` routes (incl. F1000 `/stats`, `/claim`, `/me`); 138 total incl. 2 non-`/api` |
+| Drizzle tables | 49 · Migrations | 19 (0000–0018) |
+| Client routes | 38 · Feature flags | 22 (**5 ON**: `investorDemo`, `executiveReport`, `cardVerification`, `trainingProviders`, `f1000Promo`) |
 | Server / client modules | ~44 / ~130 |
 
 ### Step 2 · PROFILE — Classification Result
 
 | CLASS | Meaning | Count | Action |
 |-------|---------|-------|--------|
-| **A — KEEP** | User-facing feature or system-correctness (auth, data, scoring, cost-safety, funnel, verification) | 36 prompts | Retained unchanged in MVP |
+| **A — KEEP** | User-facing feature or system-correctness (auth, data, scoring, cost-safety, funnel, verification, F1000 growth) | 40 prompts | Retained unchanged in MVP |
 | **B — SYNTHESISE** | Infrastructure replaceable by a platform-native equivalent, no UX loss | 2 prompts | Collapsed (see Part 2) |
 | **C — DEFER** | Serves scale not yet reached; no user sees it until a trigger fires | 17 flag families | Moved to Upgrade Path (Appendix) |
 
-**Prompt reduction: 41 ATLAS prompts → 36 retained CLASS A (~12%); the headline compression is token-level (Part 4, ~54%) — SPARTAN strips ATLAS prose to terse, I/O-typed tables. Feature Fidelity Score: 100%** — every MVP user-facing feature present; all deferrals are already 404 behind flags. *(The lower prompt-reduction vs the v10 pass is expected: Stage-1 widened from 1 ON flag to 4, so the funnel + verification + report are now KEEP, not DEFER.)*
+**Prompt reduction: 45 ATLAS prompts → 40 retained CLASS A (~11%); the headline compression is token-level (Part 4, ~54%) — SPARTAN strips ATLAS prose to terse, I/O-typed tables. Feature Fidelity Score: 100%** — every MVP user-facing feature present; all deferrals are already 404 behind flags. *(The lower prompt-reduction vs the v10 pass is expected: Stage-1 widened from 1 ON flag to 5, so the funnel + verification + report + F1000 promo are now KEEP, not DEFER.)*
 
 ### Step 3 · ASSESS — VIBE DJ Verdict
 
@@ -191,6 +192,19 @@ The retained CLASS A prompt set — the live MVP surfaces (Identity, Resume Anal
 | MVP-A35 | Stripe-stub checkout (FREE+PRO+Explorer): create→complete→entitle | audit row written | `server/billing.ts` |
 | MVP-A36 | GDPR export + cascade delete (`confirm:"DELETE"`) | all owned rows purged | `server/storage.ts` |
 
+### Special Block · F1000 Soft-Launch Promo (🟡 P1, growth)
+
+The **F1000 (First 1000)** soft-launch promo — a scarcity-bound, public-QR founding-member campaign. 1,000 single-use numbered codes → free Explorer entry + price-capped upgrade. CLASS A (live, `f1000Promo` ON). Condensed from the ATLAS Special Chapter.
+
+| ID | Description | Validation | Owner |
+|----|-------------|------------|-------|
+| MVP-A37 | Allocate single-use F1000 code (idempotent, `seq` 1…1000) | re-claim → same code; 1001st → `409 sold_out` | `server/storage.ts::allocateF1000Invite` |
+| MVP-A38 | Public live pool counter (claimed / remaining) | `requireFeature("f1000Promo")` | `/api/f1000/stats` |
+| MVP-A39 | Report caller's F1000 standing (read-only; `f1000_member` is set at claim/allocation, not here) | `requireFeature` + `requireAuth` | `/api/f1000/me` |
+| MVP-A40 | Price-cap upgrade ($10 PRO / $9 SCHOOL) + raise AI allowance for members | cap only when `f1000Member` | `server/billing.ts::priceCentsForPlan` |
+
+**Abuse resistance:** complex tokens (`F1000-####-<hex>`), claim requires auth + 10/min limiter, `user_id` UNIQUE (one code/account), `seq` UNIQUE (hard 1,000 cap). Honesty Gate G3: price-cap, not a fabricated savings figure.
+
 ### Synthesised CLASS B
 
 | ID | Production inputs collapsed | MVP form |
@@ -198,9 +212,9 @@ The retained CLASS A prompt set — the live MVP surfaces (Identity, Resume Anal
 | MVP-B01 | Redis cache + cache service | in-process `server/ai/cache.ts` |
 | MVP-B02 | Separate seed/admin service | dev-only `/api/seed` (403 in prod), seeds live SPCs + 4 providers / 8 courses |
 
-### Retained ON flags (4)
+### Retained ON flags (5)
 
-`investorDemo` (public `/demo` + `/demo-tour`; home CTAs depend on it) · `executiveReport` (`/report` one-pager export) · `cardVerification` (Primitive Card Verification quests + badges) · `trainingProviders` (Suggested Training Providers funnel + Explorer tier). All four are CLASS A for the current stage.
+`investorDemo` (public `/demo` + `/demo-tour`; home CTAs depend on it) · `executiveReport` (`/report` one-pager export) · `cardVerification` (Primitive Card Verification quests + badges) · `trainingProviders` (Suggested Training Providers funnel + Explorer tier) · `f1000Promo` (F1000 soft-launch promo: `/f1000` + `/api/f1000/*` + landing QR). All five are CLASS A for the current stage.
 
 ---
 
@@ -233,8 +247,9 @@ The MVP is already deployed; this is the SPARTAN replay order a single developer
 | 7 | Anthropic client + Haiku KCSE + two-gate budget | `/api/ai/status` ok | A24–A26 |
 | 8 | Explorer tier + training match + funnel routes + affiliate guard + ARK REPORT | `/training` gated + ranked | A27–A34 |
 | 9 | Billing stub + GDPR export/delete | audit + purge | A35–A36 |
-| 10 | Feature flags wired; only 4 ON; seed canonical data | CLASS C → 404 | A06, B02 |
-| 11 | Deploy to Autoscale | live URL | FFS 100% |
+| 10 | F1000 promo: invite allocation + claim/stats/me + price-cap at checkout + landing QR | idempotent claim; `409 sold_out` at 1,000 | A37–A40 |
+| 11 | Feature flags wired; only 5 ON; seed canonical data | CLASS C → 404 | A06, B02 |
+| 12 | Deploy to Autoscale | live URL | FFS 100% |
 
 ---
 
@@ -281,10 +296,10 @@ Every deferral has a documented return trigger (SPARTAN C-04). Lifting is a one-
 ║  SPARTAN SI — FORGE CERTIFICATION                                ║
 ║  Input:  ARK_PDD_Current_ATLAS.md  (PDD-CUR-2026-011, v11)      ║
 ║  Output: ARK_PDD_Current_MVP_Spartan  (PDD-MVP-2026-012)        ║
-║  Prompt reduction 41→36 (~12%) · Token reduction ~54%           ║
+║  Prompt reduction 45→40 (~11%) · Token reduction ~54%           ║
 ║  FFS 100 · CIS 99 · AVS 98 · UIS 100 · JCSE 49/50 PLATINUM      ║
 ║  Honesty Gate G3: ENFORCED (no ROI/savings, no ideafactory bill) ║
 ╚══════════════════════════════════════════════════════════════════╝
 ```
 
-> *SPARTAN compression complete. ATLAS MVP v12 delivered — funnel + verification promoted to CLASS A, 17 families deferred with reversible triggers.*
+> *SPARTAN compression complete. ATLAS MVP v12 delivered — funnel + verification + ARK REPORT + F1000 promo promoted to CLASS A, 17 families deferred with reversible triggers.*

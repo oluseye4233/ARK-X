@@ -5,7 +5,7 @@
 
 <h1>ARK Platform<br/>ATLAS PromptWare Design Document</h1>
 
-<div class="subtitle">Produced by <strong>ATLAS ULTRA SI</strong> (Automated Translation &amp; Layout System) operating in <strong>Mode 4 — LIVING PDD</strong>: reverse-translation of the deployed ARK Platform monorepo (38 client routes · 133 API endpoints · 48 Drizzle tables · 21 feature flags · 18 migrations) into a certified 4-Part PromptWare Design Document, current through the merged <strong>Training-Providers funnel + INDIVIDUAL_EXPLORER freemium tier</strong>, the <strong>Primitive Card Verification</strong> engine, the one-page <strong>ARK REPORT</strong>, and the promoted Intelligence-Hub tab navigation.</div>
+<div class="subtitle">Produced by <strong>ATLAS ULTRA SI</strong> (Automated Translation &amp; Layout System) operating in <strong>Mode 4 — LIVING PDD</strong>: reverse-translation of the deployed ARK Platform monorepo (38 client routes · 136 API endpoints · 49 Drizzle tables · 22 feature flags · 19 migrations) into a certified 4-Part PromptWare Design Document, current through the merged <strong>Training-Providers funnel + INDIVIDUAL_EXPLORER freemium tier</strong>, the <strong>Primitive Card Verification</strong> engine, the one-page <strong>ARK REPORT</strong>, the promoted Intelligence-Hub tab navigation, and the <strong>F1000 (First 1000) soft-launch promo</strong>.</div>
 
 <div class="manifesto">
 <strong>"Every requirement document is a blueprint in disguise. ATLAS reveals it."</strong><br/>
@@ -44,6 +44,8 @@ ATANDA Studio · Idea Factory · FORGE Institute
   - 6-Phase Deployment Map · Token Economics Dashboard
 - **PART 4 · VIBE DJ + VIBE Orchestra Implementation Plan**
   - Tool Selection · Orchestra Coordination · Camelot Team Sheet · PM Plan
+- **Special Chapter · F1000 Soft-Launch Promo** (First 1000)
+  - Concept · Mechanics · Founding Pricing · Atomic Prompts · Wasp Cards
 - **Appendix · Living Delta** (what changed since v10)
 
 </div>
@@ -53,7 +55,7 @@ ATANDA Studio · Idea Factory · FORGE Institute
 > **Invocation:** `Run ATLAS ULTRA SI on [DEPLOYED ARK PLATFORM CODEBASE] → produce 4-Part LIVING PDD of current status.`
 > **GRO DNA:** LIFE MODE · **FORGE Step:** Stage 7 (Deployed → Documented) · **Mode:** 4 — Living PDD (reverse-translation).
 
-This PDD does **not** propose a future build. It reverse-translates the *already-deployed* ARK Platform monorepo into the ATLAS 4-Part Standard, so any engineer, executive, or AI agent can pick up the current system without reading 170+ source files. Every Atomic Prompt in Part 3 maps to code that exists today. This revision (**v11**) supersedes v10 by absorbing the new **growth-and-monetization funnel** (Explorer freemium tier + Suggested Training Providers) and the **Primitive Card Verification** flywheel surface.
+This PDD does **not** propose a future build. It reverse-translates the *already-deployed* ARK Platform monorepo into the ATLAS 4-Part Standard, so any engineer, executive, or AI agent can pick up the current system without reading 170+ source files. Every Atomic Prompt in Part 3 maps to code that exists today. This revision (**v11**) supersedes v10 by absorbing the new **growth-and-monetization funnel** (Explorer freemium tier + Suggested Training Providers), the **Primitive Card Verification** flywheel surface, the one-page **ARK REPORT**, and the **F1000 (First 1000) soft-launch promo**.
 
 ### Honesty Gate (threat_model G3)
 
@@ -77,7 +79,7 @@ The deployed surface decomposes into **6 capability domains**, each expressed as
 2. **Identity & Scoring Core** — ARK/JST/CCMI engine, single-writer recalc, LHCS, SSE.
 3. **Flywheel Engines** — Resume Analyzer, CCGE Arena, SPHINX Marketplace, Primitive Card Verification.
 4. **AI Layer** — Anthropic Claude (Haiku KCSE / Sonnet narrative + scenarios), usage ledger, revenue guardrail.
-5. **Growth & Monetization Funnel** — INDIVIDUAL_EXPLORER freemium tier, Suggested Training Providers (JST-matched ranking + sponsored placement + affiliate click tracking), one-page ARK REPORT.
+5. **Growth & Monetization Funnel** — INDIVIDUAL_EXPLORER freemium tier, Suggested Training Providers (JST-matched ranking + sponsored placement + affiliate click tracking), one-page ARK REPORT, and the **F1000 (First 1000) soft-launch promo** (scarcity-bound founding-member acquisition — see Special Chapter).
 6. **Edge & Governance** — Billing, GDPR, cohorts, institution workforce / HR connectors, GUIN+, Book Companion, feature-flag gating.
 
 ### Step 3 · SPC Taxonomy Assignment
@@ -104,11 +106,12 @@ The deployed surface decomposes into **6 capability domains**, each expressed as
 | **Atomic Solution Summary** | ARK is a full-stack AI career-intelligence platform that scores a person's automation resilience (ARK 0–600 = JST + CCMI), then drives a flywheel — resume analysis, a Context-Craft card game (CCGE), primitive verification quests, and a prompt marketplace (SPHINX) — that lets the score *grow* through verifiable skill activity. The dashboard now funnels users into a gated **Suggested Training Providers** surface (certifications ranked against the JST upskilling path), unlocked by a new free **Explorer** tier and monetized via sponsored placement + affiliate clicks. Everything beyond the public investor demo is gated behind login/subscription + feature flags. |
 | **Problem Statement** | Knowledge workers cannot quantify their exposure to AI automation, see a concrete path to reduce it, *or* find the training that closes the exact gaps the engine surfaces. |
 | **Solution Vision** | A single scored career identity (ARK) + a closed-loop flywheel that converts skill activity into audited score growth + a monetizable funnel from "here is your gap" to "here is who closes it." |
-| **Top 5 Features** | • ARK Identity + JST/CCMI scoring engine with live SSE updates.<br/>• Resume Analyzer → 12-vector transferability + vulnerability assessment.<br/>• CCGE Arena + Primitive Card Verification — skill activity that *earns* score.<br/>• Suggested Training Providers — JST-ranked certifications, sponsored + affiliate-tracked, unlocked by the Explorer tier.<br/>• SPHINX Marketplace + 21-flag stage-gating holding CLASS-C surfaces until triggers fire. |
+| **Top 5 Features** | • ARK Identity + JST/CCMI scoring engine with live SSE updates.<br/>• Resume Analyzer → 12-vector transferability + vulnerability assessment.<br/>• CCGE Arena + Primitive Card Verification — skill activity that *earns* score.<br/>• Suggested Training Providers — JST-ranked certifications, sponsored + affiliate-tracked, unlocked by the Explorer tier.<br/>• SPHINX Marketplace + 22-flag stage-gating holding CLASS-C surfaces until triggers fire. |
+| **Growth Surface** | **F1000 (First 1000) soft-launch promo** — public-QR, scarcity-bound founding-member campaign: 1,000 single-use numbered codes → free Explorer entry + price-capped upgrade ($10 PRO / $9 SCHOOL). See Special Chapter. |
 | **Top 3 Benefits** | • One auditable score (ARK) replaces a folder of disconnected assessments.<br/>• Score *increases* are earned and capped, so the number stays trustworthy.<br/>• The funnel turns a free assessment into two revenue surfaces (sponsored placement + affiliate) without leaving the product. |
 | **Token Savings (artifact only)** | Raw source-to-prose ≈ 78,000 tokens → ZPOS-optimized PDD ≈ 39,000 tokens · **~50% reduction** · Semantic preservation 97% |
 | **Production Cards** | ATLAS 50/50 (Seat 3) · SPARTAN 49/50 (Seat 1) · BUGMXT 46/50 (Seat 13) · SPHINX 48/50 (Seat 6) |
-| **Stage-1 Flags ON** | `investorDemo` · `executiveReport` · `cardVerification` · `trainingProviders` (4 of 21) |
+| **Stage-1 Flags ON** | `investorDemo` · `executiveReport` · `cardVerification` · `trainingProviders` · `f1000Promo` (5 of 22) |
 | **Alignment Statement** | This PDD satisfies the request *"Draft a Comprehensive Living PDD that captures the present ARK codebase using ATLAS format."* |
 
 ---
@@ -149,7 +152,8 @@ The deployed system remains at **Stage 1 — MVP**, but the public surface has *
 | Explorer freemium tier | Free unlock of the funnel | `trainingProviderAccess` true on Explorer | Top-of-funnel acquisition |
 | ARK REPORT (`/report`) | One-page exec brief, exportable | PDF + PNG + JPEG export | Shareable artifact / virality |
 | SPHINX Marketplace | Monetizable prompt IP + credits | 70/30 split on transactional purchase | Revenue + creator network effects |
-| Feature-flag gating | Ship lean, scale without redeploy | 21 flags; 4 ON in Stage 1 | De-risked phased GTM |
+| F1000 soft-launch promo | Scarcity-bound founding-member acquisition | 1,000 single-use codes; idempotent claim | Top-of-funnel growth engine |
+| Feature-flag gating | Ship lean, scale without redeploy | 22 flags; 5 ON in Stage 1 | De-risked phased GTM |
 
 ## 4. SPC Taxonomy (Lineage)
 
@@ -202,7 +206,7 @@ The deployed system remains at **Stage 1 — MVP**, but the public surface has *
 
 ## 8. Bibliography & Data Sources
 
-`replit.md` (architecture of record) · `threat_model.md` (G3 Honesty Gate, trust boundaries) · `shared/schema.ts` (48 tables + `SCORE_GLOSSARY`) · `shared/featureFlags.ts` (21 flags) · `server/scoringEngine.ts` · `server/arkRecalc.ts` · `server/trainingMatch.ts` (funnel ranking) · `server/cardVerification.ts` · `server/routes.ts` (133 `/api/*` endpoints) · `migrations/0000–0017` · `exports/ARK_PDD_Current_MVP_Spartan.md` (Stage-1 scope) · the integrated SPC source files (ATLAS / BUGMXT / SPARTAN / SPHINX / ZPOS).
+`replit.md` (architecture of record) · `threat_model.md` (G3 Honesty Gate, trust boundaries) · `shared/schema.ts` (49 tables + `SCORE_GLOSSARY` + `F1000_PROMO`) · `shared/featureFlags.ts` (22 flags) · `server/scoringEngine.ts` · `server/arkRecalc.ts` · `server/trainingMatch.ts` (funnel ranking) · `server/cardVerification.ts` · `server/billing.ts` (F1000 price-cap) · `server/routes.ts` (136 `/api/*` endpoints) · `migrations/0000–0018` · `exports/ARK_PDD_Current_MVP_Spartan.md` (Stage-1 scope) · the integrated SPC source files (ATLAS / BUGMXT / SPARTAN / SPHINX / ZPOS).
 
 ---
 
@@ -369,7 +373,7 @@ Because the system is **deployed**, the sprint plan is a *Stage-gate lift* plan:
 | Sprint | Focus | Trigger to lift | Flag(s) |
 |--------|-------|-----------------|---------|
 | Maintenance | Keep ARK invariant + tests green | continuous | — |
-| ✅ Lifted | Verifiable score growth + revenue funnel | done | `cardVerification`, `trainingProviders`, `executiveReport` |
+| ✅ Lifted | Verifiable score growth + revenue funnel + founding-member growth | done | `cardVerification`, `trainingProviders`, `executiveReport`, `f1000Promo` |
 | Lift 1 | Public contributor profiles | ≥25 creators | `guinPublic`, `notifications` |
 | Lift 2 | Marketplace network effects | ≥100 listings | `sphinxAdvanced`, `corporateMarketplace` |
 | Lift 3 | Institutional SKU | first SCHOOL_STUDENT licence | `cohorts`, `enterpriseDashboard`, `institutionWorkforce` |
@@ -380,6 +384,63 @@ Because the system is **deployed**, the sprint plan is a *Stage-gate lift* plan:
 **PMI Knowledge-Area alignment:** Scope → feature-flag gating (404 discipline); Quality → JCSE tests + HIVE publish gate + BUGMXT drift audit; Cost → two-gate AI budget; Risk → Wasp register (Part 2 §6); Communication → audience-segmented Parts 1–4; Stakeholder → Part 1 (all) / Part 2 (exec) / Part 3 (tech) / Part 4 (PM).
 
 **SAFe PI mapping:** PI Planning = this PDD refresh on each merged increment; each *Lift* above is a Program Increment gated by a commercial trigger, executed by flipping `FEATURE_<KEY>=true` with no code change.
+
+---
+
+# Special Chapter · F1000 Soft-Launch Promo (First 1000)
+
+**Audience:** Founders, growth, investors · **Status:** ✅ LIVE (flag `f1000Promo` ON) · **Surface:** public landing QR → `/f1000`
+
+> **Why a dedicated chapter:** the F1000 ("First 1000") promo is ARK's deliberate cold-start acquisition mechanism — a scarcity-bound, single-use invite campaign that turns the public launch QR into 1,000 founding members on a free **Explorer** tier, with a price-capped upgrade path. It is the one Stage-1 surface whose *entire reason for existing* is top-of-funnel growth, so it earns its own chapter rather than a single worksheet row.
+
+## SC.1 · Concept
+
+The first **1,000** signed-in users who activate the shared launch QR each receive a **strictly numbered** founding code — the "*Nth of 1000*". Redemption lands the member on **INDIVIDUAL_EXPLORER** (free, funnel-unlocked) and brands the account `f1000_member = true`, which **price-caps any later upgrade** at promo rates and **raises the AI cost/token allowance** so founders experience the full product, not a throttled demo.
+
+This is a soft launch by design: bounded supply (1,000), no paid spend required to enter, every entrant captured as a real account, and a built-in upgrade incentive — with **no fabricated ROI or "savings" figure** (Honesty Gate G3). The promo widens Stage-1 from 4 ON flags to **5** and is the first acquisition surface that sits *in front of* the existing growth-and-monetization funnel (capability domain 5).
+
+## SC.2 · Mechanics (as-built)
+
+| Element | Implementation | Integrity property |
+|---------|----------------|--------------------|
+| **Supply** | Strict `seq` 1…1000 (`f1000_invites.seq` UNIQUE) | Hard cap; the 1001st claim returns `409 sold_out` |
+| **Token** | `F1000-<4-digit seq>-<random hex>` — e.g. `F1000-0042-7F3A9C2E1B6D` | Single-use & unguessable — the public QR cannot be drained by scripting |
+| **Binding** | `user_id` UNIQUE — one code per account | Claim is **idempotent**: re-claiming returns the same code (200), never a second |
+| **Allocation trigger** | Authenticated activation of the QR | No code is minted for anonymous traffic |
+| **Member flag** | `users.f1000_member` boolean | Drives promo pricing at checkout (`priceCentsForPlan(plan, f1000Member)`) |
+
+## SC.3 · Founding-member pricing (price-cap, not discount math)
+
+| Plan | Standard | **F1000 cap** | AI cost allowance | AI token cap |
+|------|----------|---------------|-------------------|--------------|
+| INDIVIDUAL_EXPLORER | free | **free (entry tier)** | standard Explorer | standard |
+| INDIVIDUAL_PRO | normal PRO price | **$10/mo** | **$29/mo** (2900¢) | 5,000,000 tok/mo |
+| SCHOOL_STUDENT | normal student price | **$9/mo** | **$9/mo** (900¢) | 2,000,000 tok/mo |
+
+The promo *caps* the live plan price for F1000 members; it does **not** invent a discount or savings number (Honesty Gate G3). The raised allowances are real budget constants in `shared/schema.ts::F1000_PROMO`, scaled ~10× so the token gate never binds before the dollar gate.
+
+## SC.4 · Atomic Prompts (I/O-typed)
+
+Each row maps to deployed code, consistent with Part 3's worksheet discipline.
+
+| ID | Pri | Description (single op) | Input | Output | Validation | Owner |
+|----|-----|-------------------------|-------|--------|------------|-------|
+| ARK-058 | 🟡 P1 | Allocate this account's single-use F1000 code (idempotent) | session | `{status, invite}` | `seq` 1…1000 unique; re-claim returns same code | `server/storage.ts::allocateF1000Invite` |
+| ARK-059 | 🟡 P1 | Serve live pool counter (claimed / remaining) — public | — | pool stats | `requireFeature("f1000Promo")` | `/api/f1000/stats` |
+| ARK-060 | 🟡 P1 | Report this account's F1000 standing | session | `{member, invite, stats}` | `requireFeature` + `requireAuth` | `/api/f1000/me` |
+| ARK-061 | 🟡 P1 | Cap plan price + raise AI allowance for members at checkout | plan, `f1000Member` | promo price/budget | cap applied only when `f1000Member` true | `server/billing.ts::priceCentsForPlan` |
+
+## SC.5 · Risk & Mitigation (Wasp Cards)
+
+| # | Risk | Severity | Mitigation (in-code today) |
+|---|------|----------|----------------------------|
+| F1 | QR drained by scripted / guessed claims | High | Server-minted complex tokens (seq + random hex); claim requires auth; `f1000ClaimLimiter` = 10/min |
+| F2 | One user farming many codes | High | `user_id` UNIQUE on `f1000_invites`; claim is idempotent (same code returned) |
+| F3 | Over-allocation past 1,000 | High | `seq` UNIQUE 1…1000; pool exhaustion → `409 sold_out`, never a 1001st row |
+| F4 | Promo price abuse by non-members | Medium | Pricing cap keyed off `users.f1000_member`, set only by a real allocation |
+| F5 | Surface leaks before the launch window | Low | Whole surface gated by `f1000Promo`; `requireFeature` → 404 when off; env overlay flips it |
+
+> *F1000 is a growth mechanism, not a revenue promise: bounded supply, honest price-caps, and an idempotent, abuse-resistant claim path — fully consistent with Honesty Gate G3.*
 
 ---
 
@@ -394,9 +455,10 @@ What this revision absorbed since v10 (30 May 2026, through Task #23):
 | Monetization | Sponsored/featured placement (order-only boost) + affiliate click tracking with http(s)-only outbound validation | `server/routes.ts` `/api/training/*` |
 | Flywheel | **Primitive Card Verification** — evidence-gated quests (O*NET/SFIA/WEF), tiered badges, +40 ARK/day cap | `cardVerification` ON · `/api/verification/*` |
 | Reporting | One-page **ARK REPORT** with PDF/PNG/JPEG export | `executiveReport` ON · `/report` |
+| Growth | **F1000 (First 1000) soft-launch promo** — 1,000 single-use numbered codes via public QR → free Explorer entry + price-capped upgrade ($10 PRO / $9 SCHOOL, raised AI allowance); idempotent, abuse-resistant claim | `f1000Promo` ON · `/f1000`, `/api/f1000/*` |
 | UX | Intelligence-Hub tab bar promoted to top, numbered 1/2/3, throbs on inactive tabs, hover tooltips, `prefers-reduced-motion` fallback | `client/src/pages/dashboard.tsx` |
-| Schema | Migrations grew 0009→0017 (guest assessments, cumulative profile, institution workforce, HR connectors, report bio/shares, CCGE custom card, card verifications, training providers) | `migrations/` |
-| Metrics | 33→**38** client routes · 99→**133** API endpoints · 37→**48** tables · 18→**21** flags · 9→**18** migrations · 1→**4** flags ON | platform-wide |
+| Schema | Migrations grew 0009→0018 (guest assessments, cumulative profile, institution workforce, HR connectors, report bio/shares, CCGE custom card, card verifications, training providers, **F1000 promo**) | `migrations/` |
+| Metrics | 33→**38** client routes · 99→**136** API endpoints · 37→**49** tables · 18→**22** flags · 9→**19** migrations · 1→**5** flags ON | platform-wide |
 
 ---
 
