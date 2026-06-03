@@ -10,6 +10,7 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "db:push": "drizzle-kit push",
+    "test": "tsx --test server/__tests__/*.test.ts",
     "test:scoring": "tsx --test server/__tests__/scoring.test.ts",
     "test:revenue": "tsx --test server/__tests__/revenueGuardrail.test.ts",
     "test:merge": "tsx --test server/__tests__/cumulativeMerge.test.ts",
