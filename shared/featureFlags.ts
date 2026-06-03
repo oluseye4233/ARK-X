@@ -31,6 +31,7 @@ export type FeatureKey =
   // ── PRO / paid features (trigger: PRO billing live) ──
   | "claudeNarrative" // Sonnet narrative endpoint + dashboard button
   | "executiveReport" // /report PDF export
+  | "arkResume" // /ark-resume ATS resume artifact + confirmations + headshot
   | "subscriptionCancel" // billing cancel flow + dunning
   | "assessmentEmail" // POST /api/notifications/assessment-summary
   // ── School / Enterprise SKU (trigger: first SCHOOL_STUDENT licence) ──
@@ -77,6 +78,7 @@ export const MVP_FEATURES: Readonly<Record<FeatureKey, boolean>> = Object.freeze
   notifications: false,
   claudeNarrative: false,
   executiveReport: true,
+  arkResume: true,
   subscriptionCancel: false,
   assessmentEmail: false,
   cohorts: false,

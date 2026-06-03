@@ -315,6 +315,11 @@ export default function Dashboard() {
               <FileText className="w-4 h-4 mr-2" /> Export Brief
             </Link>
           )}
+          {FEATURES.arkResume && (
+            <Link href="/ark-resume" className="inline-flex items-center justify-center border border-secondary/50 text-secondary hover:bg-secondary/10 font-mono text-xs uppercase tracking-widest h-10 px-4 rounded-md" data-testid="link-ark-resume">
+              <FileText className="w-4 h-4 mr-2" /> ARK Resume
+            </Link>
+          )}
         </div>
       </div>
 

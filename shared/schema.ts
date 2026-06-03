@@ -418,6 +418,10 @@ export const users = pgTable("users", {
   // pricing (PRO $10 / SCHOOL $9) + raised AI allowances. Server-controlled
   // only — never written from a client body.
   f1000Member: boolean("f1000_member").notNull().default(false),
+  // ── ARK RESUME (Task #59) — uploadable headshot stored as a size-limited
+  // base64 data URL on the user record (no object-storage dependency). Drives
+  // the resume artifact header. Server-validated for mime + length on write.
+  headshotDataUrl: text("headshot_data_url"),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({
@@ -501,6 +505,19 @@ export const insertF1000InviteSchema = createInsertSchema(f1000Invites).omit({
 export type InsertF1000Invite = z.infer<typeof insertF1000InviteSchema>;
 export type F1000Invite = typeof f1000Invites.$inferSelect;
 
+// ── ARK RESUME (Task #59) — one parsed employment entry. Stored as a JSONB
+// array on the assessment so a subscriber's full multi-company history rides
+// with their single evolving profile. All fields except company are optional;
+// extraction is best-effort.
+export interface WorkHistoryEntry {
+  company: string;
+  role?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  location?: string | null;
+  highlights?: string[];
+}
+
 export const assessments = pgTable("assessments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),
@@ -536,6 +553,16 @@ export const assessments = pgTable("assessments", {
   currentRole: text("current_role"),
   professionalQuals: text("professional_quals").array(),
   academicQuals: text("academic_quals").array(),
+  // ── ARK RESUME (Task #59) — contact, external links, full work history ──
+  // Scraped best-effort from the combined intake text to power the outward-
+  // facing ARK RESUME artifact. All nullable: older assessments predate them
+  // and extraction never blocks scoring.
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  linkLinkedin: text("link_linkedin"),
+  linkGithub: text("link_github"),
+  linkPortfolio: text("link_portfolio"),
+  workHistory: jsonb("work_history").$type<WorkHistoryEntry[]>(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -2006,6 +2033,51 @@ export const insertReportShareSchema = createInsertSchema(reportShares).omit({
 });
 export type InsertReportShare = z.infer<typeof insertReportShareSchema>;
 export type ReportShare = typeof reportShares.$inferSelect;
+
+// ── ARK RESUME confirmations (Task #59) ──────────────────────
+// The "living trust" layer of the ARK RESUME: a third party (a platform
+// trainer/provider account, an instructor, or admin) confirms one of a
+// subscriber's resume claims — an employment entry, a certification, or a
+// verified skill (CODEC primitive). v1 issues confirmations through existing
+// platform accounts + an admin/seed path; the external invite/approval UX is a
+// follow-up. The artifact renders the resulting badge (Confirmed / Pending /
+// Rejected / Unverified) with the confirmer's org name + optional logo.
+export const CONFIRMATION_TYPES = ["EMPLOYMENT", "CERTIFICATION", "SKILL"] as const;
+export type ConfirmationType = (typeof CONFIRMATION_TYPES)[number];
+
+export const CONFIRMATION_STATUSES = ["PENDING", "CONFIRMED", "REJECTED", "UNVERIFIED"] as const;
+export type ConfirmationStatus = (typeof CONFIRMATION_STATUSES)[number];
+
+export const skillConfirmations = pgTable(
+  "skill_confirmations",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    // The resume owner whose claim is being confirmed.
+    userId: varchar("user_id").notNull(),
+    type: text("type").notNull(), // EMPLOYMENT | CERTIFICATION | SKILL
+    // Stable reference to the claim: company name, cert text, or codec-xxx id.
+    targetRef: text("target_ref").notNull(),
+    targetLabel: text("target_label"), // human-readable label snapshot
+    status: text("status").notNull().default("PENDING"),
+    // Who confirmed. Snapshotted org/name/logo so a later account change
+    // doesn't silently rewrite an issued confirmation. confirmerUserId is
+    // nullable for the admin/seed path.
+    confirmerUserId: varchar("confirmer_user_id"),
+    confirmerOrg: text("confirmer_org").notNull(),
+    confirmerName: text("confirmer_name"),
+    confirmerLogoUrl: text("confirmer_logo_url"),
+    note: text("note"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("skill_confirmations_user_type_target_uidx").on(t.userId, t.type, t.targetRef)],
+);
+
+export const insertSkillConfirmationSchema = createInsertSchema(skillConfirmations).omit({
+  id: true, createdAt: true, updatedAt: true,
+});
+export type InsertSkillConfirmation = z.infer<typeof insertSkillConfirmationSchema>;
+export type SkillConfirmation = typeof skillConfirmations.$inferSelect;
 
 // ── Suggested Training Providers (freemium · Explorer tier) ──
 // Admin-curated + self-serve registered training organizations whose courses are

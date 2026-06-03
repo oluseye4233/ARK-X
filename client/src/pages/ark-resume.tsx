@@ -1,0 +1,486 @@
+import { useEffect, useRef, useState } from "react";
+import { Loader2, FileText, FileImage, FileType2, Upload, Lock, X, ShieldCheck, Clock, ShieldX, HelpCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/useAuth";
+import { api } from "@/lib/api";
+import { Link } from "wouter";
+import { ATANDA, BRAND_BAR, Bar } from "@/lib/arkReportTheme";
+import {
+  resumeFileStamp,
+  exportResumePdf,
+  exportResumeImage,
+  type ResumeExportData,
+} from "@/lib/arkResumeExport";
+import atandaLogo from "@assets/WEB_LEARNING_SYSTEMS_(1920_x_1280_px)_(2)_1779729580194.png";
+
+const TIER_HEX: Record<string, string> = {
+  Platinum: ATANDA.purple,
+  Gold: ATANDA.yellow,
+  Silver: ATANDA.teal,
+  Bronze: ATANDA.orange,
+};
+
+const STATUS_META: Record<string, { label: string; color: string; Icon: typeof ShieldCheck }> = {
+  CONFIRMED: { label: "Confirmed", color: ATANDA.green, Icon: ShieldCheck },
+  PENDING: { label: "Pending", color: ATANDA.yellow, Icon: Clock },
+  REJECTED: { label: "Rejected", color: ATANDA.red, Icon: ShieldX },
+  UNVERIFIED: { label: "Unverified", color: ATANDA.sub, Icon: HelpCircle },
+};
+
+function StatusBadge({ status, org }: { status: string; org?: string | null }) {
+  const m = STATUS_META[status] ?? STATUS_META.UNVERIFIED;
+  const Icon = m.Icon;
+  return (
+    <span
+      data-testid={`badge-confirmation-${status.toLowerCase()}`}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        fontSize: 10,
+        fontWeight: 700,
+        color: m.color,
+        border: `1px solid ${m.color}`,
+        borderRadius: 999,
+        padding: "1px 8px",
+        whiteSpace: "nowrap",
+      }}
+    >
+      <Icon style={{ width: 11, height: 11 }} />
+      {m.label}
+      {org ? ` · ${org}` : ""}
+    </span>
+  );
+}
+
+function TierChip({ tier }: { tier: string | null }) {
+  if (!tier) return null;
+  const color = TIER_HEX[tier] ?? ATANDA.sub;
+  return (
+    <span
+      style={{
+        fontSize: 9.5,
+        fontWeight: 700,
+        color: "#fff",
+        background: color,
+        borderRadius: 4,
+        padding: "1px 6px",
+      }}
+    >
+      {tier}
+    </span>
+  );
+}
+
+export default function ArkResumePage() {
+  const { user } = useAuth();
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<null | "pdf" | "png" | "jpeg">(null);
+  const [uploadingHeadshot, setUploadingHeadshot] = useState(false);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const load = () => {
+    setLoading(true);
+    api
+      .getArkResume()
+      .then((d) => {
+        setData(d);
+        setError(null);
+      })
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  const toExportData = (): ResumeExportData => ({
+    name: data.user.name,
+    currentRole: data.identity.currentRole,
+    currentEmployer: data.identity.currentEmployer,
+    contactEmail: data.identity.contactEmail,
+    contactPhone: data.identity.contactPhone,
+    location: data.identity.location,
+    linkLinkedin: data.identity.linkLinkedin,
+    linkGithub: data.identity.linkGithub,
+    linkPortfolio: data.identity.linkPortfolio,
+    arkScore: data.user.arkScore,
+    jst: data.jst,
+    ats: { score: data.ats.score, band: data.ats.band },
+    verifiedDeck: data.verifiedDeck.map((c: any) => ({ name: c.name, tier: c.tier, category: c.category })),
+    workHistory: data.workHistory.map((w: any) => ({
+      company: w.company,
+      role: w.role,
+      startDate: w.startDate,
+      endDate: w.endDate,
+      location: w.location,
+      highlights: w.highlights,
+      mappedCards: w.mappedCards.map((c: any) => ({ name: c.name, tier: c.tier })),
+      confirmation: w.confirmation ? { status: w.confirmation.status, confirmerOrg: w.confirmation.confirmerOrg } : null,
+    })),
+    education: data.education,
+    certifications: data.certifications,
+  });
+
+  const handleExportPdf = async () => {
+    setExporting("pdf");
+    try {
+      await exportResumePdf(toExportData(), resumeFileStamp(data.user.name));
+    } catch (e) {
+      console.error("PDF export failed:", e);
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const handleExportImage = async (type: "png" | "jpeg") => {
+    const el = sheetRef.current;
+    if (!el) return;
+    setExporting(type);
+    try {
+      await exportResumeImage(el, type, resumeFileStamp(data.user.name));
+    } catch (e) {
+      console.error("Image export failed:", e);
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const handleHeadshotFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 500_000) {
+      setError("Headshot must be under 500KB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = String(reader.result);
+      setUploadingHeadshot(true);
+      try {
+        await api.setArkResumeHeadshot(dataUrl);
+        load();
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setUploadingHeadshot(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveHeadshot = async () => {
+    setUploadingHeadshot(true);
+    try {
+      await api.deleteArkResumeHeadshot();
+      load();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setUploadingHeadshot(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="w-full max-w-4xl mx-auto min-h-[60vh] flex flex-col items-center justify-center">
+        <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
+        <p className="font-mono text-sm text-muted-foreground uppercase">Compiling ARK Resume...</p>
+      </div>
+    );
+  }
+
+  // Ineligible (403) or any load error → precise locked state. The thrown
+  // message IS the eligibility reason for a 403.
+  if (error || !data) {
+    return (
+      <div className="w-full max-w-2xl mx-auto min-h-[60vh] flex flex-col items-center justify-center text-center px-6" data-testid="ark-resume-locked">
+        <Lock className="w-12 h-12 text-primary mb-4" />
+        <h2 className="text-2xl font-display font-bold text-white mb-2">ARK RESUME is locked</h2>
+        <p className="font-mono text-sm text-muted-foreground mb-6 max-w-lg">
+          {error || "Unable to load your ARK Resume."}
+        </p>
+        <div className="flex flex-wrap gap-3 justify-center">
+          <Link href="/subscription" className="inline-flex items-center justify-center bg-primary text-primary-foreground font-mono text-xs uppercase tracking-widest h-10 px-4 rounded-md" data-testid="link-upgrade">
+            Upgrade Plan
+          </Link>
+          <Link href="/dashboard" className="inline-flex items-center justify-center border border-primary/50 text-primary hover:bg-primary/10 font-mono text-xs uppercase tracking-widest h-10 px-4 rounded-md" data-testid="link-verify-cards">
+            Verify a Primitive Card
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const headshot = data.user.headshotDataUrl as string | null;
+
+  // Index every confirmation by `TYPE:targetRef` (lowercased) so the trust layer
+  // renders across ALL claim types — employment, skill, and certification — using
+  // the same key the server matches on. Missing → rendered as "Unverified".
+  const confByKey = new Map<string, any>();
+  for (const c of (data.confirmations ?? [])) {
+    confByKey.set(`${c.type}:${String(c.targetRef).toLowerCase()}`, c);
+  }
+  const skillConf = (cardId: string) => confByKey.get(`SKILL:${cardId.toLowerCase()}`) ?? null;
+  const certConf = (label: string) => confByKey.get(`CERTIFICATION:${label.toLowerCase()}`) ?? null;
+
+  return (
+    <div className="w-full max-w-5xl mx-auto pb-16">
+      {/* Action bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div>
+          <h1 className="text-2xl font-display font-bold text-white">ARK RESUME</h1>
+          <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest">
+            ATS-optimized · verified-skill resume
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleHeadshotFile} data-testid="input-headshot" />
+          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploadingHeadshot} data-testid="button-upload-headshot">
+            {uploadingHeadshot ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />}
+            {headshot ? "Replace Photo" : "Add Photo"}
+          </Button>
+          {headshot && (
+            <Button variant="outline" size="sm" onClick={handleRemoveHeadshot} disabled={uploadingHeadshot} data-testid="button-remove-headshot">
+              <X className="w-4 h-4" />
+            </Button>
+          )}
+          <Button size="sm" onClick={handleExportPdf} disabled={!!exporting} data-testid="button-export-pdf">
+            {exporting === "pdf" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <FileText className="w-4 h-4 mr-1" />}
+            PDF (text)
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => handleExportImage("png")} disabled={!!exporting} data-testid="button-export-png">
+            {exporting === "png" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <FileImage className="w-4 h-4 mr-1" />}
+            PNG
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => handleExportImage("jpeg")} disabled={!!exporting} data-testid="button-export-jpeg">
+            {exporting === "jpeg" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <FileType2 className="w-4 h-4 mr-1" />}
+            JPEG
+          </Button>
+        </div>
+      </div>
+
+      {/* The export-ready sheet (ATANDA light theme for print/share fidelity) */}
+      <div
+        ref={sheetRef}
+        data-testid="ark-resume-sheet"
+        style={{
+          background: "#fff",
+          color: ATANDA.ink,
+          fontFamily: "Arial, Helvetica, sans-serif",
+          padding: 0,
+          borderRadius: 8,
+          overflow: "hidden",
+          boxShadow: "0 8px 40px rgba(0,0,0,0.35)",
+        }}
+      >
+        <div style={{ height: 6, background: BRAND_BAR }} />
+        <div style={{ padding: "28px 36px 36px" }}>
+          {/* Header: identity (left) + JST block (TOP-RIGHT, prominent) */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20 }}>
+            <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+              {headshot && (
+                <img
+                  src={headshot}
+                  alt={data.user.name}
+                  style={{ width: 76, height: 76, borderRadius: 8, objectFit: "cover", border: `1px solid ${ATANDA.line}` }}
+                />
+              )}
+              <div>
+                <div style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.05 }} data-testid="text-resume-name">
+                  {data.user.name}
+                </div>
+                {(data.identity.currentRole || data.identity.currentEmployer) && (
+                  <div style={{ fontSize: 14, color: ATANDA.sub, marginTop: 4 }}>
+                    {[data.identity.currentRole, data.identity.currentEmployer].filter(Boolean).join(" @ ")}
+                  </div>
+                )}
+                <div style={{ fontSize: 11, color: ATANDA.ink, marginTop: 8, lineHeight: 1.5 }}>
+                  {[data.identity.contactEmail, data.identity.contactPhone, data.identity.location].filter(Boolean).join("  •  ")}
+                </div>
+                <div style={{ fontSize: 11, color: ATANDA.blue, marginTop: 2, lineHeight: 1.5 }}>
+                  {[data.identity.linkLinkedin, data.identity.linkGithub, data.identity.linkPortfolio].filter(Boolean).join("  •  ")}
+                </div>
+              </div>
+            </div>
+
+            {/* JST — the headline metric, deliberately top-right */}
+            <div
+              style={{ background: ATANDA.blue, color: "#fff", borderRadius: 10, padding: "12px 16px", textAlign: "center", minWidth: 130 }}
+              data-testid="block-jst-top-right"
+            >
+              <div style={{ fontSize: 9, letterSpacing: 2, opacity: 0.85 }}>JST INDEX</div>
+              <div style={{ fontSize: 36, fontWeight: 800, lineHeight: 1 }}>{data.jst.total}</div>
+              <div style={{ fontSize: 9, opacity: 0.85, marginTop: 2 }}>/ 300</div>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 6, marginTop: 8, fontSize: 9 }}>
+                <span>J {data.jst.jobs}</span>
+                <span>S {data.jst.skills}</span>
+                <span>T {data.jst.talent}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* ATS + ARK strip */}
+          <div style={{ display: "flex", gap: 12, marginTop: 18, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 220, border: `1px solid ${ATANDA.line}`, borderRadius: 8, padding: "10px 14px" }} data-testid="block-ats-score">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: ATANDA.sub, letterSpacing: 1 }}>ATS READINESS</span>
+                <span style={{ fontSize: 22, fontWeight: 800, color: ATANDA.blue }}>
+                  {data.ats.score}<span style={{ fontSize: 12, color: ATANDA.sub }}>/100</span>
+                </span>
+              </div>
+              <div style={{ marginTop: 6 }}>
+                <Bar value={data.ats.score} max={100} color={ATANDA.blue} />
+              </div>
+              <div style={{ fontSize: 10, color: ATANDA.sub, marginTop: 4 }}>{data.ats.band}</div>
+            </div>
+            <div style={{ width: 150, border: `1px solid ${ATANDA.line}`, borderRadius: 8, padding: "10px 14px", textAlign: "center" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: ATANDA.sub, letterSpacing: 1 }}>ARK SCORE</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: ATANDA.ink }}>{data.user.arkScore}<span style={{ fontSize: 11, color: ATANDA.sub }}>/600</span></div>
+              {data.user.arkIdString && (
+                <div style={{ fontSize: 8.5, color: ATANDA.sub, marginTop: 2, wordBreak: "break-all" }}>{data.user.arkIdString}</div>
+              )}
+            </div>
+          </div>
+
+          {/* ATS breakdown */}
+          {data.ats.items?.length > 0 && (
+            <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "4px 24px" }} data-testid="block-ats-breakdown">
+              {data.ats.items.map((it: any) => (
+                <div key={it.label} style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: ATANDA.sub }}>
+                  <span>{it.label}</span>
+                  <span style={{ fontWeight: 700, color: ATANDA.ink }}>{it.points}/{it.max}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Verified Skills & Roles — global deck */}
+          {data.verifiedDeck.length > 0 && (
+            <Section title="Verified Skills & Roles">
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }} data-testid="block-verified-deck">
+                {data.verifiedDeck.map((c: any) => (
+                  <div
+                    key={c.cardId}
+                    style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${ATANDA.line}`, borderRadius: 8, padding: "6px 10px" }}
+                    data-testid={`card-verified-${c.cardId}`}
+                  >
+                    <span style={{ fontSize: 16 }}>{c.emoji}</span>
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700 }}>{c.name}</div>
+                      <div style={{ fontSize: 9, color: ATANDA.sub }}>{c.category}</div>
+                    </div>
+                    <TierChip tier={c.tier} />
+                    {(() => { const sc = skillConf(c.cardId); return sc ? <StatusBadge status={sc.status} org={sc.confirmerOrg} /> : null; })()}
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* Experience — with per-company AI-mapped cards + confirmation */}
+          {data.workHistory.length > 0 && (
+            <Section title="Experience">
+              {data.workHistory.map((w: any, i: number) => (
+                <div key={i} style={{ marginBottom: 14 }} data-testid={`block-work-${i}`}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700 }}>
+                      {[w.role, w.company].filter(Boolean).join(" — ") || w.company}
+                    </div>
+                    <div style={{ fontSize: 10, color: ATANDA.sub, whiteSpace: "nowrap" }}>
+                      {[w.startDate, w.endDate].filter(Boolean).join(" – ")}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
+                    {w.location && <span style={{ fontSize: 10, color: ATANDA.sub }}>{w.location}</span>}
+                    {w.company && (
+                      <StatusBadge
+                        status={w.confirmation?.status ?? "UNVERIFIED"}
+                        org={w.confirmation?.confirmerOrg}
+                      />
+                    )}
+                  </div>
+                  {(w.highlights ?? []).length > 0 && (
+                    <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+                      {w.highlights.map((h: string, hi: number) => (
+                        <li key={hi} style={{ fontSize: 11, lineHeight: 1.5, color: ATANDA.ink }}>{h}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {w.mappedCards.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }} data-testid={`block-work-cards-${i}`}>
+                      {w.mappedCards.map((c: any) => (
+                        <span
+                          key={c.cardId}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 600, color: ATANDA.blue, background: ATANDA.panel, border: `1px solid ${ATANDA.line}`, borderRadius: 999, padding: "1px 8px" }}
+                        >
+                          {c.emoji} {c.name}
+                          <TierChip tier={c.tier} />
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </Section>
+          )}
+
+          {/* Education */}
+          {data.education.length > 0 && (
+            <Section title="Education">
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {data.education.map((e: string, i: number) => (
+                  <li key={i} style={{ fontSize: 11.5, lineHeight: 1.6 }}>{e}</li>
+                ))}
+              </ul>
+            </Section>
+          )}
+
+          {/* Certifications */}
+          {data.certifications.length > 0 && (
+            <Section title="Certifications">
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {data.certifications.map((c: string, i: number) => {
+                  const cc = certConf(c);
+                  return (
+                    <li key={i} style={{ fontSize: 11.5, lineHeight: 1.6 }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        {c}
+                        {cc && <StatusBadge status={cc.status} org={cc.confirmerOrg} />}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Section>
+          )}
+
+          {/* Footer */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 24, paddingTop: 12, borderTop: `1px solid ${ATANDA.line}` }}>
+            <img src={atandaLogo} alt="ATANDA" style={{ height: 22, objectFit: "contain" }} />
+            <span style={{ fontSize: 9, color: ATANDA.sub }}>
+              Generated by ARK · Verified skills mapped to O*NET / WEF / SFIA standards
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginTop: 20 }}>
+      <div style={{ fontSize: 12, fontWeight: 800, color: ATANDA.blue, letterSpacing: 1.5, textTransform: "uppercase", borderBottom: `2px solid ${ATANDA.line}`, paddingBottom: 4, marginBottom: 10 }}>
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}

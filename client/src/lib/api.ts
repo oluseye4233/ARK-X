@@ -539,4 +539,23 @@ export const api = {
   revokeReportShare: (): Promise<{ ok: boolean }> =>
     apiRequest("/api/report/share", { method: "DELETE" }),
   getSharedReport: (token: string) => apiRequest(`/api/report/shared/${token}`),
+
+  // ── ARK RESUME (Task #59) ──
+  getArkResume: () => apiRequest("/api/ark-resume"),
+  setArkResumeHeadshot: (dataUrl: string): Promise<{ ok: boolean; headshotDataUrl: string | null }> =>
+    apiRequest("/api/ark-resume/headshot", { method: "POST", body: JSON.stringify({ dataUrl }) }),
+  deleteArkResumeHeadshot: (): Promise<{ ok: boolean }> =>
+    apiRequest("/api/ark-resume/headshot", { method: "DELETE" }),
+  getConfirmations: () => apiRequest("/api/confirmations"),
+  issueConfirmation: (data: {
+    userId: string;
+    type: "EMPLOYMENT" | "CERTIFICATION" | "SKILL";
+    targetRef: string;
+    targetLabel?: string;
+    status?: "PENDING" | "CONFIRMED" | "REJECTED" | "UNVERIFIED";
+    confirmerOrg?: string;
+    confirmerName?: string;
+    confirmerLogoUrl?: string;
+    note?: string;
+  }) => apiRequest("/api/confirmations", { method: "POST", body: JSON.stringify(data) }),
 };

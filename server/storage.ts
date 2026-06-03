@@ -47,6 +47,7 @@ import {
   trainingProviders, type TrainingProvider, type InsertTrainingProvider, type TrainingProviderStatus,
   trainingCourses, type TrainingCourse, type InsertTrainingCourse,
   trainingClicks, type TrainingClick, type InsertTrainingClick,
+  skillConfirmations, type SkillConfirmation, type InsertSkillConfirmation,
 } from "@shared/schema";
 import { or } from "drizzle-orm";
 
@@ -102,11 +103,17 @@ export interface IStorage {
   getF1000Stats(): Promise<{ claimed: number; limit: number; remaining: number }>;
   getLatestAssessment(userId: string): Promise<Assessment | undefined>;
   updateAssessmentScore(id: string, data: Partial<Pick<Assessment, "jstTotal" | "jstJobs" | "jstSkills" | "jstTalent">>): Promise<Assessment | undefined>;
+  updateAssessmentProfile(id: string, data: Partial<Pick<Assessment, "contactEmail" | "contactPhone" | "linkLinkedin" | "linkGithub" | "linkPortfolio" | "workHistory" | "academicQuals" | "professionalQuals">>): Promise<Assessment | undefined>;
 
   createReportShare(userId: string): Promise<ReportShare>;
   getActiveReportShareByUser(userId: string): Promise<ReportShare | undefined>;
   getReportShareByToken(token: string): Promise<ReportShare | undefined>;
   revokeReportShare(userId: string): Promise<void>;
+
+  // ── ARK RESUME (Task #59) ──
+  setUserHeadshot(userId: string, dataUrl: string | null): Promise<User | undefined>;
+  getSkillConfirmations(userId: string): Promise<SkillConfirmation[]>;
+  upsertSkillConfirmation(row: InsertSkillConfirmation): Promise<SkillConfirmation>;
 
   createUpskillingPlans(plans: InsertUpskillingPlan[]): Promise<UpskillingPlan[]>;
   getUpskillingPlansByAssessment(assessmentId: string): Promise<UpskillingPlan[]>;
@@ -551,9 +558,70 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(reportShares.userId, userId), eq(reportShares.revoked, false)));
   }
 
+  // ── ARK RESUME (Task #59) ───────────────────────────────────
+  async setUserHeadshot(userId: string, dataUrl: string | null): Promise<User | undefined> {
+    const [row] = await db
+      .update(users)
+      .set({ headshotDataUrl: dataUrl })
+      .where(eq(users.id, userId))
+      .returning();
+    return row;
+  }
+
+  async getSkillConfirmations(userId: string): Promise<SkillConfirmation[]> {
+    return await db
+      .select()
+      .from(skillConfirmations)
+      .where(eq(skillConfirmations.userId, userId))
+      .orderBy(desc(skillConfirmations.updatedAt));
+  }
+
+  // Upsert keyed on (userId, type, targetRef): re-issuing a confirmation for the
+  // same claim updates the status/confirmer rather than creating duplicates.
+  async upsertSkillConfirmation(row: InsertSkillConfirmation): Promise<SkillConfirmation> {
+    const [result] = await db
+      .insert(skillConfirmations)
+      .values({ ...row, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: [skillConfirmations.userId, skillConfirmations.type, skillConfirmations.targetRef],
+        set: {
+          status: row.status ?? "PENDING",
+          targetLabel: row.targetLabel ?? null,
+          confirmerUserId: row.confirmerUserId ?? null,
+          confirmerOrg: row.confirmerOrg,
+          confirmerName: row.confirmerName ?? null,
+          confirmerLogoUrl: row.confirmerLogoUrl ?? null,
+          note: row.note ?? null,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return result;
+  }
+
   async updateAssessmentScore(
     id: string,
     data: Partial<Pick<Assessment, "jstTotal" | "jstJobs" | "jstSkills" | "jstTalent">>
+  ): Promise<Assessment | undefined> {
+    const [updated] = await db.update(assessments).set(data).where(eq(assessments.id, id)).returning();
+    return updated;
+  }
+
+  async updateAssessmentProfile(
+    id: string,
+    data: Partial<
+      Pick<
+        Assessment,
+        | "contactEmail"
+        | "contactPhone"
+        | "linkLinkedin"
+        | "linkGithub"
+        | "linkPortfolio"
+        | "workHistory"
+        | "academicQuals"
+        | "professionalQuals"
+      >
+    >
   ): Promise<Assessment | undefined> {
     const [updated] = await db.update(assessments).set(data).where(eq(assessments.id, id)).returning();
     return updated;

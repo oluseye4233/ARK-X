@@ -41,6 +41,8 @@ import { scoreSessionWithClaude } from "./ai/kcse";
 import { generateResumeNarrative, ProTierRequiredError } from "./ai/narrative";
 import { CODEC_PRIMITIVES, CODEC_BY_ID } from "@shared/codec-primitives";
 import { generateScenario } from "./ai/scenarioGen";
+import { buildArkResume } from "./arkResume";
+import { CONFIRMATION_TYPES, CONFIRMATION_STATUSES } from "@shared/schema";
 import { getTierStatus } from "./ai/usage";
 import { isClaudeAvailable, resolveUseClaude } from "./ai/client";
 import {
@@ -1365,6 +1367,12 @@ export async function registerRoutes(
         currentRole: bio.currentRole,
         professionalQuals: bio.professionalQuals,
         academicQuals: bio.academicQuals,
+        contactEmail: bio.contactEmail,
+        contactPhone: bio.contactPhone,
+        linkLinkedin: bio.linkLinkedin,
+        linkGithub: bio.linkGithub,
+        linkPortfolio: bio.linkPortfolio,
+        workHistory: bio.workHistory,
       });
 
       const [plans, pivots, vectors] = await Promise.all([
@@ -1790,6 +1798,161 @@ export async function registerRoutes(
       const userId = currentUserId(req)!;
       const lhcs = await computeLhcsForUser(userId);
       return res.json(lhcs);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── ARK RESUME (Task #59) ────────────────────────────────────
+  // ATS-optimized, shareable resume artifact fusing the lifted static resume
+  // with the verified-card + confirmation layers. Gated BEFORE requireAuth so
+  // the whole surface 404s while flagged OFF. Eligibility: Pro+ AND >=1 card
+  // verified at Silver+. On an ineligible-but-authed user we return 403 WITH the
+  // eligibility detail so the client can render a precise locked state.
+  app.get("/api/ark-resume", requireFeature("arkResume"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const payload = await buildArkResume(userId);
+      if (!payload) return res.status(404).json({ message: "User not found." });
+      if (!payload.eligibility.eligible) {
+        return res
+          .status(403)
+          .json({ message: payload.eligibility.reason, eligibility: payload.eligibility });
+      }
+      return res.json(payload);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Headshot upload — self only. Stored as a size-limited base64 data URL on the
+  // user record (the global 1MB body limit + this cap keep it bounded).
+  app.post("/api/ark-resume/headshot", requireFeature("arkResume"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const schema = z.object({
+        dataUrl: z
+          .string()
+          .regex(/^data:image\/(png|jpeg|jpg|webp);base64,/, "Must be a PNG, JPEG, or WebP image.")
+          .max(700_000, "Image too large — please use one under ~500KB."),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid image." });
+      }
+      const user = await storage.setUserHeadshot(userId, parsed.data.dataUrl);
+      return res.json({ ok: true, headshotDataUrl: user?.headshotDataUrl ?? null });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/ark-resume/headshot", requireFeature("arkResume"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      await storage.setUserHeadshot(userId, null);
+      return res.json({ ok: true });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // List the current user's own confirmations (the trust layer of their resume).
+  app.get("/api/confirmations", requireFeature("arkResume"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const rows = await storage.getSkillConfirmations(userId);
+      return res.json(rows);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Issue/update a confirmation for a subscriber's resume claim. Confirmer-gated:
+  // the actor must be an admin, an instructor, or own a training provider. The
+  // confirmer org/name/logo is ALWAYS snapshotted server-side from the actor's
+  // authoritative source (owned provider, or the account for instructors/admin)
+  // — never trusted from the request body — so a confirmer cannot impersonate
+  // another organization. The cited claim must actually exist on the subject's
+  // resume (matched the same way the resume reads it) or the write is rejected,
+  // preventing forged badges against non-existent claims.
+  app.post("/api/confirmations", requireFeature("arkResume"), requireAuth, async (req, res) => {
+    try {
+      const actorId = currentUserId(req)!;
+      const actor = await storage.getUser(actorId);
+      if (!actor) return res.status(404).json({ message: "User not found." });
+      const adminId = process.env.ADMIN_USER_ID;
+      const isAdmin = !!adminId && actor.id === adminId;
+      const isInstructor = (actor.role ?? "").toLowerCase() === "instructor";
+      const providers = await storage.listTrainingProvidersByOwner(actorId);
+      const isProvider = providers.length > 0;
+      if (!isAdmin && !isInstructor && !isProvider) {
+        return res.status(403).json({
+          message: "Only verified instructors, training providers, or admins can issue confirmations.",
+        });
+      }
+      const schema = z.object({
+        userId: z.string().min(1),
+        type: z.enum(CONFIRMATION_TYPES),
+        targetRef: z.string().trim().min(1).max(200),
+        targetLabel: z.string().trim().max(200).optional(),
+        status: z.enum(CONFIRMATION_STATUSES).optional(),
+        note: z.string().trim().max(1000).optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid confirmation." });
+      }
+      const subject = await storage.getUser(parsed.data.userId);
+      if (!subject) return res.status(404).json({ message: "Subject user not found." });
+
+      // Validate the cited claim exists on the subject's resume, using the SAME
+      // matching the resume builder uses on read so a confirmation can never
+      // silently orphan. SKILL → a Silver+/any verification cardId; EMPLOYMENT →
+      // a company in the latest assessment work history; CERTIFICATION → one of
+      // the subject's professional qualifications.
+      const ref = parsed.data.targetRef.trim();
+      const [subjectAssessment, subjectVerifications] = await Promise.all([
+        storage.getLatestAssessment(subject.id),
+        storage.getCardVerifications(subject.id),
+      ]);
+      let claimExists = false;
+      if (parsed.data.type === "SKILL") {
+        claimExists = subjectVerifications.some((v) => v.cardId.toLowerCase() === ref.toLowerCase());
+      } else if (parsed.data.type === "EMPLOYMENT") {
+        const companies = ((subjectAssessment?.workHistory ?? []) as { company?: string }[])
+          .map((w) => (w.company ?? "").toLowerCase());
+        claimExists = companies.includes(ref.toLowerCase());
+      } else if (parsed.data.type === "CERTIFICATION") {
+        const certs = (subjectAssessment?.professionalQuals ?? []).map((c) => c.toLowerCase());
+        claimExists = certs.includes(ref.toLowerCase());
+      }
+      if (!claimExists) {
+        return res.status(422).json({
+          message: "That claim was not found on the subject's resume, so it cannot be confirmed.",
+        });
+      }
+
+      // Confirmer identity is snapshotted from the actor, never the request body.
+      const confirmerOrg = isProvider
+        ? providers[0].name
+        : isInstructor
+          ? (actor.institution ?? actor.name)
+          : (actor.institution ?? actor.name ?? "ARK Admin");
+      const confirmerLogoUrl = isProvider ? (providers[0].logoUrl ?? null) : null;
+      const row = await storage.upsertSkillConfirmation({
+        userId: parsed.data.userId,
+        type: parsed.data.type,
+        targetRef: ref,
+        targetLabel: parsed.data.targetLabel ?? null,
+        status: parsed.data.status ?? "CONFIRMED",
+        confirmerUserId: actorId,
+        confirmerOrg,
+        confirmerName: actor.name,
+        confirmerLogoUrl,
+        note: parsed.data.note ?? null,
+      });
+      return res.json(row);
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
@@ -4141,6 +4304,57 @@ export async function registerRoutes(
             { task: "Stakeholder Communication", automatable: 15 },
           ],
           matchedCardIds: ["codec-elephant", "codec-platform", "codec-business-processes", "codec-innovation", "codec-revenue"],
+          candidateName: "Alex Vance",
+          currentRole: "Senior Systems Analyst",
+          currentEmployer: "Vance Industries",
+          contactEmail: "alex.vance@example.com",
+          contactPhone: "+1 (415) 555-0142",
+          linkLinkedin: "linkedin.com/in/alexvance",
+          linkGithub: "github.com/alexvance",
+          linkPortfolio: "alexvance.dev",
+          academicQuals: [
+            "B.Sc. Computer Science — University of Washington (2014)",
+            "M.Sc. Data Science — Georgia Tech (2018)",
+          ],
+          professionalQuals: [
+            "AWS Solutions Architect — Associate",
+            "Context Craft Certified (CC-400 / Gold)",
+          ],
+          workHistory: [
+            {
+              company: "Vance Industries",
+              role: "Senior Systems Analyst",
+              startDate: "2020",
+              endDate: "Present",
+              location: "Global / Remote",
+              highlights: [
+                "Re-architected the core platform integration layer, cutting incident volume 38% across 12 services.",
+                "Drove a business process automation initiative that recovered 1,200 analyst-hours per quarter.",
+                "Partnered with product to ship 3 innovation pilots, two of which graduated to GA.",
+              ],
+            },
+            {
+              company: "Northwind Analytics",
+              role: "Systems Analyst",
+              startDate: "2016",
+              endDate: "2020",
+              location: "Seattle, WA",
+              highlights: [
+                "Built revenue reporting pipelines feeding a $40M ARR sales org.",
+                "Reduced data-entry workload 55% by introducing validated intake workflows.",
+              ],
+            },
+            {
+              company: "Cascade Software",
+              role: "Junior Developer",
+              startDate: "2014",
+              endDate: "2016",
+              location: "Portland, OR",
+              highlights: [
+                "Shipped customer-facing dashboards used by 5,000+ monthly users.",
+              ],
+            },
+          ],
         });
 
         await storage.createUpskillingPlans([
@@ -4169,6 +4383,141 @@ export async function registerRoutes(
           { assessmentId: assessment.id, subject: "Execution Speed", score: 75 },
           { assessmentId: assessment.id, subject: "Strategic Vision", score: 60 },
         ]);
+      }
+
+      // Task #59 — ARK RESUME demo fixtures. Idempotent + runs regardless of
+      // whether the demo user was freshly created, so an already-seeded DB also
+      // becomes eligible and renders the living trust layer.
+      const demoForResume = await storage.getUserByUsername("analyst@enterprise.com");
+      if (demoForResume) {
+        // Eligibility: at least one Primitive Card verified at Silver+.
+        // (Pro+ is granted via the ENTERPRISE plan upgrade below.)
+        await storage.finalizeCardVerification({
+          userId: demoForResume.id,
+          cardId: "codec-elephant",
+          score: 84,
+          tier: "Gold",
+          submissions: [],
+        });
+        await storage.finalizeCardVerification({
+          userId: demoForResume.id,
+          cardId: "codec-platform",
+          score: 74,
+          tier: "Silver",
+          submissions: [],
+        });
+
+        // Set the demo bio (contact / links / work history / quals) on the
+        // latest assessment so an already-seeded DB also renders the full sheet.
+        const latest = await storage.getLatestAssessment(demoForResume.id);
+        if (latest) {
+          await storage.updateAssessmentProfile(latest.id, {
+            contactEmail: "alex.vance@example.com",
+            contactPhone: "+1 (415) 555-0142",
+            linkLinkedin: "linkedin.com/in/alexvance",
+            linkGithub: "github.com/alexvance",
+            linkPortfolio: "alexvance.dev",
+            academicQuals: [
+              "B.Sc. Computer Science — University of Washington (2014)",
+              "M.Sc. Data Science — Georgia Tech (2018)",
+            ],
+            professionalQuals: [
+              "AWS Solutions Architect — Associate",
+              "Context Craft Certified (CC-400 / Gold)",
+            ],
+            workHistory: [
+              {
+                company: "Vance Industries",
+                role: "Senior Systems Analyst",
+                startDate: "2022",
+                endDate: "Present",
+                location: "San Francisco, CA",
+                highlights: [
+                  "Led the data-modernization program across 4 business units, cutting reporting latency 60%.",
+                  "Built the analytics platform now used by 1,200+ internal stakeholders.",
+                ],
+              },
+              {
+                company: "Northwind Analytics",
+                role: "Systems Analyst",
+                startDate: "2019",
+                endDate: "2022",
+                location: "Seattle, WA",
+                highlights: [
+                  "Owned ETL pipelines feeding executive dashboards for a $400M product line.",
+                  "Introduced automated data-quality checks reducing incidents 45%.",
+                ],
+              },
+              {
+                company: "Meridian Consulting",
+                role: "Junior Analyst",
+                startDate: "2017",
+                endDate: "2019",
+                location: "Portland, OR",
+                highlights: [
+                  "Delivered client-facing reporting suites across 6 engagements.",
+                ],
+              },
+            ],
+          });
+        }
+
+        // Confirmer (a training provider owner) + sample confirmations so the
+        // "living trust" layer renders on the demo ARK RESUME.
+        let confirmer = await storage.getUserByUsername("registrar@vance.edu");
+        if (!confirmer) {
+          confirmer = await storage.createUser({
+            username: "registrar@vance.edu",
+            password: "arkplatform",
+            name: "Dana Reyes",
+            role: "Registrar",
+            seniority: "Senior",
+            location: "Global",
+          });
+          await storage.createTrainingProvider({
+            name: "Vance Academy",
+            slug: "vance-academy",
+            description: "Internal upskilling & credential registrar for Vance Industries.",
+            ownerUserId: confirmer.id,
+            status: "approved",
+          });
+        }
+        await storage.upsertSkillConfirmation({
+          userId: demoForResume.id,
+          type: "EMPLOYMENT",
+          targetRef: "Northwind Analytics",
+          targetLabel: "Systems Analyst — Northwind Analytics",
+          status: "CONFIRMED",
+          confirmerUserId: confirmer.id,
+          confirmerOrg: "Vance Academy",
+          confirmerName: "Dana Reyes",
+          confirmerLogoUrl: null,
+          note: "Employment dates and title verified against HR records.",
+        });
+        await storage.upsertSkillConfirmation({
+          userId: demoForResume.id,
+          type: "SKILL",
+          targetRef: "codec-elephant",
+          targetLabel: "Verified skill: Strategic Scale",
+          status: "CONFIRMED",
+          confirmerUserId: confirmer.id,
+          confirmerOrg: "Vance Academy",
+          confirmerName: "Dana Reyes",
+          confirmerLogoUrl: null,
+          note: "Gold-tier verification independently reviewed.",
+        });
+        await storage.upsertSkillConfirmation({
+          userId: demoForResume.id,
+          type: "EMPLOYMENT",
+          targetRef: "Vance Industries",
+          targetLabel: "Senior Systems Analyst — Vance Industries",
+          status: "PENDING",
+          confirmerUserId: confirmer.id,
+          confirmerOrg: "Vance Academy",
+          confirmerName: "Dana Reyes",
+          confirmerLogoUrl: null,
+          note: "Awaiting manager sign-off.",
+        });
       }
 
       // Task #25 — make the demo user an institution (ENTERPRISE) admin so the
