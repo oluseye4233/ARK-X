@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader2, FileText, FileImage, FileType2, Upload, Lock, X, ShieldCheck, Clock, ShieldX, HelpCircle, Mail, Send, Copy, Check } from "lucide-react";
+import { Loader2, FileText, FileImage, FileType2, Upload, Lock, X, ShieldCheck, Clock, ShieldX, HelpCircle, Mail, Send, Copy, Check, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/useAuth";
 import { api } from "@/lib/api";
@@ -151,6 +151,10 @@ export default function ArkResumePage() {
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // Task #65 — pending-invite lifecycle (revoke / resend) state.
+  const [inviteActionId, setInviteActionId] = useState<string | null>(null);
+  const [resentLinks, setResentLinks] = useState<Record<string, string>>({});
+  const [copiedResentId, setCopiedResentId] = useState<string | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -213,6 +217,43 @@ export default function ArkResumePage() {
       setInviteError(e.message || "Could not create the invite.");
     } finally {
       setInviteSubmitting(false);
+    }
+  };
+
+  const revokeInvite = async (id: string) => {
+    setInviteActionId(id);
+    try {
+      await api.revokeConfirmationInvite(id);
+      loadInvites();
+    } catch {
+      /* surfaced via reload; row stays as-is on failure */
+    } finally {
+      setInviteActionId(null);
+    }
+  };
+
+  const resendInvite = async (id: string) => {
+    setInviteActionId(id);
+    try {
+      const res = await api.resendConfirmationInvite(id);
+      setResentLinks((prev) => ({ ...prev, [id]: `${window.location.origin}${res.path}` }));
+      loadInvites();
+    } catch {
+      /* surfaced via reload; row stays as-is on failure */
+    } finally {
+      setInviteActionId(null);
+    }
+  };
+
+  const copyResentLink = async (id: string) => {
+    const link = resentLinks[id];
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopiedResentId(id);
+      setTimeout(() => setCopiedResentId((cur) => (cur === id ? null : cur)), 2000);
+    } catch {
+      /* clipboard unavailable — the link is still selectable in the field */
     }
   };
 
@@ -362,9 +403,10 @@ export default function ArkResumePage() {
   const skillConf = (cardId: string) => skillByKey.get(cardId.toLowerCase()) ?? null;
   const certConf = (label: string) =>
     certConfs.find((c) => certMatches(label, String(c.targetRef))) ?? null;
-  // Generic lookup for the Confirmation Requests panel: index every confirmation
-  // by `${type}:${targetRef}` so a claim can show whether a request already
-  // resolved (the candidate's own view; badge rendering uses the tolerant maps above).
+  // Per-claim confirmation status lookup for the Request Confirmations panel,
+  // keyed exactly as that panel queries it: `${type}:${targetRef.toLowerCase()}`
+  // — so a claim can show whether a request already resolved (the candidate's own
+  // view; badge rendering uses the tolerant maps above).
   const confByKey = new Map<string, any>();
   for (const c of allConfs) {
     confByKey.set(`${c.type}:${String(c.targetRef).toLowerCase()}`, c);
@@ -633,6 +675,12 @@ export default function ArkResumePage() {
         invites={invites}
         confByKey={confByKey}
         onRequest={openInvite}
+        onRevoke={revokeInvite}
+        onResend={resendInvite}
+        actioningId={inviteActionId}
+        resentLinks={resentLinks}
+        copiedResentId={copiedResentId}
+        onCopyResent={copyResentLink}
       />
     </div>
 
@@ -679,11 +727,23 @@ function ConfirmationRequests({
   invites,
   confByKey,
   onRequest,
+  onRevoke,
+  onResend,
+  actioningId,
+  resentLinks,
+  copiedResentId,
+  onCopyResent,
 }: {
   data: any;
   invites: any[];
   confByKey: Map<string, any>;
   onRequest: (claim: { type: "EMPLOYMENT" | "CERTIFICATION" | "SKILL"; targetRef: string; targetLabel: string }) => void;
+  onRevoke: (id: string) => void;
+  onResend: (id: string) => void;
+  actioningId: string | null;
+  resentLinks: Record<string, string>;
+  copiedResentId: string | null;
+  onCopyResent: (id: string) => void;
 }) {
   type ClaimRow = { type: "EMPLOYMENT" | "CERTIFICATION" | "SKILL"; targetRef: string; targetLabel: string; group: string };
   const claims: ClaimRow[] = [];
@@ -758,20 +818,77 @@ function ConfirmationRequests({
       {invites.length > 0 && (
         <div className="mt-5">
           <h3 className="text-sm font-bold text-white mb-2">Sent Requests</h3>
-          <div className="space-y-1.5">
+          <div className="space-y-2.5">
             {invites.map((inv) => {
               const m = INVITE_STATUS_META[inv.status] ?? INVITE_STATUS_META.PENDING;
+              const busy = actioningId === inv.id;
+              const canRevoke = inv.status === "PENDING";
+              const canResend = inv.status === "PENDING" || inv.status === "EXPIRED";
+              const resentLink = resentLinks[inv.id];
               return (
                 <div
                   key={inv.id}
-                  className="flex items-center justify-between gap-3 text-xs border-b border-border/50 pb-1.5"
+                  className="text-xs border-b border-border/50 pb-2"
                   data-testid={`row-invite-${inv.id}`}
                 >
-                  <div className="min-w-0">
-                    <span className="text-white truncate">{inv.targetLabel ?? inv.targetRef}</span>
-                    <span className="text-muted-foreground"> → {inv.recipientEmail}</span>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <span className="text-white truncate">{inv.targetLabel ?? inv.targetRef}</span>
+                      <span className="text-muted-foreground"> → {inv.recipientEmail}</span>
+                    </div>
+                    <span className="font-bold shrink-0" style={{ color: m.color }} data-testid={`text-invite-status-${inv.id}`}>
+                      {m.label}
+                    </span>
                   </div>
-                  <span className="font-bold shrink-0" style={{ color: m.color }}>{m.label}</span>
+                  {(canRevoke || canResend) && (
+                    <div className="flex items-center gap-2 mt-1.5">
+                      {canResend && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          disabled={busy}
+                          onClick={() => onResend(inv.id)}
+                          data-testid={`button-resend-invite-${inv.id}`}
+                        >
+                          <RotateCw className="w-3 h-3 mr-1" />
+                          {inv.status === "EXPIRED" ? "Resend link" : "New link"}
+                        </Button>
+                      )}
+                      {canRevoke && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                          disabled={busy}
+                          onClick={() => onRevoke(inv.id)}
+                          data-testid={`button-revoke-invite-${inv.id}`}
+                        >
+                          <X className="w-3 h-3 mr-1" />
+                          Revoke
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                  {resentLink && (
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <input
+                        readOnly
+                        value={resentLink}
+                        className="flex-1 min-w-0 bg-background/60 border border-border rounded px-2 py-1 font-mono text-[11px] text-muted-foreground"
+                        data-testid={`input-resent-link-${inv.id}`}
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs shrink-0"
+                        onClick={() => onCopyResent(inv.id)}
+                        data-testid={`button-copy-resent-${inv.id}`}
+                      >
+                        {copiedResentId === inv.id ? "Copied!" : "Copy"}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               );
             })}

@@ -142,6 +142,8 @@ export interface IStorage {
       responseNote?: string | null;
     },
   ): Promise<{ invite: ConfirmationInvite; confirmation: SkillConfirmation }>;
+  revokeConfirmationInvite(id: string, userId: string): Promise<ConfirmationInvite | undefined>;
+  resendConfirmationInvite(id: string, userId: string): Promise<ConfirmationInvite | undefined>;
 
   createUpskillingPlans(plans: InsertUpskillingPlan[]): Promise<UpskillingPlan[]>;
   getUpskillingPlansByAssessment(assessmentId: string): Promise<UpskillingPlan[]>;
@@ -775,6 +777,47 @@ export class DatabaseStorage implements IStorage {
 
       return { invite: updatedInvite, confirmation };
     });
+  }
+
+  // Candidate-driven lifecycle (Task #65). Revoke a PENDING invite the candidate
+  // sent in error: flip it to EXPIRED so the no-login token immediately stops
+  // working (the respond path rejects any non-PENDING invite). Scoped to the
+  // owner; only a PENDING invite is revocable (already-answered invites keep
+  // their audit status).
+  async revokeConfirmationInvite(id: string, userId: string): Promise<ConfirmationInvite | undefined> {
+    const [row] = await db
+      .update(confirmationInvites)
+      .set({ status: "EXPIRED" })
+      .where(
+        and(
+          eq(confirmationInvites.id, id),
+          eq(confirmationInvites.userId, userId),
+          eq(confirmationInvites.status, "PENDING"),
+        ),
+      )
+      .returning();
+    return row;
+  }
+
+  // Resend/regenerate a link for a PENDING or EXPIRED invite: mint a fresh token
+  // (invalidating any previously-shared link), reset the TTL window, and return
+  // it to PENDING. Scoped to the owner. Already-answered (APPROVED/REJECTED)
+  // invites cannot be reopened — the candidate must send a new request instead.
+  async resendConfirmationInvite(id: string, userId: string): Promise<ConfirmationInvite | undefined> {
+    const token = randomBytes(24).toString("base64url");
+    const expiresAt = new Date(Date.now() + CONFIRMATION_INVITE_TTL_DAYS * 86_400_000);
+    const [row] = await db
+      .update(confirmationInvites)
+      .set({ token, status: "PENDING", expiresAt, responseNote: null, respondedAt: null })
+      .where(
+        and(
+          eq(confirmationInvites.id, id),
+          eq(confirmationInvites.userId, userId),
+          inArray(confirmationInvites.status, ["PENDING", "EXPIRED"]),
+        ),
+      )
+      .returning();
+    return row;
   }
 
   async updateAssessmentScore(

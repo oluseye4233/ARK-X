@@ -2085,6 +2085,59 @@ export async function registerRoutes(
     }
   });
 
+  // Revoke a PENDING invite the candidate sent in error (e.g. wrong email). The
+  // token immediately stops working (flipped to EXPIRED). Owner-scoped; a 404 is
+  // returned if the invite isn't the caller's or is no longer PENDING.
+  app.post("/api/ark-resume/confirmation-invites/:id/revoke", requireFeature("arkResume"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const invite = await storage.revokeConfirmationInvite(String(req.params.id), userId);
+      if (!invite) {
+        return res.status(404).json({ message: "That request can't be revoked — it isn't pending or doesn't exist." });
+      }
+      return res.json({ invite });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Resend / regenerate a link for a PENDING or EXPIRED invite (e.g. to a
+  // corrected address, or after a revoke). Mints a fresh token — any previously
+  // shared link is invalidated — and resets the expiry window. Owner-scoped.
+  // Returns the same { invite, path, emailPreview } shape as create so the UI can
+  // surface the new shareable link.
+  app.post("/api/ark-resume/confirmation-invites/:id/resend", requireFeature("arkResume"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found." });
+      const invite = await storage.resendConfirmationInvite(String(req.params.id), userId);
+      if (!invite) {
+        return res.status(404).json({ message: "That request can't be resent — it was already answered or doesn't exist." });
+      }
+      const path = `/confirm/${invite.token}`;
+      const claimLabel = invite.targetLabel ?? invite.targetRef;
+      return res.json({
+        invite,
+        path,
+        emailPreview: {
+          to: invite.recipientEmail,
+          subject: `${user.name} asked you to confirm a résumé claim on ARK`,
+          body:
+            `Hi${invite.recipientName ? ` ${invite.recipientName}` : ""},\n\n` +
+            `${user.name} listed "${claimLabel}" on their ARK résumé and has asked you to confirm it. ` +
+            `Open the link below to approve or decline — no account needed. ` +
+            `This link expires in ${CONFIRMATION_INVITE_TTL_DAYS} days.\n\n` +
+            `{{LINK}}\n\n` +
+            (invite.note ? `Their message: "${invite.note}"\n\n` : "") +
+            `— ARK Platform`,
+        },
+      });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
   // Public, NO-auth view of a single invite by token. Returns only what the
   // recipient needs to make a decision (claim label/type, who is asking, expiry,
   // current status) — a deliberately narrow DTO, never the owner's full record.

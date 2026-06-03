@@ -574,6 +574,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  revokeConfirmationInvite: (id: string) =>
+    apiRequest(`/api/ark-resume/confirmation-invites/${id}/revoke`, { method: "POST" }),
+  resendConfirmationInvite: (id: string) =>
+    apiRequest(`/api/ark-resume/confirmation-invites/${id}/resend`, { method: "POST" }),
   getConfirmationInvite: (token: string) => apiRequest(`/api/confirmation-invites/${token}`),
   respondConfirmationInvite: (
     token: string,
