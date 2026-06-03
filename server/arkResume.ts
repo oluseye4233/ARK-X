@@ -205,6 +205,48 @@ export function buildVerifiedDeck(verifications: CardVerification[]): VerifiedCa
     .sort((a, b) => (tierRank[b.tier ?? ""] ?? 0) - (tierRank[a.tier ?? ""] ?? 0));
 }
 
+// Build the FULL living deck shown on the resume: every verified card (tier set)
+// PLUS every matched-but-not-yet-verified Primitive Card, the latter carrying
+// tier=null / status="UNVERIFIED" so the UI can render "Yet to verify". Verified
+// cards sort first (by tier), unverified matched cards trail. Only cards that
+// resolve to a known CODEC primitive are included.
+export function buildCardDeck(
+  verifications: CardVerification[],
+  matchedCardIds: string[],
+): VerifiedCard[] {
+  const tierRank: Record<string, number> = { Platinum: 4, Gold: 3, Silver: 2, Bronze: 1 };
+  const verById = new Map<string, CardVerification>();
+  for (const v of verifications) if (v.tier) verById.set(v.cardId, v);
+  // Verified cards first, then any matched ids not already verified.
+  const orderedIds = [
+    ...Array.from(verById.keys()),
+    ...matchedCardIds.filter((id) => !verById.has(id)),
+  ];
+  const seen = new Set<string>();
+  const cards: VerifiedCard[] = [];
+  for (const id of orderedIds) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const p = CODEC_BY_ID[id];
+    if (!p) continue;
+    const v = verById.get(id);
+    cards.push({
+      cardId: id,
+      name: p.name,
+      emoji: p.emoji,
+      category: p.category,
+      persona: p.persona,
+      tier: v?.tier ?? null,
+      score: v?.score ?? 0,
+      status: v?.tier ? v.status : "UNVERIFIED",
+      mappings: p.mappings,
+    });
+  }
+  return cards.sort(
+    (a, b) => (tierRank[b.tier ?? ""] ?? 0) - (tierRank[a.tier ?? ""] ?? 0),
+  );
+}
+
 // Deterministic card→company mapping: score each card's match keywords against
 // the company's text blob (company + role + highlights). Returns, per company
 // index, the ids of cards whose keywords hit. This is the reliable fallback the
@@ -348,12 +390,15 @@ export async function buildArkResume(userId: string): Promise<ArkResumePayload |
   if (!user) return null;
 
   const eligibility = checkResumeEligibility(user, verifications);
-  const verifiedDeck = buildVerifiedDeck(verifications);
+  const verifiedOnlyCount = buildVerifiedDeck(verifications).length;
 
   const a: Assessment | undefined = assessment;
   const workHistoryRaw = ((a?.workHistory ?? []) as WorkHistoryEntry[]) || [];
 
-  // Map verified cards to companies (best-effort AI, keyword fallback).
+  // Full living deck = verified cards + matched-but-unverified ("Yet to verify").
+  const verifiedDeck = buildCardDeck(verifications, a?.matchedCardIds ?? []);
+
+  // Map all living cards to companies (best-effort AI, keyword fallback).
   const mapping = await aiMapCardsToCompanies(workHistoryRaw, verifiedDeck);
   const deckById = new Map(verifiedDeck.map((c) => [c.cardId, c]));
 
@@ -370,7 +415,7 @@ export async function buildArkResume(userId: string): Promise<ArkResumePayload |
   }));
 
   const ats = a
-    ? computeAtsScore({ assessment: a, verifiedCount: verifiedDeck.length })
+    ? computeAtsScore({ assessment: a, verifiedCount: verifiedOnlyCount })
     : { score: 0, band: "Needs Work" as const, items: [] };
 
   return {

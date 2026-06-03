@@ -27,7 +27,15 @@ const STATUS_META: Record<string, { label: string; color: string; Icon: typeof S
   UNVERIFIED: { label: "Unverified", color: ATANDA.sub, Icon: HelpCircle },
 };
 
-function StatusBadge({ status, org }: { status: string; org?: string | null }) {
+function StatusBadge({
+  status,
+  org,
+  logoUrl,
+}: {
+  status: string;
+  org?: string | null;
+  logoUrl?: string | null;
+}) {
   const m = STATUS_META[status] ?? STATUS_META.UNVERIFIED;
   const Icon = m.Icon;
   return (
@@ -48,13 +56,46 @@ function StatusBadge({ status, org }: { status: string; org?: string | null }) {
     >
       <Icon style={{ width: 11, height: 11 }} />
       {m.label}
-      {org ? ` · ${org}` : ""}
+      {org ? (
+        <>
+          {" · "}
+          {logoUrl ? (
+            <img
+              src={logoUrl}
+              alt=""
+              style={{ width: 12, height: 12, borderRadius: 2, objectFit: "contain" }}
+            />
+          ) : null}
+          {org}
+        </>
+      ) : (
+        ""
+      )}
     </span>
   );
 }
 
+// Verification tier chip. Verified cards show their tier; matched-but-unverified
+// cards render an explicit "Yet to verify" pill so the living layer is complete.
 function TierChip({ tier }: { tier: string | null }) {
-  if (!tier) return null;
+  if (!tier) {
+    return (
+      <span
+        style={{
+          fontSize: 9,
+          fontWeight: 700,
+          color: ATANDA.sub,
+          background: ATANDA.panel,
+          border: `1px dashed ${ATANDA.line}`,
+          borderRadius: 4,
+          padding: "1px 6px",
+          whiteSpace: "nowrap",
+        }}
+      >
+        Yet to verify
+      </span>
+    );
+  }
   const color = TIER_HEX[tier] ?? ATANDA.sub;
   return (
     <span
@@ -377,7 +418,7 @@ export default function ArkResumePage() {
                       <div style={{ fontSize: 9, color: ATANDA.sub }}>{c.category}</div>
                     </div>
                     <TierChip tier={c.tier} />
-                    {(() => { const sc = skillConf(c.cardId); return sc ? <StatusBadge status={sc.status} org={sc.confirmerOrg} /> : null; })()}
+                    {(() => { const sc = skillConf(c.cardId); return sc ? <StatusBadge status={sc.status} org={sc.confirmerOrg} logoUrl={sc.confirmerLogoUrl} /> : null; })()}
                   </div>
                 ))}
               </div>
@@ -403,6 +444,7 @@ export default function ArkResumePage() {
                       <StatusBadge
                         status={w.confirmation?.status ?? "UNVERIFIED"}
                         org={w.confirmation?.confirmerOrg}
+                        logoUrl={w.confirmation?.confirmerLogoUrl}
                       />
                     )}
                   </div>
@@ -452,7 +494,7 @@ export default function ArkResumePage() {
                     <li key={i} style={{ fontSize: 11.5, lineHeight: 1.6 }}>
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         {c}
-                        {cc && <StatusBadge status={cc.status} org={cc.confirmerOrg} />}
+                        <StatusBadge status={cc?.status ?? "UNVERIFIED"} org={cc?.confirmerOrg} logoUrl={cc?.confirmerLogoUrl} />
                       </span>
                     </li>
                   );
