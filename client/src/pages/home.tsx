@@ -170,26 +170,6 @@ export default function Home() {
               </Link>
             </div>
           )}
-          <div className="relative group">
-            {/* Outer pulse ring */}
-            <span
-              aria-hidden="true"
-              className="absolute -inset-3 rounded-full bg-primary/30 blur-2xl animate-ping-slow pointer-events-none"
-            />
-            {/* Inner steady glow */}
-            <span
-              aria-hidden="true"
-              className="absolute -inset-1 rounded-full bg-primary/40 blur-xl pointer-events-none"
-            />
-            <Link
-              href="/free"
-              data-testid="button-start-assessment"
-              className="relative inline-flex items-center justify-center bg-primary hover:bg-primary/90 text-primary-foreground font-mono uppercase tracking-wider rounded-none neon-border h-16 px-6 sm:px-12 transition-all hover:scale-[1.04] text-base font-bold shadow-[0_0_30px_hsl(var(--primary)/0.6)] animate-throb-glow"
-            >
-              Claim Free JST Assessment <ArrowRight className="ml-3 h-6 w-6" />
-            </Link>
-          </div>
-
           {/* Secondary CTA — guided demo tour. Magenta/fuchsia glow so it
               reads as a distinct "preview first" option vs the cyan primary. */}
           <div className="relative group">

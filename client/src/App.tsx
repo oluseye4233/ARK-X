@@ -8,7 +8,6 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { FEATURES } from "@shared/featureFlags";
 import Home from "@/pages/home";
-import FreeAssessment from "@/pages/free-assessment";
 import UploadPage from "@/pages/upload";
 import Dashboard from "@/pages/dashboard";
 import PathwaysPage from "@/pages/pathways";
@@ -44,7 +43,6 @@ function Router() {
       <Switch>
         {/* ── MVP CLASS A surfaces (always on) ───────────────────────── */}
         <Route path="/" component={Home} />
-        <Route path="/free" component={FreeAssessment} />
         <Route path="/login" component={LoginPage} />
         <Route path="/signup" component={LoginPage} />
         <Route path="/upload" component={UploadPage} />
