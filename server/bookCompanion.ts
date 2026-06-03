@@ -208,7 +208,7 @@ export async function buildJourney(userId: string): Promise<JourneyView> {
     };
   });
   return {
-    bookTitle: "Context Craft: The Last Skill",
+    bookTitle: "Context Craft: An AI Survival Guide",
     totalNodes: JOURNEY_NODES.length,
     earnedCount: badges.filter((b) => JOURNEY_NODES.some((n) => n.id === b.nodeId)).length,
     nodes,

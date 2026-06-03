@@ -2,7 +2,7 @@
  * Context Craft Book Companion (Task #22)
  * ----------------------------------------
  * Canonical, framework-authoritative map between the 13 journey nodes of the
- * book *Context Craft: The Last Skill* (Prologue + Chapters 1–11 + Epilogue)
+ * book *Context Craft: An AI Survival Guide* (Prologue + Chapters 1–11 + Epilogue)
  * and the REAL platform surfaces that prove each chapter's skill.
  *
  * HONESTY GATE (threat_model G3): every destination resolves to a live in-app
@@ -365,5 +365,5 @@ export function slugDirectory(): Array<{
   }));
 }
 
-export const BOOK_TITLE = "Context Craft: The Last Skill" as const;
+export const BOOK_TITLE = "Context Craft: An AI Survival Guide" as const;
 export const BOOK_TOTAL_NODES = JOURNEY_NODES.length; // 13
