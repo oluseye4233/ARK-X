@@ -42,7 +42,7 @@ import { scoreSessionWithClaude } from "./ai/kcse";
 import { generateResumeNarrative, ProTierRequiredError } from "./ai/narrative";
 import { CODEC_PRIMITIVES, CODEC_BY_ID } from "@shared/codec-primitives";
 import { generateScenario } from "./ai/scenarioGen";
-import { buildArkResume } from "./arkResume";
+import { buildArkResume, checkResumeEligibility } from "./arkResume";
 import {
   scoreUserForOpportunity,
   skillGapForOpportunity,
@@ -59,7 +59,7 @@ import {
   type InsertOpportunity,
   type InsertOpportunityRequirement,
 } from "@shared/schema";
-import { CONFIRMATION_TYPES, CONFIRMATION_STATUSES } from "@shared/schema";
+import { CONFIRMATION_TYPES, CONFIRMATION_STATUSES, CONFIRMATION_INVITE_TTL_DAYS, type ConfirmationType } from "@shared/schema";
 import { getTierStatus } from "./ai/usage";
 import { isClaudeAvailable, resolveUseClaude } from "./ai/client";
 import {
@@ -172,6 +172,40 @@ function signCommandCentreHandoff(payload: Record<string, unknown>): string {
   const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const sig = createHmac("sha256", handoffSecret()).update(body).digest("base64url");
   return `${body}.${sig}`;
+}
+
+// Validate a cited resume claim actually exists on a subject's resume, using the
+// SAME matching the resume builder uses on read so a confirmation (internal OR
+// via external invite) can never silently orphan against a non-existent claim.
+// SKILL → a verification cardId; EMPLOYMENT → a company in the latest assessment
+// work history; CERTIFICATION → one of the subject's professional qualifications.
+async function claimExistsOnResume(
+  subjectId: string,
+  type: ConfirmationType,
+  targetRef: string,
+): Promise<boolean> {
+  const ref = targetRef.trim();
+  const [assessment, verifications] = await Promise.all([
+    storage.getLatestAssessment(subjectId),
+    storage.getCardVerifications(subjectId),
+  ]);
+  // SKILL stays an exact card-id match (ids are stable). EMPLOYMENT and
+  // CERTIFICATION use tolerant matching (suffixes, punctuation, casing, minor
+  // typos) — the SAME comparison the resume builder uses on read — so a
+  // confirmation against a reasonable variant of a claim is accepted and later
+  // renders instead of silently orphaning.
+  if (type === "SKILL") {
+    return verifications.some((v) => v.cardId.toLowerCase() === ref.toLowerCase());
+  }
+  if (type === "EMPLOYMENT") {
+    const companies = ((assessment?.workHistory ?? []) as { company?: string }[])
+      .map((w) => w.company ?? "");
+    return companies.some((c) => companyMatches(c, ref));
+  }
+  if (type === "CERTIFICATION") {
+    return (assessment?.professionalQuals ?? []).some((c) => certMatches(c, ref));
+  }
+  return false;
 }
 
 export async function registerRoutes(
@@ -1923,32 +1957,11 @@ export async function registerRoutes(
       const subject = await storage.getUser(parsed.data.userId);
       if (!subject) return res.status(404).json({ message: "Subject user not found." });
 
-      // Validate the cited claim exists on the subject's resume, using the SAME
-      // matching the resume builder uses on read so a confirmation can never
-      // silently orphan. SKILL → a Silver+/any verification cardId; EMPLOYMENT →
-      // a company in the latest assessment work history; CERTIFICATION → one of
-      // the subject's professional qualifications.
+      // Validate the cited claim exists on the subject's resume (shared matcher).
       const ref = parsed.data.targetRef.trim();
-      const [subjectAssessment, subjectVerifications] = await Promise.all([
-        storage.getLatestAssessment(subject.id),
-        storage.getCardVerifications(subject.id),
-      ]);
-      // SKILL stays an exact card-id match (ids are stable). EMPLOYMENT and
-      // CERTIFICATION use tolerant matching (suffixes, punctuation, casing,
-      // minor typos) — the SAME comparison the resume builder uses on read — so
-      // a confirmation against a reasonable variant of a claim is accepted and
-      // later renders instead of silently orphaning.
-      let claimExists = false;
-      if (parsed.data.type === "SKILL") {
-        claimExists = subjectVerifications.some((v) => v.cardId.toLowerCase() === ref.toLowerCase());
-      } else if (parsed.data.type === "EMPLOYMENT") {
-        const companies = ((subjectAssessment?.workHistory ?? []) as { company?: string }[])
-          .map((w) => w.company ?? "");
-        claimExists = companies.some((c) => companyMatches(c, ref));
-      } else if (parsed.data.type === "CERTIFICATION") {
-        const certs = subjectAssessment?.professionalQuals ?? [];
-        claimExists = certs.some((c) => certMatches(c, ref));
-      }
+      // Tolerant matching (Task #61) now lives inside the shared helper so this
+      // route AND the external invite route both accept reasonable claim variants.
+      const claimExists = await claimExistsOnResume(subject.id, parsed.data.type, ref);
       if (!claimExists) {
         return res.status(422).json({
           message: "That claim was not found on the subject's resume, so it cannot be confirmed.",
@@ -1975,6 +1988,179 @@ export async function registerRoutes(
         note: parsed.data.note ?? null,
       });
       return res.json(row);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── ARK RESUME external confirmation invites (Task #60) ──────
+  // The candidate-driven path: a subscriber invites an EXTERNAL party (a former
+  // manager, a registrar — no platform account) by email to confirm ONE of their
+  // OWN resume claims. We mint an unguessable token; the recipient opens
+  // /confirm/:token with NO login to approve/reject just that claim. Real email
+  // delivery is stubbed (this deployment has no mail transport) — we return the
+  // shareable link + an email preview so the candidate can send it, mirroring the
+  // existing assessment-summary stub.
+
+  // List the current user's own sent invites (the audit trail).
+  app.get("/api/ark-resume/confirmation-invites", requireFeature("arkResume"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const rows = await storage.getConfirmationInvitesByUser(userId);
+      return res.json(rows);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Create an invite for ONE of the caller's own claims. Eligibility mirrors the
+  // resume itself (Pro+ AND >=1 Silver+ verification) so only users who actually
+  // have a resume to confirm can send invites. The claim must exist on the
+  // caller's own resume (shared matcher) — you can only request confirmation of
+  // claims you actually make.
+  app.post("/api/ark-resume/confirmation-invites", requireFeature("arkResume"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found." });
+      const verifications = await storage.getCardVerifications(userId);
+      const eligibility = checkResumeEligibility(user, verifications);
+      if (!eligibility.eligible) {
+        return res.status(403).json({ message: eligibility.reason, eligibility });
+      }
+
+      const schema = z.object({
+        type: z.enum(CONFIRMATION_TYPES),
+        targetRef: z.string().trim().min(1).max(200),
+        targetLabel: z.string().trim().max(200).optional(),
+        recipientEmail: z.string().trim().email().max(200),
+        recipientName: z.string().trim().max(120).optional(),
+        recipientOrg: z.string().trim().max(160).optional(),
+        note: z.string().trim().max(1000).optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid invite." });
+      }
+
+      const ref = parsed.data.targetRef.trim();
+      const exists = await claimExistsOnResume(userId, parsed.data.type, ref);
+      if (!exists) {
+        return res.status(422).json({
+          message: "That claim was not found on your resume, so it cannot be sent for confirmation.",
+        });
+      }
+
+      const invite = await storage.createConfirmationInvite({
+        userId,
+        type: parsed.data.type,
+        targetRef: ref,
+        targetLabel: parsed.data.targetLabel ?? null,
+        recipientEmail: parsed.data.recipientEmail,
+        recipientName: parsed.data.recipientName ?? null,
+        recipientOrg: parsed.data.recipientOrg ?? null,
+        note: parsed.data.note ?? null,
+      });
+
+      const path = `/confirm/${invite.token}`;
+      const claimLabel = invite.targetLabel ?? invite.targetRef;
+      return res.json({
+        invite,
+        path,
+        emailPreview: {
+          to: invite.recipientEmail,
+          subject: `${user.name} asked you to confirm a résumé claim on ARK`,
+          body:
+            `Hi${invite.recipientName ? ` ${invite.recipientName}` : ""},\n\n` +
+            `${user.name} listed "${claimLabel}" on their ARK résumé and has asked you to confirm it. ` +
+            `Open the link below to approve or decline — no account needed. ` +
+            `This link expires in ${CONFIRMATION_INVITE_TTL_DAYS} days.\n\n` +
+            `{{LINK}}\n\n` +
+            (invite.note ? `Their message: "${invite.note}"\n\n` : "") +
+            `— ARK Platform`,
+        },
+      });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Public, NO-auth view of a single invite by token. Returns only what the
+  // recipient needs to make a decision (claim label/type, who is asking, expiry,
+  // current status) — a deliberately narrow DTO, never the owner's full record.
+  // A past-expiry PENDING invite is reported as EXPIRED.
+  app.get("/api/confirmation-invites/:token", requireFeature("arkResume"), async (req, res) => {
+    try {
+      const invite = await storage.getConfirmationInviteByToken(String(req.params.token));
+      if (!invite) return res.status(404).json({ message: "This confirmation link is not valid." });
+      const owner = await storage.getUser(invite.userId);
+      const expired = invite.status === "PENDING" && invite.expiresAt.getTime() < Date.now();
+      const status = expired ? "EXPIRED" : invite.status;
+      return res.json({
+        token: invite.token,
+        type: invite.type,
+        targetRef: invite.targetRef,
+        targetLabel: invite.targetLabel ?? invite.targetRef,
+        candidateName: owner?.name ?? "An ARK candidate",
+        recipientName: invite.recipientName,
+        recipientOrg: invite.recipientOrg,
+        note: invite.note,
+        status,
+        expiresAt: invite.expiresAt,
+        respondedAt: invite.respondedAt,
+        responseNote: invite.responseNote,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Public, NO-auth approve/reject of a single claim by token. Atomically upserts
+  // the resulting skill_confirmation (confirmerUserId null — external party) and
+  // stamps the invite responded. The responder identity is taken from THIS form
+  // (they have no account), defaulting org to the email domain the invite was
+  // sent to so a badge always carries an attributable organisation.
+  app.post("/api/confirmation-invites/:token/respond", requireFeature("arkResume"), async (req, res) => {
+    try {
+      const token = String(req.params.token);
+      const invite = await storage.getConfirmationInviteByToken(token);
+      if (!invite) return res.status(404).json({ message: "This confirmation link is not valid." });
+
+      const schema = z.object({
+        decision: z.enum(["approve", "reject"]),
+        responderName: z.string().trim().max(120).optional(),
+        responderOrg: z.string().trim().max(160).optional(),
+        responseNote: z.string().trim().max(1000).optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid response." });
+      }
+
+      const domain = invite.recipientEmail.split("@")[1] ?? "External";
+      const responderOrg =
+        parsed.data.responderOrg?.trim() || invite.recipientOrg?.trim() || domain;
+
+      try {
+        const { invite: updated } = await storage.resolveConfirmationInvite(token, {
+          decision: parsed.data.decision === "approve" ? "APPROVED" : "REJECTED",
+          responderName: parsed.data.responderName ?? null,
+          responderOrg,
+          responseNote: parsed.data.responseNote ?? null,
+        });
+        return res.json({ ok: true, status: updated.status });
+      } catch (e: any) {
+        if (e.message === "INVITE_NOT_FOUND") {
+          return res.status(404).json({ message: "This confirmation link is not valid." });
+        }
+        if (e.message === "INVITE_ALREADY_RESPONDED") {
+          return res.status(409).json({ message: "This confirmation request has already been answered." });
+        }
+        if (e.message === "INVITE_EXPIRED") {
+          return res.status(410).json({ message: "This confirmation request has expired." });
+        }
+        throw e;
+      }
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }

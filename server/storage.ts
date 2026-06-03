@@ -51,6 +51,8 @@ import {
   opportunities, type Opportunity, type InsertOpportunity,
   opportunityRequirements, type OpportunityRequirement, type InsertOpportunityRequirement,
   opportunityApplications, type OpportunityApplication, type InsertOpportunityApplication,
+  confirmationInvites, type ConfirmationInvite, type ConfirmationType,
+  CONFIRMATION_INVITE_TTL_DAYS,
 } from "@shared/schema";
 import { or } from "drizzle-orm";
 
@@ -117,6 +119,29 @@ export interface IStorage {
   setUserHeadshot(userId: string, dataUrl: string | null): Promise<User | undefined>;
   getSkillConfirmations(userId: string): Promise<SkillConfirmation[]>;
   upsertSkillConfirmation(row: InsertSkillConfirmation): Promise<SkillConfirmation>;
+
+  // ── ARK RESUME external confirmation invites (Task #60) ──
+  createConfirmationInvite(input: {
+    userId: string;
+    type: ConfirmationType;
+    targetRef: string;
+    targetLabel?: string | null;
+    recipientEmail: string;
+    recipientName?: string | null;
+    recipientOrg?: string | null;
+    note?: string | null;
+  }): Promise<ConfirmationInvite>;
+  getConfirmationInvitesByUser(userId: string): Promise<ConfirmationInvite[]>;
+  getConfirmationInviteByToken(token: string): Promise<ConfirmationInvite | undefined>;
+  resolveConfirmationInvite(
+    token: string,
+    opts: {
+      decision: "APPROVED" | "REJECTED";
+      responderName?: string | null;
+      responderOrg: string;
+      responseNote?: string | null;
+    },
+  ): Promise<{ invite: ConfirmationInvite; confirmation: SkillConfirmation }>;
 
   createUpskillingPlans(plans: InsertUpskillingPlan[]): Promise<UpskillingPlan[]>;
   getUpskillingPlansByAssessment(assessmentId: string): Promise<UpskillingPlan[]>;
@@ -625,6 +650,131 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return result;
+  }
+
+  // ── ARK RESUME external confirmation invites (Task #60) ──
+  // Mint an unguessable, single-claim invite the candidate emails to an external
+  // confirmer. Claim-existence is validated by the route before this is called.
+  async createConfirmationInvite(input: {
+    userId: string;
+    type: ConfirmationType;
+    targetRef: string;
+    targetLabel?: string | null;
+    recipientEmail: string;
+    recipientName?: string | null;
+    recipientOrg?: string | null;
+    note?: string | null;
+  }): Promise<ConfirmationInvite> {
+    const token = randomBytes(24).toString("base64url");
+    const expiresAt = new Date(Date.now() + CONFIRMATION_INVITE_TTL_DAYS * 86_400_000);
+    const [row] = await db
+      .insert(confirmationInvites)
+      .values({
+        token,
+        userId: input.userId,
+        type: input.type,
+        targetRef: input.targetRef,
+        targetLabel: input.targetLabel ?? null,
+        recipientEmail: input.recipientEmail,
+        recipientName: input.recipientName ?? null,
+        recipientOrg: input.recipientOrg ?? null,
+        note: input.note ?? null,
+        expiresAt,
+      })
+      .returning();
+    return row;
+  }
+
+  async getConfirmationInvitesByUser(userId: string): Promise<ConfirmationInvite[]> {
+    return await db
+      .select()
+      .from(confirmationInvites)
+      .where(eq(confirmationInvites.userId, userId))
+      .orderBy(desc(confirmationInvites.createdAt));
+  }
+
+  async getConfirmationInviteByToken(token: string): Promise<ConfirmationInvite | undefined> {
+    const rows = await db
+      .select()
+      .from(confirmationInvites)
+      .where(eq(confirmationInvites.token, token))
+      .limit(1);
+    return rows[0];
+  }
+
+  // Atomically resolve an invite: lock the row, reject if missing / already
+  // responded / expired (lazily flipping a past-expiry row to EXPIRED), then
+  // upsert the resulting skill_confirmation (confirmerUserId stays null — the
+  // external confirmer has no platform account) and stamp the invite responded.
+  async resolveConfirmationInvite(
+    token: string,
+    opts: {
+      decision: "APPROVED" | "REJECTED";
+      responderName?: string | null;
+      responderOrg: string;
+      responseNote?: string | null;
+    },
+  ): Promise<{ invite: ConfirmationInvite; confirmation: SkillConfirmation }> {
+    return await db.transaction(async (tx) => {
+      const [invite] = await tx
+        .select()
+        .from(confirmationInvites)
+        .where(eq(confirmationInvites.token, token))
+        .for("update");
+      if (!invite) throw new Error("INVITE_NOT_FOUND");
+      if (invite.status !== "PENDING") throw new Error("INVITE_ALREADY_RESPONDED");
+      if (invite.expiresAt.getTime() < Date.now()) {
+        await tx
+          .update(confirmationInvites)
+          .set({ status: "EXPIRED" })
+          .where(eq(confirmationInvites.id, invite.id));
+        throw new Error("INVITE_EXPIRED");
+      }
+
+      const confStatus = opts.decision === "APPROVED" ? "CONFIRMED" : "REJECTED";
+      const now = new Date();
+      const [confirmation] = await tx
+        .insert(skillConfirmations)
+        .values({
+          userId: invite.userId,
+          type: invite.type,
+          targetRef: invite.targetRef,
+          targetLabel: invite.targetLabel ?? null,
+          status: confStatus,
+          confirmerUserId: null,
+          confirmerOrg: opts.responderOrg,
+          confirmerName: opts.responderName ?? null,
+          confirmerLogoUrl: null,
+          note: opts.responseNote ?? null,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: [skillConfirmations.userId, skillConfirmations.type, skillConfirmations.targetRef],
+          set: {
+            status: confStatus,
+            targetLabel: invite.targetLabel ?? null,
+            confirmerUserId: null,
+            confirmerOrg: opts.responderOrg,
+            confirmerName: opts.responderName ?? null,
+            confirmerLogoUrl: null,
+            note: opts.responseNote ?? null,
+            updatedAt: now,
+          },
+        })
+        .returning();
+
+      const [updatedInvite] = await tx
+        .update(confirmationInvites)
+        .set({
+          status: opts.decision,
+          responseNote: opts.responseNote ?? null,
+          respondedAt: now,
+        })
+        .where(eq(confirmationInvites.id, invite.id))
+        .returning();
+
+      return { invite: updatedInvite, confirmation };
+    });
   }
 
   async updateAssessmentScore(

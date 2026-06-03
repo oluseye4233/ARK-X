@@ -558,4 +558,34 @@ export const api = {
     confirmerLogoUrl?: string;
     note?: string;
   }) => apiRequest("/api/confirmations", { method: "POST", body: JSON.stringify(data) }),
+
+  // ── ARK RESUME external confirmation invites (Task #60) ──
+  listConfirmationInvites: () => apiRequest("/api/ark-resume/confirmation-invites"),
+  createConfirmationInvite: (data: {
+    type: "EMPLOYMENT" | "CERTIFICATION" | "SKILL";
+    targetRef: string;
+    targetLabel?: string;
+    recipientEmail: string;
+    recipientName?: string;
+    recipientOrg?: string;
+    note?: string;
+  }) =>
+    apiRequest("/api/ark-resume/confirmation-invites", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  getConfirmationInvite: (token: string) => apiRequest(`/api/confirmation-invites/${token}`),
+  respondConfirmationInvite: (
+    token: string,
+    data: {
+      decision: "approve" | "reject";
+      responderName?: string;
+      responderOrg?: string;
+      responseNote?: string;
+    },
+  ) =>
+    apiRequest(`/api/confirmation-invites/${token}/respond`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };

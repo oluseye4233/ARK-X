@@ -33,6 +33,7 @@ import AdminCcgeImportPage from "@/pages/admin-ccge-import";
 import BookCompanionPage from "@/pages/book-companion";
 import WorkforcePage from "@/pages/workforce";
 import SharedReportPage from "@/pages/shared-report";
+import ConfirmInvitePage from "@/pages/confirm-invite";
 import TrainingPage from "@/pages/training";
 import TrainingProviderDetailPage from "@/pages/training-provider-detail";
 import TrainingRegisterPage from "@/pages/training-register";
@@ -104,6 +105,7 @@ function App() {
           <Switch>
             {/* Public, no-login shared ARK Report — rendered OUTSIDE app chrome. */}
             <Route path="/r/:token" component={SharedReportPage} />
+            <Route path="/confirm/:token" component={ConfirmInvitePage} />
             <Route component={Router} />
           </Switch>
         </TooltipProvider>

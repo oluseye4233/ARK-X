@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader2, FileText, FileImage, FileType2, Upload, Lock, X, ShieldCheck, Clock, ShieldX, HelpCircle } from "lucide-react";
+import { Loader2, FileText, FileImage, FileType2, Upload, Lock, X, ShieldCheck, Clock, ShieldX, HelpCircle, Mail, Send, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/useAuth";
 import { api } from "@/lib/api";
@@ -136,6 +136,22 @@ export default function ArkResumePage() {
   const sheetRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Task #60 — external confirmation invites the candidate sends by email.
+  const [invites, setInvites] = useState<any[]>([]);
+  const [inviteClaim, setInviteClaim] = useState<null | {
+    type: "EMPLOYMENT" | "CERTIFICATION" | "SKILL";
+    targetRef: string;
+    targetLabel: string;
+  }>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
+  const [inviteOrg, setInviteOrg] = useState("");
+  const [inviteMessage, setInviteMessage] = useState("");
+  const [inviteSubmitting, setInviteSubmitting] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
   const load = () => {
     setLoading(true);
     api
@@ -148,11 +164,68 @@ export default function ArkResumePage() {
       .finally(() => setLoading(false));
   };
 
+  const loadInvites = () => {
+    api
+      .listConfirmationInvites()
+      .then((rows: any[]) => setInvites(rows))
+      .catch(() => setInvites([]));
+  };
+
   useEffect(() => {
     if (!user) return;
     load();
+    loadInvites();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  const openInvite = (claim: {
+    type: "EMPLOYMENT" | "CERTIFICATION" | "SKILL";
+    targetRef: string;
+    targetLabel: string;
+  }) => {
+    setInviteClaim(claim);
+    setInviteEmail("");
+    setInviteName("");
+    setInviteOrg("");
+    setInviteMessage("");
+    setInviteError(null);
+    setInviteLink(null);
+    setCopied(false);
+  };
+
+  const submitInvite = async () => {
+    if (!inviteClaim) return;
+    setInviteSubmitting(true);
+    setInviteError(null);
+    try {
+      const res = await api.createConfirmationInvite({
+        type: inviteClaim.type,
+        targetRef: inviteClaim.targetRef,
+        targetLabel: inviteClaim.targetLabel,
+        recipientEmail: inviteEmail.trim(),
+        recipientName: inviteName.trim() || undefined,
+        recipientOrg: inviteOrg.trim() || undefined,
+        note: inviteMessage.trim() || undefined,
+      });
+      setInviteLink(`${window.location.origin}${res.path}`);
+      loadInvites();
+    } catch (e: any) {
+      setInviteError(e.message || "Could not create the invite.");
+    } finally {
+      setInviteSubmitting(false);
+    }
+  };
+
+  const copyLink = async () => {
+    if (!inviteLink) return;
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard unavailable — the link is still selectable in the field */
+    }
+  };
 
   const toExportData = (): ResumeExportData => ({
     name: data.user.name,
@@ -291,6 +364,7 @@ export default function ArkResumePage() {
     certConfs.find((c) => certMatches(label, String(c.targetRef))) ?? null;
 
   return (
+    <>
     <div className="w-full max-w-5xl mx-auto pb-16">
       {/* Action bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
@@ -541,6 +615,304 @@ export default function ArkResumePage() {
             </span>
           </div>
         </div>
+      </div>
+
+      {/* ── Confirmation requests (Task #60) — OUTSIDE the export sheet ─────
+          Candidate-driven trust layer: invite an external party by email to
+          confirm a specific claim. Kept off the printable sheet so exports stay
+          clean. */}
+      <ConfirmationRequests
+        data={data}
+        invites={invites}
+        confByKey={confByKey}
+        onRequest={openInvite}
+      />
+    </div>
+
+    {inviteClaim && (
+      <InviteModal
+        claim={inviteClaim}
+        email={inviteEmail}
+        setEmail={setInviteEmail}
+        name={inviteName}
+        setName={setInviteName}
+        org={inviteOrg}
+        setOrg={setInviteOrg}
+        message={inviteMessage}
+        setMessage={setInviteMessage}
+        submitting={inviteSubmitting}
+        errorMsg={inviteError}
+        link={inviteLink}
+        copied={copied}
+        onCopy={copyLink}
+        onSubmit={submitInvite}
+        onClose={() => setInviteClaim(null)}
+      />
+    )}
+    </>
+  );
+}
+
+const CONF_STATUS_META: Record<string, { label: string; color: string }> = {
+  CONFIRMED: { label: "Confirmed", color: ATANDA.green },
+  PENDING: { label: "Pending", color: ATANDA.yellow },
+  REJECTED: { label: "Rejected", color: ATANDA.red },
+  UNVERIFIED: { label: "Unverified", color: ATANDA.sub },
+};
+
+const INVITE_STATUS_META: Record<string, { label: string; color: string }> = {
+  PENDING: { label: "Awaiting response", color: ATANDA.yellow },
+  APPROVED: { label: "Approved", color: ATANDA.green },
+  REJECTED: { label: "Declined", color: ATANDA.red },
+  EXPIRED: { label: "Expired", color: ATANDA.sub },
+};
+
+function ConfirmationRequests({
+  data,
+  invites,
+  confByKey,
+  onRequest,
+}: {
+  data: any;
+  invites: any[];
+  confByKey: Map<string, any>;
+  onRequest: (claim: { type: "EMPLOYMENT" | "CERTIFICATION" | "SKILL"; targetRef: string; targetLabel: string }) => void;
+}) {
+  type ClaimRow = { type: "EMPLOYMENT" | "CERTIFICATION" | "SKILL"; targetRef: string; targetLabel: string; group: string };
+  const claims: ClaimRow[] = [];
+  for (const w of data.workHistory ?? []) {
+    if (!w.company) continue;
+    claims.push({
+      type: "EMPLOYMENT",
+      targetRef: w.company,
+      targetLabel: [w.role, w.company].filter(Boolean).join(" — ") || w.company,
+      group: "Employment",
+    });
+  }
+  for (const c of data.certifications ?? []) {
+    claims.push({ type: "CERTIFICATION", targetRef: c, targetLabel: c, group: "Certifications" });
+  }
+  for (const c of data.verifiedDeck ?? []) {
+    claims.push({ type: "SKILL", targetRef: c.cardId, targetLabel: c.name, group: "Verified Skills" });
+  }
+
+  const statusOf = (claim: ClaimRow): string => {
+    const conf = confByKey.get(`${claim.type}:${String(claim.targetRef).toLowerCase()}`);
+    return conf?.status ?? "UNVERIFIED";
+  };
+
+  return (
+    <div className="mt-8 glass-card rounded-lg p-5" data-testid="block-confirmation-requests">
+      <div className="flex items-center gap-2 mb-1">
+        <Mail className="w-4 h-4 text-primary" />
+        <h2 className="text-lg font-display font-bold text-white">Request Confirmations</h2>
+      </div>
+      <p className="font-mono text-xs text-muted-foreground mb-4">
+        Invite a former manager, registrar, or institution to verify a claim by email. They confirm with a no-login link — no ARK account needed.
+      </p>
+
+      {claims.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No claims available to confirm yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {claims.map((claim, i) => {
+            const status = statusOf(claim);
+            const m = CONF_STATUS_META[status] ?? CONF_STATUS_META.UNVERIFIED;
+            return (
+              <div
+                key={`${claim.type}-${claim.targetRef}-${i}`}
+                className="flex items-center justify-between gap-3 border border-border rounded-md px-3 py-2"
+                data-testid={`row-claim-${claim.type.toLowerCase()}-${i}`}
+              >
+                <div className="min-w-0">
+                  <div className="text-xs font-mono uppercase tracking-wide text-muted-foreground">{claim.group}</div>
+                  <div className="text-sm text-white truncate">{claim.targetLabel}</div>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-xs font-bold" style={{ color: m.color }} data-testid={`text-claim-status-${i}`}>
+                    {m.label}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onRequest({ type: claim.type, targetRef: claim.targetRef, targetLabel: claim.targetLabel })}
+                    data-testid={`button-request-confirmation-${i}`}
+                  >
+                    <Send className="w-3.5 h-3.5 mr-1" />
+                    Request
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {invites.length > 0 && (
+        <div className="mt-5">
+          <h3 className="text-sm font-bold text-white mb-2">Sent Requests</h3>
+          <div className="space-y-1.5">
+            {invites.map((inv) => {
+              const m = INVITE_STATUS_META[inv.status] ?? INVITE_STATUS_META.PENDING;
+              return (
+                <div
+                  key={inv.id}
+                  className="flex items-center justify-between gap-3 text-xs border-b border-border/50 pb-1.5"
+                  data-testid={`row-invite-${inv.id}`}
+                >
+                  <div className="min-w-0">
+                    <span className="text-white truncate">{inv.targetLabel ?? inv.targetRef}</span>
+                    <span className="text-muted-foreground"> → {inv.recipientEmail}</span>
+                  </div>
+                  <span className="font-bold shrink-0" style={{ color: m.color }}>{m.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InviteModal({
+  claim,
+  email,
+  setEmail,
+  name,
+  setName,
+  org,
+  setOrg,
+  message,
+  setMessage,
+  submitting,
+  errorMsg,
+  link,
+  copied,
+  onCopy,
+  onSubmit,
+  onClose,
+}: {
+  claim: { type: string; targetRef: string; targetLabel: string };
+  email: string;
+  setEmail: (v: string) => void;
+  name: string;
+  setName: (v: string) => void;
+  org: string;
+  setOrg: (v: string) => void;
+  message: string;
+  setMessage: (v: string) => void;
+  submitting: boolean;
+  errorMsg: string | null;
+  link: string | null;
+  copied: boolean;
+  onCopy: () => void;
+  onSubmit: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      onClick={onClose}
+      data-testid="modal-invite"
+    >
+      <div
+        className="w-full max-w-md glass-card rounded-lg p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <h3 className="text-lg font-display font-bold text-white">Request confirmation</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">{claim.targetLabel}</p>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-white" data-testid="button-close-invite">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {link ? (
+          <div data-testid="block-invite-success">
+            <p className="text-sm text-white mb-3">
+              Invite created. Send this no-login link to your confirmer — it expires in 14 days.
+            </p>
+            <div className="flex items-center gap-2 mb-4">
+              <input
+                readOnly
+                value={link}
+                className="flex-1 bg-background border border-border rounded-md px-3 py-2 text-xs text-white font-mono"
+                data-testid="input-invite-link"
+                onFocus={(e) => e.currentTarget.select()}
+              />
+              <Button variant="outline" size="sm" onClick={onCopy} data-testid="button-copy-link">
+                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              </Button>
+            </div>
+            <Button className="w-full" onClick={onClose} data-testid="button-invite-done">Done</Button>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-mono uppercase text-muted-foreground">Recipient email *</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="manager@company.com"
+                  className="w-full mt-1 bg-background border border-border rounded-md px-3 py-2 text-sm text-white"
+                  data-testid="input-recipient-email"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-mono uppercase text-muted-foreground">Their name</label>
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Optional"
+                    className="w-full mt-1 bg-background border border-border rounded-md px-3 py-2 text-sm text-white"
+                    data-testid="input-recipient-name"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-mono uppercase text-muted-foreground">Their org</label>
+                  <input
+                    value={org}
+                    onChange={(e) => setOrg(e.target.value)}
+                    placeholder="Optional"
+                    className="w-full mt-1 bg-background border border-border rounded-md px-3 py-2 text-sm text-white"
+                    data-testid="input-recipient-org"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-mono uppercase text-muted-foreground">Message</label>
+                <textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Optional note to the recipient"
+                  rows={2}
+                  className="w-full mt-1 bg-background border border-border rounded-md px-3 py-2 text-sm text-white resize-y"
+                  data-testid="input-invite-message"
+                />
+              </div>
+            </div>
+
+            {errorMsg && (
+              <p className="text-xs text-destructive mt-3" data-testid="text-invite-error">{errorMsg}</p>
+            )}
+
+            <Button
+              className="w-full mt-4"
+              onClick={onSubmit}
+              disabled={submitting || !email.trim()}
+              data-testid="button-send-invite"
+            >
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Send className="w-4 h-4 mr-1" />}
+              Create invite link
+            </Button>
+          </>
+        )}
       </div>
     </div>
   );

@@ -2182,6 +2182,53 @@ export const insertSkillConfirmationSchema = createInsertSchema(skillConfirmatio
 export type InsertSkillConfirmation = z.infer<typeof insertSkillConfirmationSchema>;
 export type SkillConfirmation = typeof skillConfirmations.$inferSelect;
 
+// ── ARK RESUME external confirmation invites (Task #60) ──────
+// The candidate-driven counterpart to the confirmer-gated internal path: a
+// subscriber invites an external party (a former manager, a registrar) BY EMAIL
+// to confirm ONE specific resume claim. The recipient gets an unguessable,
+// no-login token URL (/confirm/:token) to approve or reject just that claim; the
+// resolution upserts into `skill_confirmations` (confirmerUserId stays null —
+// the confirmer has no platform account). Invites expire (TTL below) and every
+// invite + response is persisted for audit.
+export const CONFIRMATION_INVITE_STATUSES = ["PENDING", "APPROVED", "REJECTED", "EXPIRED"] as const;
+export type ConfirmationInviteStatus = (typeof CONFIRMATION_INVITE_STATUSES)[number];
+
+export const CONFIRMATION_INVITE_TTL_DAYS = 14;
+
+export const confirmationInvites = pgTable(
+  "confirmation_invites",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    // Unguessable, single-claim token embedded in the no-login recipient link.
+    token: varchar("token").notNull().unique(),
+    // The resume owner who SENT the invite (claim must exist on their resume).
+    userId: varchar("user_id").notNull(),
+    type: text("type").notNull(), // EMPLOYMENT | CERTIFICATION | SKILL
+    targetRef: text("target_ref").notNull(),
+    targetLabel: text("target_label"),
+    // Who the candidate is inviting to confirm.
+    recipientEmail: text("recipient_email").notNull(),
+    recipientName: text("recipient_name"),
+    recipientOrg: text("recipient_org"),
+    // Optional message from the candidate to the recipient.
+    note: text("note"),
+    status: text("status").notNull().default("PENDING"),
+    // Snapshot of what the responder typed when approving/rejecting.
+    responseNote: text("response_note"),
+    expiresAt: timestamp("expires_at").notNull(),
+    respondedAt: timestamp("responded_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("confirmation_invites_token_uidx").on(t.token)],
+);
+
+export const insertConfirmationInviteSchema = createInsertSchema(confirmationInvites).omit({
+  id: true, token: true, status: true, responseNote: true, respondedAt: true,
+  expiresAt: true, createdAt: true,
+});
+export type InsertConfirmationInvite = z.infer<typeof insertConfirmationInviteSchema>;
+export type ConfirmationInvite = typeof confirmationInvites.$inferSelect;
+
 // ── Suggested Training Providers (freemium · Explorer tier) ──
 // Admin-curated + self-serve registered training organizations whose courses are
 // ranked against the JST engine's suggested upskilling path. Monetized via
