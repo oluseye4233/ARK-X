@@ -150,6 +150,8 @@ export default function ArkResumePage() {
   const [inviteSubmitting, setInviteSubmitting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [inviteEmailSent, setInviteEmailSent] = useState(false);
+  const [inviteEmailWarning, setInviteEmailWarning] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   // Task #65 — pending-invite lifecycle (revoke / resend) state.
   const [inviteActionId, setInviteActionId] = useState<string | null>(null);
@@ -194,6 +196,8 @@ export default function ArkResumePage() {
     setInviteMessage("");
     setInviteError(null);
     setInviteLink(null);
+    setInviteEmailSent(false);
+    setInviteEmailWarning(null);
     setCopied(false);
   };
 
@@ -211,7 +215,9 @@ export default function ArkResumePage() {
         recipientOrg: inviteOrg.trim() || undefined,
         note: inviteMessage.trim() || undefined,
       });
-      setInviteLink(`${window.location.origin}${res.path}`);
+      setInviteLink(res.link || `${window.location.origin}${res.path}`);
+      setInviteEmailSent(!!res.emailSent);
+      setInviteEmailWarning(res.emailSent ? null : res.emailError || null);
       loadInvites();
     } catch (e: any) {
       setInviteError(e.message || "Could not create the invite.");
@@ -698,6 +704,8 @@ export default function ArkResumePage() {
         submitting={inviteSubmitting}
         errorMsg={inviteError}
         link={inviteLink}
+        emailSent={inviteEmailSent}
+        emailWarning={inviteEmailWarning}
         copied={copied}
         onCopy={copyLink}
         onSubmit={submitInvite}
@@ -912,6 +920,8 @@ function InviteModal({
   submitting,
   errorMsg,
   link,
+  emailSent,
+  emailWarning,
   copied,
   onCopy,
   onSubmit,
@@ -929,6 +939,8 @@ function InviteModal({
   submitting: boolean;
   errorMsg: string | null;
   link: string | null;
+  emailSent: boolean;
+  emailWarning: string | null;
   copied: boolean;
   onCopy: () => void;
   onSubmit: () => void;
@@ -956,9 +968,15 @@ function InviteModal({
 
         {link ? (
           <div data-testid="block-invite-success">
-            <p className="text-sm text-white mb-3">
-              Invite created. Send this no-login link to your confirmer — it expires in 14 days.
-            </p>
+            {emailSent ? (
+              <p className="text-sm text-white mb-3" data-testid="text-invite-emailed">
+                Invite emailed to your confirmer. The no-login link expires in 14 days — keep a copy below if you'd like to resend it.
+              </p>
+            ) : (
+              <p className="text-sm text-amber-400 mb-3" data-testid="text-invite-email-warning">
+                {emailWarning || "Invite created, but the email could not be sent. Copy the no-login link below and send it to your confirmer — it expires in 14 days."}
+              </p>
+            )}
             <div className="flex items-center gap-2 mb-4">
               <input
                 readOnly
@@ -1033,7 +1051,7 @@ function InviteModal({
               data-testid="button-send-invite"
             >
               {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Send className="w-4 h-4 mr-1" />}
-              Create invite link
+              Send invite
             </Button>
           </>
         )}

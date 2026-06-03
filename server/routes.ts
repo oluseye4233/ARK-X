@@ -38,6 +38,7 @@ import { recalcArkForUser } from "./arkRecalc";
 import { computeLhcsForUser } from "./lhcs";
 import { pickFlywheelCta, rankAllCtas } from "./flywheelCta";
 import { backfillAllUsers } from "./arkBackfill";
+import { sendMail, isMailConfigured, MailNotConfiguredError } from "./mail";
 import { scoreSessionWithClaude } from "./ai/kcse";
 import { generateResumeNarrative, ProTierRequiredError } from "./ai/narrative";
 import { CODEC_PRIMITIVES, CODEC_BY_ID } from "@shared/codec-primitives";
@@ -162,6 +163,64 @@ function commandCentreBaseUrl(): string {
 
 function handoffSecret(): string {
   return process.env.SESSION_SECRET || "ark-dev-only-secret-DO-NOT-USE-IN-PROD";
+}
+
+// Absolute origin of the current request, honouring the reverse proxy headers
+// Replit terminates TLS behind. Used to build no-login links that work when
+// opened from an email (the server, not the browser, mints these).
+function publicOrigin(req: { headers: Record<string, any>; protocol: string }): string {
+  const proto = (req.headers["x-forwarded-proto"] as string)?.split(",")[0] || req.protocol;
+  const host = req.headers["x-forwarded-host"] || req.headers.host;
+  return `${proto}://${host}`;
+}
+
+// Best-effort origin when no request is in scope (e.g. a fire-and-forget
+// notification). Falls back to a relative mention if the platform domain env
+// is absent.
+function platformOrigin(): string | null {
+  const domains = (process.env.REPLIT_DOMAINS || "").split(",").map((d) => d.trim()).filter(Boolean);
+  const host = domains[0] || (process.env.REPLIT_DEV_DOMAIN || "").trim();
+  return host ? `https://${host}` : null;
+}
+
+// Notifies the candidate (résumé owner) that an external party answered their
+// confirmation request. Best-effort: any mail failure is swallowed by the
+// caller. Looks up the owner's contact email (falling back to an email-shaped
+// username) and silently no-ops if neither is usable.
+async function notifyCandidateOfResponse(
+  invite: { userId: string; type: string; targetRef: string; targetLabel: string | null; status: string; recipientName: string | null; recipientOrg: string | null; recipientEmail: string },
+  responseNote: string | null,
+): Promise<void> {
+  if (!isMailConfigured()) return;
+  const owner = await storage.getUser(invite.userId);
+  if (!owner) return;
+  const assessment = await storage.getLatestAssessment(invite.userId);
+  const emailLike = (v?: string | null) => !!v && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v);
+  const to = emailLike(assessment?.contactEmail)
+    ? assessment!.contactEmail!
+    : emailLike(owner.username)
+      ? owner.username
+      : null;
+  if (!to) return;
+
+  const claimLabel = invite.targetLabel ?? invite.targetRef;
+  const who = invite.recipientName || invite.recipientOrg || invite.recipientEmail;
+  const approved = invite.status === "APPROVED";
+  const origin = platformOrigin();
+  const subject = approved
+    ? `Your ARK résumé claim "${claimLabel}" was confirmed`
+    : `Update on your ARK confirmation request for "${claimLabel}"`;
+  const text =
+    `Hi ${owner.name},\n\n` +
+    (approved
+      ? `${who} confirmed your claim "${claimLabel}". It now shows as verified on your ARK résumé.`
+      : `${who} declined to confirm your claim "${claimLabel}".`) +
+    `\n\n` +
+    (responseNote ? `Their note: "${responseNote}"\n\n` : "") +
+    (origin ? `View your résumé: ${origin}/ark-resume\n\n` : "") +
+    `— ARK Platform`;
+
+  await sendMail({ to, subject, text });
 }
 
 // Builds a short-lived, HMAC-signed identity assertion. Carries only the
@@ -2064,22 +2123,39 @@ export async function registerRoutes(
 
       const path = `/confirm/${invite.token}`;
       const claimLabel = invite.targetLabel ?? invite.targetRef;
-      return res.json({
-        invite,
-        path,
-        emailPreview: {
-          to: invite.recipientEmail,
-          subject: `${user.name} asked you to confirm a résumé claim on ARK`,
-          body:
-            `Hi${invite.recipientName ? ` ${invite.recipientName}` : ""},\n\n` +
-            `${user.name} listed "${claimLabel}" on their ARK résumé and has asked you to confirm it. ` +
-            `Open the link below to approve or decline — no account needed. ` +
-            `This link expires in ${CONFIRMATION_INVITE_TTL_DAYS} days.\n\n` +
-            `{{LINK}}\n\n` +
-            (invite.note ? `Their message: "${invite.note}"\n\n` : "") +
-            `— ARK Platform`,
-        },
-      });
+      const link = `${publicOrigin(req)}${path}`;
+      const subject = `${user.name} asked you to confirm a résumé claim on ARK`;
+      const body =
+        `Hi${invite.recipientName ? ` ${invite.recipientName}` : ""},\n\n` +
+        `${user.name} listed "${claimLabel}" on their ARK résumé and has asked you to confirm it. ` +
+        `Open the link below to approve or decline — no account needed. ` +
+        `This link expires in ${CONFIRMATION_INVITE_TTL_DAYS} days.\n\n` +
+        `${link}\n\n` +
+        (invite.note ? `Their message: "${invite.note}"\n\n` : "") +
+        `— ARK Platform`;
+
+      // Attempt real delivery. The invite + tokenised link already exist, so on
+      // any send failure we keep the invite and return the link as a manual
+      // fallback alongside a clear error — never a silent success.
+      try {
+        await sendMail({ to: invite.recipientEmail, subject, text: body });
+        return res.json({ invite, path, link, emailSent: true });
+      } catch (mailErr: any) {
+        const reason =
+          mailErr instanceof MailNotConfiguredError
+            ? "Email delivery isn't connected yet, so no email was sent. Copy the link below and send it to your confirmer."
+            : `We couldn't email this invite (${mailErr.message}). Copy the link below and send it to your confirmer.`;
+        // 200 with emailSent:false (not an HTTP error): the invite + link are
+        // valid and the UI must keep the fallback link, but we never claim the
+        // email went out — the warning is shown explicitly.
+        return res.json({
+          invite,
+          path,
+          link,
+          emailSent: false,
+          emailError: reason,
+        });
+      }
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
@@ -2201,6 +2277,14 @@ export async function registerRoutes(
           responderOrg,
           responseNote: parsed.data.responseNote ?? null,
         });
+
+        // Best-effort notify the candidate that their request was answered.
+        // Failure here must never break the responder's flow (they did their
+        // part), so we swallow mail errors and only log them.
+        void notifyCandidateOfResponse(updated, parsed.data.responseNote ?? null).catch(
+          (e) => console.warn("[mail] candidate response notice failed:", e?.message),
+        );
+
         return res.json({ ok: true, status: updated.status });
       } catch (e: any) {
         if (e.message === "INVITE_NOT_FOUND") {

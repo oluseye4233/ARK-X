@@ -11,3 +11,4 @@
 - [db:push is interactive](db-push-interactive.md) — drizzle push hangs on TTY prompts; apply DDL via psql AND write an idempotent migrations/*.sql or prod breaks.
 - [Resume claim matching](resume-claim-matching.md) — confirmations attach via shared/claimMatch.ts; SKILL exact (card id), EMPLOYMENT/CERTIFICATION fuzzy; 3 sites must stay in lockstep.
 - [Matchmaking engine](matchmaking-engine.md) — Talent Exchange scores ONLY on verified cards (never keywords); candidate pool needs user+assessment(archetype)+verifications to place people.
+- [Email transport](email-transport.md) — outbound mail = Gmail connector via @replit/connectors-sdk proxy; invite send keeps a link fallback on failure, never silent success.
