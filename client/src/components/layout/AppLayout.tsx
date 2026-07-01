@@ -128,13 +128,18 @@ function SidebarBody({ location, openTour, onNavigate }: {
   const isAdmin = !!(user as any)?.isAdmin;
   return (
     <div className="flex flex-col h-full">
-      <div className="p-6 flex items-center gap-3">
+      <Link
+        href="/"
+        onClick={onNavigate}
+        data-testid="link-logo-home"
+        className="p-6 flex items-center gap-3 hover:opacity-80 transition-opacity"
+      >
         <Activity className="h-8 w-8 text-primary animate-pulse" />
         <div>
           <h1 className="text-xl font-display font-bold text-primary tracking-widest leading-none">ARK</h1>
           <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-mono">Synthesized Intel</p>
         </div>
-      </div>
+      </Link>
 
       <nav className="px-4 py-4 flex-1 overflow-y-auto" aria-label="Primary">
         {NAV_GROUPS.map((group) => (
@@ -313,10 +318,10 @@ export function AppLayout({ children }: AppLayoutProps) {
     <div className="min-h-screen flex flex-col sm:flex-row bg-background">
       {/* Mobile top bar (< md): hamburger drawer */}
       <header className="sm:hidden sticky top-0 z-30 flex items-center justify-between pb-3 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[calc(0.75rem+env(safe-area-inset-top))] border-b border-primary/20 bg-background/90 backdrop-blur-md">
-        <div className="flex items-center gap-2">
+        <Link href="/" data-testid="link-logo-home-mobile" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
           <Activity className="h-6 w-6 text-primary animate-pulse" />
           <span className="font-display font-bold text-primary tracking-widest text-sm">ARK</span>
-        </div>
+        </Link>
         <div className="flex items-center gap-2">
           {isMobile && FEATURES.notifications && <NotificationBell />}
         <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
