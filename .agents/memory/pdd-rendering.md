@@ -25,3 +25,8 @@ Every refresh regenerates the sibling .pdf, so you need a working headless Chrom
 
 **Styling:** CSS lives in `scripts/pddStyles.ts` (PDD_BASE_CSS). Cover/toc use raw HTML
 `<div class="cover">` / `<div class="toc">` blocks at the top of the markdown.
+
+**Batch regen:** `npm run pdd:render` regenerates every `exports/*Current*.md` sibling PDF;
+`npm run pdd:check` flags (exit 1) any Current PDF missing or older than its .md. renderPdd.ts
+now auto-resolves chromium via `resolveChromium()` (env → `which chromium`), so no manual
+PUPPETEER_EXECUTABLE_PATH export is needed. Run pdd:render after every Current PDD edit.
