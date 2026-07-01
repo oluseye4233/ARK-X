@@ -14,15 +14,13 @@ import guideCover from "@assets/ark_onecraft_subscription_guide_cover.jpg";
 import guidePdf from "@assets/ARK_Onecraft_Subscription_Guide_1780266946261.pdf";
 
 function ScarcityBadge() {
-  const f1000On = FEATURES.f1000Promo;
   const { data } = useQuery<{ claimed: number; limit: number; remaining: number }>({
-    queryKey: [f1000On ? "/api/f1000/stats" : "/api/free-assessment/spots"],
-    queryFn: () => (f1000On ? api.getF1000Stats() : api.getFreeAssessmentSpots()),
+    queryKey: ["/api/f1000/stats"],
+    queryFn: () => api.getF1000Stats(),
     refetchOnWindowFocus: false,
   });
-  const fallback = f1000On ? 1000 : 100;
-  const remaining = data?.remaining ?? fallback;
-  const limit = data?.limit ?? fallback;
+  const remaining = data?.remaining ?? 1000;
+  const limit = data?.limit ?? 1000;
   const soldOut = remaining <= 0;
   return (
     <div
@@ -30,16 +28,10 @@ function ScarcityBadge() {
       data-testid="badge-home-spots"
     >
       <Sparkles className="h-3.5 w-3.5" />
-      {f1000On ? (
-        soldOut ? (
-          <span data-testid="text-home-spots-remaining">All {limit} F1000 seats claimed — still free to try</span>
-        ) : (
-          <>F1000 free with this QR · <span className="font-bold text-white" data-testid="text-home-spots-remaining">{remaining}</span>/{limit} left</>
-        )
-      ) : soldOut ? (
-        <span data-testid="text-home-spots-remaining">All {limit} free spots claimed — still free to try</span>
+      {soldOut ? (
+        <span data-testid="text-home-spots-remaining">All {limit} F1000 seats claimed — still free to try</span>
       ) : (
-        <>First 100 Free · <span className="font-bold text-white" data-testid="text-home-spots-remaining">{remaining}</span>/{limit} spots left</>
+        <>F1000 free with this QR · <span className="font-bold text-white" data-testid="text-home-spots-remaining">{remaining}</span>/{limit} left</>
       )}
     </div>
   );
