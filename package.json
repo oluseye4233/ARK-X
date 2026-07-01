@@ -22,6 +22,7 @@
     "test:adviser": "tsx --test server/__tests__/adviserNarrative.test.ts",
     "test:claim-match": "tsx --test server/__tests__/claimMatch.test.ts",
     "test:matchmaking": "tsx --test server/__tests__/matchmaking.test.ts",
+    "test:workforce-filters": "tsx --test server/__tests__/workforceFilters.test.ts",
     "test:confirmation-email": "tsx --test server/__tests__/confirmationInviteEmail.test.ts",
     "test:assessment-email": "tsx --test server/__tests__/assessmentSummaryEmail.test.ts",
     "test:staff-nudge-invite": "tsx --test server/__tests__/staffNudgeInvite.test.ts"
