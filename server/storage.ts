@@ -98,6 +98,28 @@ export type StaffDrilldownRow = {
   nudgedAt: string | null;
 };
 
+/** Query options for a bounded, searchable department drill-down. */
+export type DepartmentStaffQuery = {
+  search?: string;
+  limit?: number;
+  offset?: number;
+};
+
+/** A single page of department staff plus the counts needed to paginate. */
+export type DepartmentStaffPage = {
+  rows: StaffDrilldownRow[];
+  total: number;
+  filtered: number;
+  limit: number;
+  offset: number;
+};
+
+/** Hard ceiling on rows returned per drill-down request, so a unit with hundreds
+ *  of staff can never return an unbounded payload. */
+export const DEPARTMENT_STAFF_MAX_LIMIT = 100;
+/** Default page size when the client doesn't specify one (top-N most at risk). */
+export const DEPARTMENT_STAFF_DEFAULT_LIMIT = 25;
+
 /** One AI-vulnerability stratum + how many assessed staff fall in it. */
 export type VulnerabilityBand = { name: string; value: number };
 
@@ -390,7 +412,11 @@ export interface IStorage {
   /** Institution-scoped drill-down: the individual staff members in one
    *  department (matched to the same normalized key the workforce aggregation
    *  uses), each with per-person JST/vulnerability/assessment status. */
-  getDepartmentStaff(institution: string, department: string): Promise<StaffDrilldownRow[]>;
+  getDepartmentStaff(
+    institution: string,
+    department: string,
+    query?: DepartmentStaffQuery,
+  ): Promise<DepartmentStaffPage>;
   getStaffRecord(id: string): Promise<StaffRecord | undefined>;
   /** Match a staff row to an existing ARK account by email and set arkUserId.
    *  Returns the updated row, or null if no account matches. Institution-scoped. */
@@ -2242,7 +2268,8 @@ export class DatabaseStorage implements IStorage {
   async getDepartmentStaff(
     institution: string,
     department: string,
-  ): Promise<StaffDrilldownRow[]> {
+    query: DepartmentStaffQuery = {},
+  ): Promise<DepartmentStaffPage> {
     // Match against the same normalized key the workforce aggregation uses so a
     // clicked department row resolves exactly (including the "Unspecified" bucket
     // for staff with no department). Filtering happens server-side within the
@@ -2255,7 +2282,7 @@ export class DatabaseStorage implements IStorage {
       invited: 2,
       unlinked: 3,
     };
-    return staff
+    const inDept = staff
       .filter((s) => ((s.department ?? "").trim() || "Unspecified") === wanted)
       .map((s) => ({
         id: s.id,
@@ -2274,6 +2301,30 @@ export class DatabaseStorage implements IStorage {
         if (r !== 0) return r;
         return (b.vulnerabilityPct ?? -1) - (a.vulnerabilityPct ?? -1);
       });
+
+    const total = inDept.length;
+
+    // Case-insensitive name/title search so an admin can jump to one person in a
+    // unit of hundreds without scrolling the whole roster.
+    const term = (query.search ?? "").trim().toLowerCase();
+    const matched = term
+      ? inDept.filter(
+          (s) =>
+            s.fullName.toLowerCase().includes(term) ||
+            (s.jobTitle ?? "").toLowerCase().includes(term),
+        )
+      : inDept;
+    const filtered = matched.length;
+
+    // Bound the response: default to a top-N page of the most at-risk staff, and
+    // hard-cap the client-requested size so no single unit can return an
+    // unbounded payload.
+    const rawLimit = query.limit ?? DEPARTMENT_STAFF_DEFAULT_LIMIT;
+    const limit = Math.max(1, Math.min(DEPARTMENT_STAFF_MAX_LIMIT, Math.floor(rawLimit)));
+    const offset = Math.max(0, Math.floor(query.offset ?? 0));
+    const rows = matched.slice(offset, offset + limit);
+
+    return { rows, total, filtered, limit, offset };
   }
 
   async getStaffRecord(id: string): Promise<StaffRecord | undefined> {

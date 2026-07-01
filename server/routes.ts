@@ -3069,8 +3069,15 @@ export async function registerRoutes(
       try {
         const raw = req.params.department;
         const department = decodeURIComponent(Array.isArray(raw) ? raw[0] ?? "" : raw ?? "");
-        const staff = await storage.getDepartmentStaff(req.institutionScope!, department);
-        return res.json(staff);
+        const search = typeof req.query.q === "string" ? req.query.q : undefined;
+        const limitRaw = typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
+        const offsetRaw = typeof req.query.offset === "string" ? Number(req.query.offset) : undefined;
+        const page = await storage.getDepartmentStaff(req.institutionScope!, department, {
+          search,
+          limit: Number.isFinite(limitRaw) ? limitRaw : undefined,
+          offset: Number.isFinite(offsetRaw) ? offsetRaw : undefined,
+        });
+        return res.json(page);
       } catch (err: any) {
         return res.status(500).json({ message: err.message });
       }

@@ -77,8 +77,19 @@ export const api = {
     return apiRequest(`/api/enterprise/intelligence${qs}`);
   },
 
-  getDepartmentStaff: (department: string) =>
-    apiRequest(`/api/enterprise/departments/${encodeURIComponent(department)}/staff`),
+  getDepartmentStaff: (
+    department: string,
+    opts?: { q?: string; limit?: number; offset?: number },
+  ) => {
+    const params = new URLSearchParams();
+    if (opts?.q) params.set("q", opts.q);
+    if (opts?.limit != null) params.set("limit", String(opts.limit));
+    if (opts?.offset != null) params.set("offset", String(opts.offset));
+    const qs = params.toString();
+    return apiRequest(
+      `/api/enterprise/departments/${encodeURIComponent(department)}/staff${qs ? `?${qs}` : ""}`,
+    );
+  },
 
   inviteStaffMember: (staffId: string) =>
     apiRequest(`/api/workforce/staff/${encodeURIComponent(staffId)}/invite`, {
