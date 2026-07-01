@@ -41,6 +41,7 @@ import { pickFlywheelCta, rankAllCtas } from "./flywheelCta";
 import { backfillAllUsers } from "./arkBackfill";
 import { sendMail, isMailConfigured } from "./mail";
 import { deliverConfirmationInvite } from "./confirmationInviteEmail";
+import { buildAssessmentSummaryEmail, deliverAssessmentSummary } from "./assessmentSummaryEmail";
 import { scoreSessionWithClaude } from "./ai/kcse";
 import { generateResumeNarrative, ProTierRequiredError } from "./ai/narrative";
 import { CODEC_PRIMITIVES, CODEC_BY_ID } from "@shared/codec-primitives";
@@ -595,25 +596,29 @@ export async function registerRoutes(
   app.post("/api/notifications/assessment-summary", requireFeature("assessmentEmail"), requireAuth, async (req, res) => {
     try {
       const userId = currentUserId(req)!;
-      const { email } = req.body;
-      if (!email) {
-        return res.status(400).json({ message: "email is required" });
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      // Recipient is ALWAYS the authenticated user's own account email —
+      // never a client-supplied address — so this can't be used as an open
+      // mail relay.
+      const recipient = (user.username ?? "").trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(recipient)) {
+        return res.status(400).json({
+          message: "Your account has no valid email address to send the summary to.",
+        });
       }
       const assessment = await storage.getLatestAssessment(userId);
       if (!assessment) {
         return res.status(404).json({ message: "No assessment found for this user" });
       }
-      return res.json({
-        success: true,
-        message: `Assessment summary will be sent to ${email}`,
-        preview: {
-          subject: `Your ARK JST Assessment Summary — Score: ${assessment.jstTotal}/300`,
-          recipient: email,
-          jstTotal: assessment.jstTotal,
-          readinessProfile: assessment.readinessProfile,
-          vulnerabilityLevel: assessment.vulnerabilityLevel,
-        },
-      });
+      const { subject, body } = buildAssessmentSummaryEmail(assessment, user.name ?? undefined);
+      const result = await deliverAssessmentSummary({ to: recipient, subject, body });
+      if (!result.emailSent) {
+        return res.status(502).json({ success: false, message: result.emailError });
+      }
+      return res.json({ success: true, message: `Assessment summary sent to ${recipient}` });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
@@ -2837,6 +2842,25 @@ export async function registerRoutes(
       return res.status(500).json({ message: err.message });
     }
   });
+
+  // Enterprise dashboard (/enterprise) — the macro workforce-risk overview.
+  // Reuses the SAME aggregation as /workforce (institutionWorkforce) rather
+  // than re-implementing it; gated by its own `enterpriseDashboard` flag plus
+  // institution-admin scoping so the org is always derived from the session.
+  app.get(
+    "/api/enterprise/intelligence",
+    requireFeature("enterpriseDashboard"),
+    requireAuth,
+    requireInstitutionAdmin,
+    async (req, res) => {
+      try {
+        const intel = await storage.getWorkforceIntelligence(req.institutionScope!);
+        return res.json(intel);
+      } catch (err: any) {
+        return res.status(500).json({ message: err.message });
+      }
+    },
+  );
 
   // Workforce intelligence CSV export — same breakdowns as the on-screen
   // dashboard, flattened into one file for board/HR reviews. Mirrors the cohort

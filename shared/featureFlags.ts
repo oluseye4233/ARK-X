@@ -2,11 +2,11 @@
  * Feature flags — single source of truth for which surfaces are live.
  *
  * Stage 1 / MVP scope (per exports/ARK_PDD_MVP_Spartan.md):
- *   - ON  : the 7 CLASS A surfaces — Identity, Resume Analyzer, CCGE Arena,
- *           SPHINX MVP (browse + publish-paste + purchase), Bonsai onboarding,
- *           Billing FREE+PRO, GDPR.
- *   - OFF : all CLASS C surfaces — flip via env when their trigger fires
- *           (see Part 4 of the MVP PDD for trigger families).
+ *   - ON  : the 7 CLASS A surfaces (Identity, Resume Analyzer, CCGE Arena,
+ *           SPHINX MVP, Bonsai onboarding, Billing FREE+PRO, GDPR) PLUS every
+ *           CLASS C surface — all deferred modules have been activated.
+ *   - OFF : none. (Flip any flag OFF via env if a trigger needs to be gated
+ *           again; see Part 4 of the MVP PDD for trigger families.)
  *
  * Server-side: read via `isFeatureEnabled(key)` from `server/featureFlags.ts`.
  *              Gate routes with the `requireFeature(key)` middleware — flagged
@@ -77,10 +77,11 @@ export type FeatureKey =
  * client-visible flag. As deferred CLASS C trigger families fire, modules are
  * promoted here from OFF → ON.
  *
- * Currently OFF (half-built stubs, tracked separately): `enterpriseDashboard`
- * (only /api/departments exists; the live workforce aggregation lives behind
- * `institutionWorkforce`) and `assessmentEmail` (route returns a preview
- * payload; it does not yet dispatch mail). Every other flag is ON.
+ * All flags are now ON. The two former stubs are finished: `enterpriseDashboard`
+ * (/enterprise now renders real aggregated workforce intelligence, reusing the
+ * same `getWorkforceIntelligence` aggregation as `institutionWorkforce`) and
+ * `assessmentEmail` (POST /api/notifications/assessment-summary now sends a real
+ * email via the shared Gmail transport to the user's own account address).
  */
 export const MVP_FEATURES: Readonly<Record<FeatureKey, boolean>> = Object.freeze({
   sphinxAdvanced: true,
@@ -90,9 +91,9 @@ export const MVP_FEATURES: Readonly<Record<FeatureKey, boolean>> = Object.freeze
   executiveReport: true,
   arkResume: true,
   subscriptionCancel: true,
-  assessmentEmail: false,
+  assessmentEmail: true,
   cohorts: true,
-  enterpriseDashboard: false,
+  enterpriseDashboard: true,
   institutionWorkforce: true,
   corporateMarketplace: true,
   investorDemo: true,

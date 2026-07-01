@@ -70,6 +70,8 @@ export const api = {
 
   getDepartments: () => apiRequest("/api/departments"),
 
+  getEnterpriseIntelligence: () => apiRequest("/api/enterprise/intelligence"),
+
   getContextCraftLevels: () => apiRequest("/api/context-craft/levels"),
 
   updateContextCraftCert: (userId: string, level: string) =>
