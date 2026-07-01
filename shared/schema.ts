@@ -1948,6 +1948,7 @@ export const NOTIFICATION_TYPES = [
   "synthesis.completed",
   "spc.purchased",
   "spc.first_sale",
+  "upskill.nudge",
 ] as const;
 export type NotificationType = typeof NOTIFICATION_TYPES[number];
 

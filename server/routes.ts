@@ -42,6 +42,12 @@ import { backfillAllUsers } from "./arkBackfill";
 import { sendMail, isMailConfigured } from "./mail";
 import { deliverConfirmationInvite } from "./confirmationInviteEmail";
 import { handleAssessmentSummary } from "./assessmentSummaryEmail";
+import {
+  buildUpskillNudgeEmail,
+  deliverUpskillNudge,
+  isValidEmail as isValidNudgeEmail,
+  UPSKILL_NUDGE_PATH,
+} from "./upskillNudgeEmail";
 import { scoreSessionWithClaude } from "./ai/kcse";
 import { generateResumeNarrative, ProTierRequiredError } from "./ai/narrative";
 import { CODEC_PRIMITIVES, CODEC_BY_ID } from "@shared/codec-primitives";
@@ -2974,9 +2980,52 @@ export async function registerRoutes(
           message: "Cannot nudge: staff member isn't linked to a completed ARK assessment yet.",
         });
       }
+
+      // Actually close the loop: deliver a real prompt to the nudged person.
+      // nudgeStaff only succeeds for staff linked to an assessed ARK account,
+      // so arkUserId is guaranteed present here. The in-app notification is the
+      // primary, reliable channel; email is best-effort with a truthful
+      // fallback (mirrors the confirmation-invite send/fallback pattern).
+      const arkUserId = result.arkUserId!;
+      const linkedUser = await storage.getUser(arkUserId);
+
+      const { persistAndBroadcastNotification } = await import("./sphinxSynergy");
+      const notification = await persistAndBroadcastNotification(arkUserId, {
+        type: "upskill.nudge",
+        title: "You've been nudged to upskill",
+        body: "Your workforce lead flagged an opportunity to close your skill gaps. Open Career Mobility to see your upskilling roadmap.",
+        link: UPSKILL_NUDGE_PATH,
+        payload: { staffRecordId: result.id },
+      });
+
+      // Best-effort email to the linked account's own address. Never throws;
+      // a delivery failure surfaces truthfully instead of a silent success.
+      let emailSent = false;
+      let emailError: string | undefined;
+      const recipient = (linkedUser?.username ?? "").trim();
+      if (isValidNudgeEmail(recipient)) {
+        const { subject, body } = buildUpskillNudgeEmail(linkedUser?.name ?? undefined);
+        const delivery = await deliverUpskillNudge({ to: recipient, subject, body });
+        emailSent = delivery.emailSent;
+        emailError = delivery.emailError;
+      } else {
+        emailError =
+          "No valid email on the linked account, so no email was sent — but the in-app nudge was delivered.";
+      }
+
+      const inAppDelivered = !!notification;
+      const message = emailSent
+        ? "Upskilling nudge delivered — an in-app alert and an email were sent."
+        : inAppDelivered
+          ? `Upskilling nudge delivered in-app. ${emailError ?? ""}`.trim()
+          : "The nudge was recorded, but we couldn't deliver an in-app alert or email to this staff member.";
+
       return res.json({
         staff: result,
-        message: "Upskilling nudge sent — this staff member has been prompted to close their skill gaps.",
+        inAppDelivered,
+        emailSent,
+        emailError,
+        message,
       });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
