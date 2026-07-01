@@ -50,7 +50,7 @@ ATANDA Studio · FORGE Institute
 > **Invocation:** `Run SPARTAN on [ARK_PDD_Current_ATLAS.md v11] targeting [AUTO].`
 > **GRO DNA:** SAFE_LIFE · **FORGE Step:** Stage 3 (runs after full PDD exists) · **Input route:** PDD Compression Path (`.md` ATLAS structure detected).
 
-SPARTAN received the published v11 ATLAS Living PDD and compressed it to its minimum-viable, fully-deployable form. The MVP retains 100% of user-facing features that exist *today* — and the deployed surface has **widened** since the v10 compression: the **Suggested Training Providers** funnel, the **INDIVIDUAL_EXPLORER** free tier, the **Primitive Card Verification** flywheel, the one-page **ARK REPORT**, and the **F1000 (First 1000) soft-launch promo** are all live and therefore **promoted into the retained CLASS A set**. Everything still deferred is feature-flagged **off** behind a documented commercial trigger, so no current user loses anything.
+SPARTAN received the published v11 ATLAS Living PDD and compressed it to its minimum-viable, fully-deployable form. The MVP retains 100% of user-facing features that exist *today* — and the deployed surface has **widened again** since the previous compression: the **Suggested Training Providers** funnel, the **INDIVIDUAL_EXPLORER** free tier, the **Primitive Card Verification** flywheel (now with **DATA-pillar evidence uploads** and a **Name-Job-Role O*NET/SFIA/WEF guide**), the one-page **ARK REPORT**, the shareable **ARK RESUME** ATS artifact, the **ARK Talent Exchange** (Cognitive Talent Exchange matchmaking), and the **F1000 (First 1000) soft-launch promo** are all live and therefore **promoted into the retained CLASS A set** — **7 flags ON**. Everything still deferred is feature-flagged **off** behind a documented commercial trigger, so no current user loses anything.
 
 ### Honesty Gate (threat_model G3)
 
@@ -60,21 +60,21 @@ SPARTAN's benchmark card cites "90–98% infrastructure cost reduction" and list
 
 | Metric | Source (Full ATLAS PDD v11) |
 |--------|------------------------------|
-| Atomic Prompts | 45 (ARK-001 … ARK-066 incl. F1000 ARK-058…061, non-contiguous) across 6 phases + 1 special block |
-| API endpoints | 136 `/api` routes (incl. F1000 `/stats`, `/claim`, `/me`); 138 total incl. 2 non-`/api` |
-| Drizzle tables | 49 · Migrations | 19 (0000–0018) |
-| Client routes | 38 · Feature flags | 22 (**5 ON**: `investorDemo`, `executiveReport`, `cardVerification`, `trainingProviders`, `f1000Promo`) |
-| Server / client modules | ~44 / ~130 |
+| Atomic Prompts | 51 across 7 phases + 1 special block (adds ARK RESUME, Talent Exchange, verification DATA-evidence + Name-Job-Role guide) |
+| API endpoints | 153 `/api` routes (incl. `/ark-resume`, `/confirmations`, `/matchmaking/*`, `/verification/*`) |
+| Drizzle tables | 55 · Migrations | 23 (0000–0021; two `0020_*` files: `_confirmation_invites` + `_matchmaking`) |
+| Client routes | 44 `<Route>` · Feature flags | 24 (**7 ON**: `investorDemo`, `executiveReport`, `cardVerification`, `trainingProviders`, `f1000Promo`, `arkResume`, `matchmaking`) |
+| Server / client modules | ~50 / ~140 |
 
 ### Step 2 · PROFILE — Classification Result
 
 | CLASS | Meaning | Count | Action |
 |-------|---------|-------|--------|
-| **A — KEEP** | User-facing feature or system-correctness (auth, data, scoring, cost-safety, funnel, verification, F1000 growth) | 40 prompts | Retained unchanged in MVP |
+| **A — KEEP** | User-facing feature or system-correctness (auth, data, scoring, cost-safety, funnel, verification, résumé/matchmaking, F1000 growth) | 46 prompts | Retained unchanged in MVP |
 | **B — SYNTHESISE** | Infrastructure replaceable by a platform-native equivalent, no UX loss | 2 prompts | Collapsed (see Part 2) |
 | **C — DEFER** | Serves scale not yet reached; no user sees it until a trigger fires | 17 flag families | Moved to Upgrade Path (Appendix) |
 
-**Prompt reduction: 45 ATLAS prompts → 40 retained CLASS A (~11%); the headline compression is token-level (Part 4, ~54%) — SPARTAN strips ATLAS prose to terse, I/O-typed tables. Feature Fidelity Score: 100%** — every MVP user-facing feature present; all deferrals are already 404 behind flags. *(The lower prompt-reduction vs the v10 pass is expected: Stage-1 widened from 1 ON flag to 5, so the funnel + verification + report + F1000 promo are now KEEP, not DEFER.)*
+**Prompt reduction: 51 ATLAS prompts → 46 retained CLASS A (~10%); the headline compression is token-level (Part 4, ~54%) — SPARTAN strips ATLAS prose to terse, I/O-typed tables. Feature Fidelity Score: 100%** — every MVP user-facing feature present; all deferrals are already 404 behind flags. *(The lower prompt-reduction vs earlier passes is expected: Stage-1 has widened from 1 ON flag to 7, so the funnel + verification + report + ARK RESUME + Talent Exchange + F1000 promo are now KEEP, not DEFER.)*
 
 ### Step 3 · ASSESS — VIBE DJ Verdict
 
@@ -124,7 +124,7 @@ ARK is **already collapsed** — SPARTAN confirms the production stack never acc
 
 # PART 3 · Compressed MVP ATLAS PDD
 
-The retained CLASS A prompt set — the live MVP surfaces (Identity, Resume Analyzer, CCGE Arena, **Card Verification**, SPHINX MVP, **Training-Providers funnel + Explorer tier**, **ARK REPORT**, Bonsai onboarding, Billing FREE+PRO+Explorer, GDPR) plus their system-correctness foundations. Token text ZPOS+5-optimised (Part 4).
+The retained CLASS A prompt set — the live MVP surfaces (Identity, Resume Analyzer, CCGE Arena, **Card Verification** incl. DATA-evidence + Name-Job-Role guide, SPHINX MVP, **Training-Providers funnel + Explorer tier**, **ARK REPORT**, **ARK RESUME**, **ARK Talent Exchange**, Bonsai onboarding, Billing FREE+PRO+Explorer, GDPR) plus their system-correctness foundations. Token text ZPOS+5-optimised (Part 4).
 
 ### MVP Phase 1 — Foundation (🔴 P0)
 
@@ -192,6 +192,19 @@ The retained CLASS A prompt set — the live MVP surfaces (Identity, Resume Anal
 | MVP-A35 | Stripe-stub checkout (FREE+PRO+Explorer): create→complete→entitle | audit row written | `server/billing.ts` |
 | MVP-A36 | GDPR export + cascade delete (`confirm:"DELETE"`) | all owned rows purged | `server/storage.ts` |
 
+### MVP Phase 7 — Verified Résumé & Talent Exchange (🟡 P1, live)
+
+The surfaces promoted into CLASS A since the last compression: two Card-Verification sub-features, the shareable **ARK RESUME** artifact, and the **ARK Talent Exchange** matchmaking engine — all scored PURELY on banked verifications + JST + archetype, never self-claims.
+
+| ID | Description | Validation | Owner |
+|----|-------------|------------|-------|
+| MVP-A41 | Verification DATA-pillar evidence: attach docs/certs per primitive (base64 ≤1MB, PDF/PNG/JPEG/WebP) → satisfies Data pillar, lifts craft score | owner-scoped + evidence-gated to `matchedCardIds` | `server/routes.ts` + `verification_documents` (`0021`) |
+| MVP-A42 | Verification Name-Job-Role guide: named role → O*NET/SFIA/WEF reference (Haiku, global 30-day cache) | reference-only, NOT scored; 503 when Claude off | `server/ai/jobRoleGuide.ts` |
+| MVP-A43 | ARK RESUME artifact: static résumé + verified-card living layer + confirmations; ATS score 0–100 breakdown; selectable-text PDF (jsPDF), PNG/JPEG (html2canvas) | Pro+ AND ≥1 Silver+ verification, else locked state | `server/arkResume.ts` · `client/src/pages/ark-resume.tsx` |
+| MVP-A44 | Third-party confirmations + external confirmation-invite email (Confirmed/Pending/Rejected/Unverified per claim) | confirmer-gated; claim must exist on résumé; owner notified | `server/routes.ts` · `server/confirmationInviteEmail.ts` |
+| MVP-A45 | ARK Talent Exchange: match people ↔ opportunities (JOB/PROJECT) — coverage·.7 + jstFactor·.2 + archetypeFit·.1; under-tier verifications = 0.5 partial | `npm run test:matchmaking`; verified-only scoring | `server/matchmaking.ts` (`0020_matchmaking`) |
+| MVP-A46 | Talent Exchange team formation: greedy one-per-role → TXS = coverage·.6 + archetypeDiversity·.25 + jstDepth·.15 | PROJECT detail returns team | `server/matchmaking.ts::assembleTeam` |
+
 ### Special Block · F1000 Soft-Launch Promo (🟡 P1, growth)
 
 The **F1000 (First 1000)** soft-launch promo — a scarcity-bound, public-QR founding-member campaign. 1,000 single-use numbered codes → free Explorer entry + price-capped upgrade. CLASS A (live, `f1000Promo` ON). Condensed from the ATLAS Special Chapter.
@@ -212,9 +225,9 @@ The **F1000 (First 1000)** soft-launch promo — a scarcity-bound, public-QR fou
 | MVP-B01 | Redis cache + cache service | in-process `server/ai/cache.ts` |
 | MVP-B02 | Separate seed/admin service | dev-only `/api/seed` (403 in prod), seeds live SPCs + 4 providers / 8 courses |
 
-### Retained ON flags (5)
+### Retained ON flags (7)
 
-`investorDemo` (public `/demo` + `/demo-tour`; home CTAs depend on it) · `executiveReport` (`/report` one-pager export) · `cardVerification` (Primitive Card Verification quests + badges) · `trainingProviders` (Suggested Training Providers funnel + Explorer tier) · `f1000Promo` (F1000 soft-launch promo: `/f1000` + `/api/f1000/*` + landing QR). All five are CLASS A for the current stage.
+`investorDemo` (public `/demo` + `/demo-tour`; home CTAs depend on it) · `executiveReport` (`/report` one-pager export) · `cardVerification` (Primitive Card Verification quests + badges + DATA evidence + Name-Job-Role guide) · `trainingProviders` (Suggested Training Providers funnel + Explorer tier) · `f1000Promo` (F1000 soft-launch promo: `/f1000` + `/api/f1000/*` + landing QR) · `arkResume` (`/ark-resume` ATS résumé artifact + confirmations + headshot) · `matchmaking` (ARK Talent Exchange `/matchmaking` + `/api/matchmaking/*`). All seven are CLASS A for the current stage.
 
 ---
 
@@ -239,7 +252,7 @@ The MVP is already deployed; this is the SPARTAN replay order a single developer
 | # | Step | Deliverable | Gate |
 |---|------|-------------|------|
 | 1 | Provision PostgreSQL + `SESSION_SECRET`; bootstrap Express + helmet | server boots, `/api/features` | A01–A03 |
-| 2 | Schema + migrations 0000–0017; `DatabaseStorage` | tables exist | A02 |
+| 2 | Schema + migrations 0000–0021; `DatabaseStorage` | tables exist | A02 |
 | 3 | Auth (login/register/logout/me) + `requireSelf` | session flow | A04–A05 |
 | 4 | Scoring engine + single-writer recalc + caps + LHCS | `test:scoring` green | A07–A12 |
 | 5 | Orchestrator SSE + `useArkStream` | live ARK widget | A13 |
@@ -247,15 +260,16 @@ The MVP is already deployed; this is the SPARTAN replay order a single developer
 | 7 | Anthropic client + Haiku KCSE + two-gate budget | `/api/ai/status` ok | A24–A26 |
 | 8 | Explorer tier + training match + funnel routes + affiliate guard + ARK REPORT | `/training` gated + ranked | A27–A34 |
 | 9 | Billing stub + GDPR export/delete | audit + purge | A35–A36 |
-| 10 | F1000 promo: invite allocation + claim/stats/me + price-cap at checkout + landing QR | idempotent claim; `409 sold_out` at 1,000 | A37–A40 |
-| 11 | Feature flags wired; only 5 ON; seed canonical data | CLASS C → 404 | A06, B02 |
-| 12 | Deploy to Autoscale | live URL | FFS 100% |
+| 10 | Verification DATA-evidence + Name-Job-Role guide; ARK RESUME + confirmations; ARK Talent Exchange + team formation | `test:matchmaking` green; résumé Pro+/Silver+ gate | A41–A46 |
+| 11 | F1000 promo: invite allocation + claim/stats/me + price-cap at checkout + landing QR | idempotent claim; `409 sold_out` at 1,000 | A37–A40 |
+| 12 | Feature flags wired; 7 ON; seed canonical data | CLASS C → 404 | A06, B02 |
+| 13 | Deploy to Autoscale | live URL | FFS 100% |
 
 ---
 
 # APPENDIX · Upgrade Path Document (CLASS C Triggers)
 
-Every deferral has a documented return trigger (SPARTAN C-04). Lifting is a one-line `FEATURE_<KEY>=true` env flip — **no rebuild** (SPARTAN reversibility guarantee). 17 flag families remain deferred (`executiveReport`, `cardVerification`, `trainingProviders` were lifted into CLASS A this cycle).
+Every deferral has a documented return trigger (SPARTAN C-04). Lifting is a one-line `FEATURE_<KEY>=true` env flip — **no rebuild** (SPARTAN reversibility guarantee). 17 flag families remain deferred (`executiveReport`, `cardVerification`, `trainingProviders`, `f1000Promo`, `investorDemo`, `arkResume`, `matchmaking` are the 7 lifted into CLASS A).
 
 | CLASS C item | Flag | Upgrade trigger |
 |--------------|------|-----------------|
@@ -277,7 +291,7 @@ Every deferral has a documented return trigger (SPARTAN C-04). Lifting is a one-
 | Cost-cap second gate + V2 budgets | `revenueGuardrail` | first $1k MRR or 80% cap crossing |
 | Book Companion journey + `/b/:slug` QR + ledger | `bookCompanion` | book launch / first reader cohort |
 
-**Data forward-compatibility (SPARTAN C-08):** all 48 tables already exist in the deployed schema — CLASS C surfaces are gated at the *route* layer, not removed from the data model, so no migration is needed when a flag flips. Auth, scoring, billing, and funnel contracts are untouched by any deferral (C-02 satisfied).
+**Data forward-compatibility (SPARTAN C-08):** all 55 tables already exist in the deployed schema — CLASS C surfaces are gated at the *route* layer, not removed from the data model, so no migration is needed when a flag flips. Auth, scoring, billing, and funnel contracts are untouched by any deferral (C-02 satisfied).
 
 ---
 
@@ -296,10 +310,10 @@ Every deferral has a documented return trigger (SPARTAN C-04). Lifting is a one-
 ║  SPARTAN SI — FORGE CERTIFICATION                                ║
 ║  Input:  ARK_PDD_Current_ATLAS.md  (PDD-CUR-2026-011, v11)      ║
 ║  Output: ARK_PDD_Current_MVP_Spartan  (PDD-MVP-2026-012)        ║
-║  Prompt reduction 45→40 (~11%) · Token reduction ~54%           ║
+║  Prompt reduction 51→46 (~10%) · Token reduction ~54%           ║
 ║  FFS 100 · CIS 99 · AVS 98 · UIS 100 · JCSE 49/50 PLATINUM      ║
 ║  Honesty Gate G3: ENFORCED (no ROI/savings, no ideafactory bill) ║
 ╚══════════════════════════════════════════════════════════════════╝
 ```
 
-> *SPARTAN compression complete. ATLAS MVP v12 delivered — funnel + verification + ARK REPORT + F1000 promo promoted to CLASS A, 17 families deferred with reversible triggers.*
+> *SPARTAN compression complete. ATLAS MVP v12 delivered — funnel + verification (incl. DATA-evidence + Name-Job-Role guide) + ARK REPORT + ARK RESUME + ARK Talent Exchange + F1000 promo promoted to CLASS A (7 flags ON), 17 families deferred with reversible triggers.*
