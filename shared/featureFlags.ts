@@ -73,30 +73,36 @@ export type FeatureKey =
   | "matchmaking"; // /matchmaking + /api/matchmaking/* + opportunity posting
 
 /**
- * MVP defaults — every CLASS C surface is OFF.
- * Editing this constant is the canonical way to flip a client-visible flag.
+ * MVP defaults. Editing this constant is the canonical way to flip a
+ * client-visible flag. As deferred CLASS C trigger families fire, modules are
+ * promoted here from OFF → ON.
+ *
+ * Currently OFF (half-built stubs, tracked separately): `enterpriseDashboard`
+ * (only /api/departments exists; the live workforce aggregation lives behind
+ * `institutionWorkforce`) and `assessmentEmail` (route returns a preview
+ * payload; it does not yet dispatch mail). Every other flag is ON.
  */
 export const MVP_FEATURES: Readonly<Record<FeatureKey, boolean>> = Object.freeze({
-  sphinxAdvanced: false,
-  guinPublic: false,
-  notifications: false,
-  claudeNarrative: false,
+  sphinxAdvanced: true,
+  guinPublic: true,
+  notifications: true,
+  claudeNarrative: true,
   executiveReport: true,
   arkResume: true,
-  subscriptionCancel: false,
+  subscriptionCancel: true,
   assessmentEmail: false,
-  cohorts: false,
+  cohorts: true,
   enterpriseDashboard: false,
-  institutionWorkforce: false,
-  corporateMarketplace: false,
+  institutionWorkforce: true,
+  corporateMarketplace: true,
   investorDemo: true,
-  forgeLabDocx: false,
-  drm: false,
-  customScenarios: false,
-  adminCcgeImport: false,
-  contextCraftPage: false,
-  revenueGuardrail: false,
-  bookCompanion: false,
+  forgeLabDocx: true,
+  drm: true,
+  customScenarios: true,
+  adminCcgeImport: true,
+  contextCraftPage: true,
+  revenueGuardrail: true,
+  bookCompanion: true,
   cardVerification: true,
   trainingProviders: true,
   f1000Promo: true,
