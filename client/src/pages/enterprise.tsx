@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
-import { Users, Target, ShieldAlert, Activity, Loader2, ChevronRight } from "lucide-react";
+import { Users, Target, ShieldAlert, Activity, Loader2, ChevronRight, SlidersHorizontal, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 
@@ -24,6 +24,17 @@ interface StaffDrilldownRow {
   vulnerabilityPct: number | null;
 }
 
+interface WorkforceFilterOption {
+  dimension: string;
+  label: string;
+  values: string[];
+}
+
+interface WorkforceFilter {
+  dimension: string;
+  value: string;
+}
+
 interface EnterpriseIntelligence {
   institution: string;
   totals: {
@@ -37,6 +48,8 @@ interface EnterpriseIntelligence {
   byDepartment: WorkforceBreakdownRow[];
   vulnerabilityDistribution: { name: string; value: number }[];
   jstTrend: { month: string; avgJst: number }[];
+  filterOptions: WorkforceFilterOption[];
+  activeFilter: WorkforceFilter | null;
 }
 
 const BAND_FILL: Record<string, string> = {
@@ -58,7 +71,9 @@ function getRiskColor(risk: number) {
 export default function EnterprisePage() {
   const [intel, setIntel] = useState<EnterpriseIntelligence | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<WorkforceFilter | null>(null);
   const [expandedDept, setExpandedDept] = useState<string | null>(null);
   const [deptStaff, setDeptStaff] = useState<Record<string, StaffDrilldownRow[]>>({});
   const [staffLoading, setStaffLoading] = useState<string | null>(null);
@@ -79,11 +94,14 @@ export default function EnterprisePage() {
   }, [deptStaff]);
 
   useEffect(() => {
-    api.getEnterpriseIntelligence()
-      .then((data: EnterpriseIntelligence) => setIntel(data))
-      .catch((e: any) => setError(e?.message || "Unable to load workforce intelligence."))
-      .finally(() => setLoading(false));
-  }, []);
+    let cancelled = false;
+    setRefreshing(true);
+    api.getEnterpriseIntelligence(filter ?? undefined)
+      .then((data: EnterpriseIntelligence) => { if (!cancelled) setIntel(data); })
+      .catch((e: any) => { if (!cancelled) setError(e?.message || "Unable to load workforce intelligence."); })
+      .finally(() => { if (!cancelled) { setLoading(false); setRefreshing(false); } });
+    return () => { cancelled = true; };
+  }, [filter]);
 
   const distribution = useMemo(
     () => (intel?.vulnerabilityDistribution ?? []).filter(d => d.value > 0).map(d => ({ ...d, fill: BAND_FILL[d.name] ?? "hsl(var(--muted-foreground))" })),
@@ -154,6 +172,66 @@ export default function EnterprisePage() {
           Live Data Feed Active
         </div>
       </div>
+
+      {intel.filterOptions.length > 0 && (
+        <div className="glass-card p-4 rounded-lg flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <SlidersHorizontal className="w-4 h-4" />
+            <span className="text-xs font-mono uppercase tracking-widest">Filter Workforce</span>
+          </div>
+
+          <select
+            value={filter?.dimension ?? ""}
+            onChange={(e) => {
+              const dim = e.target.value;
+              if (!dim) { setFilter(null); return; }
+              const opt = intel.filterOptions.find((o) => o.dimension === dim);
+              if (opt && opt.values.length) setFilter({ dimension: dim, value: opt.values[0] });
+            }}
+            className="bg-black/40 border border-white/15 rounded px-3 py-1.5 font-mono text-sm text-white focus:border-primary focus:outline-none"
+            data-testid="select-filter-dimension"
+          >
+            <option value="">All staff</option>
+            {intel.filterOptions.map((o) => (
+              <option key={o.dimension} value={o.dimension}>{o.label}</option>
+            ))}
+          </select>
+
+          {filter && (
+            <select
+              value={filter.value}
+              onChange={(e) => setFilter({ dimension: filter.dimension, value: e.target.value })}
+              className="bg-black/40 border border-white/15 rounded px-3 py-1.5 font-mono text-sm text-white focus:border-primary focus:outline-none"
+              data-testid="select-filter-value"
+            >
+              {(intel.filterOptions.find((o) => o.dimension === filter.dimension)?.values ?? []).map((v) => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+          )}
+
+          {filter && (
+            <button
+              onClick={() => setFilter(null)}
+              className="flex items-center gap-1 text-xs font-mono uppercase tracking-widest text-muted-foreground hover:text-white transition-colors"
+              data-testid="button-clear-filter"
+            >
+              <X className="w-3.5 h-3.5" /> Clear
+            </button>
+          )}
+
+          {refreshing && <Loader2 className="w-4 h-4 text-primary animate-spin sm:ml-auto" />}
+
+          {intel.activeFilter && (
+            <span
+              className="sm:ml-auto text-[11px] font-mono uppercase tracking-widest text-primary"
+              data-testid="text-active-filter"
+            >
+              Showing {totals.staff} of this slice
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="glass-card p-4 rounded-lg flex items-center gap-4 hover:border-white/20 transition-colors">

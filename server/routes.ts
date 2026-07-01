@@ -12,7 +12,7 @@ const _filename = typeof __filename !== "undefined"
     : process.cwd() + "/index.js";
 const _require = createRequire(_filename);
 const { PDFParse } = _require("pdf-parse") as { PDFParse: new (opts: { data: Uint8Array }) => { getText: () => Promise<{ text: string }> } };
-import { storage } from "./storage";
+import { storage, type WorkforceDimension } from "./storage";
 import { analyzeResume } from "./resumeAnalyzer";
 import { extractProfileBio, EMPTY_BIO, type ProfileBio } from "./profileExtract";
 import { requireAuth, requireSelf, requireInstructor, requireInstitutionAdmin, currentUserId, loginSession } from "./auth";
@@ -3012,7 +3012,16 @@ export async function registerRoutes(
     requireInstitutionAdmin,
     async (req, res) => {
       try {
-        const intel = await storage.getEnterpriseIntelligence(req.institutionScope!);
+        // Optional slice: ?dimension=<tenureBand|compensationBand|manager|location>&value=<bucket>.
+        // Storage validates both against the real roster and ignores anything
+        // that doesn't match, so bad params degrade to the unfiltered overview.
+        const dimension = typeof req.query.dimension === "string" ? req.query.dimension : undefined;
+        const value = typeof req.query.value === "string" ? req.query.value : undefined;
+        const filter =
+          dimension && value
+            ? ({ dimension: dimension as WorkforceDimension, value })
+            : undefined;
+        const intel = await storage.getEnterpriseIntelligence(req.institutionScope!, filter);
         return res.json(intel);
       } catch (err: any) {
         return res.status(500).json({ message: err.message });

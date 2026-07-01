@@ -104,14 +104,51 @@ export type VulnerabilityBand = { name: string; value: number };
 export type JstTrendPoint = { month: string; avgJst: number };
 
 /**
+ * Breakdown dimensions the enterprise overview can be sliced by. These are the
+ * roster attributes the aggregation already groups on (department stays the
+ * heatmap axis, so it is intentionally excluded as a filter dimension).
+ */
+export type WorkforceDimension = "tenureBand" | "compensationBand" | "manager" | "location";
+
+/** Filterable dimension + its distinct real values (for the filter UI). */
+export type WorkforceFilterOption = {
+  dimension: WorkforceDimension;
+  label: string;
+  values: string[];
+};
+
+/** An active slice applied to the enterprise overview. */
+export type WorkforceFilter = { dimension: WorkforceDimension; value: string };
+
+/** Placeholder bucket for staff missing a value on a given dimension. */
+const UNSPECIFIED_KEY = "Unspecified";
+const workforceKey = (v: string | null | undefined) => (v ?? "").trim() || UNSPECIFIED_KEY;
+
+/** dimension → human label + accessor, single source for filtering + options. */
+const WORKFORCE_DIMENSIONS: {
+  dimension: WorkforceDimension;
+  label: string;
+  keyOf: (s: StaffRecordWithArk) => string | null | undefined;
+}[] = [
+  { dimension: "tenureBand", label: "Tenure Band", keyOf: (s) => s.tenureBand },
+  { dimension: "compensationBand", label: "Compensation Band", keyOf: (s) => s.compensationBand },
+  { dimension: "manager", label: "Manager", keyOf: (s) => s.manager },
+  { dimension: "location", label: "Location", keyOf: (s) => s.location },
+];
+
+/**
  * Enterprise-overview payload for the `/enterprise` dashboard. Reuses the
  * `getWorkforceIntelligence` aggregation (department heatmap + totals) and adds
  * a vulnerability distribution and a real JST trend, all driven by live
- * account/assessment data for the institution.
+ * account/assessment data for the institution. When an admin applies a filter,
+ * every surface is recomputed over the filtered staff subset and `activeFilter`
+ * echoes the applied slice; `filterOptions` always reflects the full roster.
  */
 export type EnterpriseIntelligence = WorkforceIntelligence & {
   vulnerabilityDistribution: VulnerabilityBand[];
   jstTrend: JstTrendPoint[];
+  filterOptions: WorkforceFilterOption[];
+  activeFilter: WorkforceFilter | null;
 };
 
 export interface IStorage {
@@ -364,7 +401,10 @@ export interface IStorage {
    *  (across institutions) when they register/log in. Returns rows linked. */
   reconcileStaffInvitesForUser(userId: string, email: string): Promise<number>;
   getWorkforceIntelligence(institution: string): Promise<WorkforceIntelligence>;
-  getEnterpriseIntelligence(institution: string): Promise<EnterpriseIntelligence>;
+  getEnterpriseIntelligence(
+    institution: string,
+    filter?: WorkforceFilter,
+  ): Promise<EnterpriseIntelligence>;
   /** Persist the most-recent connection-test outcome for a connector, upserted
    *  on (institution, adapter) so each connector keeps only its latest result. */
   recordConnectorTest(test: InsertHrConnectorTest): Promise<HrConnectorTest>;
@@ -2350,13 +2390,19 @@ export class DatabaseStorage implements IStorage {
 
   async getWorkforceIntelligence(institution: string): Promise<WorkforceIntelligence> {
     const staff = await this.getStaffRecords(institution);
+    return this.computeWorkforceIntelligence(institution, staff);
+  }
 
+  private computeWorkforceIntelligence(
+    institution: string,
+    staff: StaffRecordWithArk[],
+  ): WorkforceIntelligence {
     const aggregate = (
       keyOf: (s: StaffRecordWithArk) => string | null | undefined,
     ): WorkforceBreakdownRow[] => {
       const groups = new Map<string, StaffRecordWithArk[]>();
       for (const s of staff) {
-        const k = (keyOf(s) ?? "").trim() || "Unspecified";
+        const k = workforceKey(keyOf(s));
         const arr = groups.get(k) ?? [];
         arr.push(s);
         groups.set(k, arr);
@@ -2416,14 +2462,44 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getEnterpriseIntelligence(institution: string): Promise<EnterpriseIntelligence> {
-    // Reuse the workforce aggregation for totals + department heatmap, then
-    // layer on the two enterprise-only visuals (vulnerability strata + JST
-    // trend) from the same underlying account/assessment data.
-    const [intel, staff] = await Promise.all([
-      this.getWorkforceIntelligence(institution),
-      this.getStaffRecords(institution),
-    ]);
+  async getEnterpriseIntelligence(
+    institution: string,
+    filter?: WorkforceFilter,
+  ): Promise<EnterpriseIntelligence> {
+    // Fetch the full roster once, derive the filter options from it (so the
+    // dropdown always reflects the whole org), then optionally narrow to the
+    // requested slice before computing every downstream surface.
+    const allStaff = await this.getStaffRecords(institution);
+
+    // Filter options: only dimensions with ≥2 distinct real values are worth
+    // slicing on. Values are the actual buckets present in the roster — no
+    // fabricated categories.
+    const filterOptions: WorkforceFilterOption[] = [];
+    for (const dim of WORKFORCE_DIMENSIONS) {
+      const values = Array.from(new Set(allStaff.map((s) => workforceKey(dim.keyOf(s))))).sort(
+        (a, b) => a.localeCompare(b),
+      );
+      if (values.length >= 2) {
+        filterOptions.push({ dimension: dim.dimension, label: dim.label, values });
+      }
+    }
+
+    // Validate the requested filter against the real options so a client can
+    // never inject a fabricated dimension/value; invalid → treated as no filter.
+    let activeFilter: WorkforceFilter | null = null;
+    let staff = allStaff;
+    if (filter) {
+      const dim = WORKFORCE_DIMENSIONS.find((d) => d.dimension === filter.dimension);
+      const opt = filterOptions.find((o) => o.dimension === filter.dimension);
+      if (dim && opt && opt.values.includes(filter.value)) {
+        staff = allStaff.filter((s) => workforceKey(dim.keyOf(s)) === filter.value);
+        activeFilter = { dimension: filter.dimension, value: filter.value };
+      }
+    }
+
+    // Reuse the workforce aggregation for totals + department heatmap over the
+    // (possibly filtered) staff subset.
+    const intel = this.computeWorkforceIntelligence(institution, staff);
 
     // Vulnerability distribution over assessed staff. Higher replacement % =
     // worse; bands mirror the 5 strata rendered by the enterprise dashboard.
@@ -2445,19 +2521,32 @@ export class DatabaseStorage implements IStorage {
       { name: "Flourishing", value: bands.Flourishing },
     ];
 
-    const jstTrend = await this.getInstitutionJstTrend(institution, 6);
+    // Trend is re-scoped to the filtered staff's linked accounts so it stays
+    // consistent with the rest of the overview; unfiltered → whole institution.
+    const userIds = activeFilter
+      ? staff.map((s) => s.arkUserId).filter((id): id is string => !!id)
+      : undefined;
+    const jstTrend = await this.getInstitutionJstTrend(institution, 6, userIds);
 
-    return { ...intel, vulnerabilityDistribution, jstTrend };
+    return { ...intel, vulnerabilityDistribution, jstTrend, filterOptions, activeFilter };
   }
 
   // Institution-wide monthly average JST from ark_score_history, restricted to
   // the institution's linked staff accounts. Real time-series — sparse months
   // simply don't appear rather than being padded with fabricated points.
-  async getInstitutionJstTrend(institution: string, months = 6): Promise<JstTrendPoint[]> {
+  async getInstitutionJstTrend(
+    institution: string,
+    months = 6,
+    userIds?: string[],
+  ): Promise<JstTrendPoint[]> {
     const since = new Date();
     since.setMonth(since.getMonth() - (months - 1));
     since.setDate(1);
     since.setHours(0, 0, 0, 0);
+
+    // A filter that matched no linked accounts must yield an empty trend, never
+    // silently fall back to the whole institution.
+    if (userIds && userIds.length === 0) return [];
 
     const rows = await db
       .select({ createdAt: arkScoreHistory.createdAt, jstIndex: arkScoreHistory.jstIndex })
@@ -2469,7 +2558,14 @@ export class DatabaseStorage implements IStorage {
           eq(staffRecords.institution, institution),
         ),
       )
-      .where(sql`${arkScoreHistory.createdAt} >= ${since}`)
+      .where(
+        userIds
+          ? and(
+              sql`${arkScoreHistory.createdAt} >= ${since}`,
+              inArray(arkScoreHistory.userId, userIds),
+            )
+          : sql`${arkScoreHistory.createdAt} >= ${since}`,
+      )
       .orderBy(arkScoreHistory.createdAt);
 
     const buckets = new Map<string, { label: string; sum: number; n: number; order: number }>();

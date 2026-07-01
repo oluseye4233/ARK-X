@@ -68,7 +68,12 @@ export const api = {
       body: JSON.stringify({ ids }),
     }),
 
-  getEnterpriseIntelligence: () => apiRequest("/api/enterprise/intelligence"),
+  getEnterpriseIntelligence: (filter?: { dimension: string; value: string }) => {
+    const qs = filter
+      ? `?dimension=${encodeURIComponent(filter.dimension)}&value=${encodeURIComponent(filter.value)}`
+      : "";
+    return apiRequest(`/api/enterprise/intelligence${qs}`);
+  },
 
   getDepartmentStaff: (department: string) =>
     apiRequest(`/api/enterprise/departments/${encodeURIComponent(department)}/staff`),
