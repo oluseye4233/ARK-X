@@ -41,7 +41,7 @@ import { pickFlywheelCta, rankAllCtas } from "./flywheelCta";
 import { backfillAllUsers } from "./arkBackfill";
 import { sendMail, isMailConfigured } from "./mail";
 import { deliverConfirmationInvite } from "./confirmationInviteEmail";
-import { buildAssessmentSummaryEmail, deliverAssessmentSummary } from "./assessmentSummaryEmail";
+import { handleAssessmentSummary } from "./assessmentSummaryEmail";
 import { scoreSessionWithClaude } from "./ai/kcse";
 import { generateResumeNarrative, ProTierRequiredError } from "./ai/narrative";
 import { CODEC_PRIMITIVES, CODEC_BY_ID } from "@shared/codec-primitives";
@@ -596,29 +596,14 @@ export async function registerRoutes(
   app.post("/api/notifications/assessment-summary", requireFeature("assessmentEmail"), requireAuth, async (req, res) => {
     try {
       const userId = currentUserId(req)!;
-      const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
       // Recipient is ALWAYS the authenticated user's own account email —
-      // never a client-supplied address — so this can't be used as an open
-      // mail relay.
-      const recipient = (user.username ?? "").trim();
-      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(recipient)) {
-        return res.status(400).json({
-          message: "Your account has no valid email address to send the summary to.",
-        });
-      }
-      const assessment = await storage.getLatestAssessment(userId);
-      if (!assessment) {
-        return res.status(404).json({ message: "No assessment found for this user" });
-      }
-      const { subject, body } = buildAssessmentSummaryEmail(assessment, user.name ?? undefined);
-      const result = await deliverAssessmentSummary({ to: recipient, subject, body });
-      if (!result.emailSent) {
-        return res.status(502).json({ success: false, message: result.emailError });
-      }
-      return res.json({ success: true, message: `Assessment summary sent to ${recipient}` });
+      // derived inside the handler from the session-scoped userId, never from a
+      // client-supplied address — so this can't be used as an open mail relay.
+      const { status, body } = await handleAssessmentSummary(userId, {
+        getUser: (id) => storage.getUser(id),
+        getLatestAssessment: (id) => storage.getLatestAssessment(id),
+      });
+      return res.status(status).json(body);
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }

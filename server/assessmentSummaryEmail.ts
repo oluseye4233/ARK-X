@@ -92,3 +92,76 @@ export async function deliverAssessmentSummary(
     return { emailSent: false, emailError: reason };
   }
 }
+
+// A single, valid email address (no whitespace, exactly one @, a dotted domain).
+// Used to reject accounts whose username isn't a usable recipient BEFORE any
+// send is attempted — and to guarantee we never send to a client-supplied one.
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+// Minimal view of a user the summary handler needs. Structurally satisfied by
+// the full `User` record, so `storage.getUser` can be passed directly.
+export interface AssessmentSummaryUser {
+  username: string | null;
+  name: string | null;
+}
+
+// Injectable data + delivery dependencies for the request handler, so the
+// route's branch logic (missing user / invalid email / missing assessment /
+// delivery failure / success) can be unit tested without the HTTP, session,
+// storage, or mail stack.
+export interface AssessmentSummaryHandlerDeps {
+  getUser: (userId: string) => Promise<AssessmentSummaryUser | undefined>;
+  getLatestAssessment: (userId: string) => Promise<Assessment | undefined>;
+  deliver?: (args: {
+    to: string;
+    subject: string;
+    body: string;
+  }) => Promise<AssessmentSummaryResult>;
+}
+
+export interface AssessmentSummaryHttpResponse {
+  status: number;
+  body: Record<string, unknown>;
+}
+
+// Pure request handler for POST /api/notifications/assessment-summary.
+//
+// The recipient is ALWAYS the authenticated user's own account email — derived
+// here from the looked-up user, never from client input — so this cannot be
+// abused as an open mail relay. A delivery failure surfaces a truthful 502
+// (never a fake 200), and no branch throws.
+export async function handleAssessmentSummary(
+  userId: string,
+  deps: AssessmentSummaryHandlerDeps,
+): Promise<AssessmentSummaryHttpResponse> {
+  const user = await deps.getUser(userId);
+  if (!user) {
+    return { status: 404, body: { message: "User not found" } };
+  }
+  const recipient = (user.username ?? "").trim();
+  if (!EMAIL_RE.test(recipient)) {
+    return {
+      status: 400,
+      body: {
+        message: "Your account has no valid email address to send the summary to.",
+      },
+    };
+  }
+  const assessment = await deps.getLatestAssessment(userId);
+  if (!assessment) {
+    return { status: 404, body: { message: "No assessment found for this user" } };
+  }
+  const { subject, body } = buildAssessmentSummaryEmail(
+    assessment,
+    user.name ?? undefined,
+  );
+  const deliver = deps.deliver ?? deliverAssessmentSummary;
+  const result = await deliver({ to: recipient, subject, body });
+  if (!result.emailSent) {
+    return { status: 502, body: { success: false, message: result.emailError } };
+  }
+  return {
+    status: 200,
+    body: { success: true, message: `Assessment summary sent to ${recipient}` },
+  };
+}
