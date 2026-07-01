@@ -141,15 +141,16 @@ const WORKFORCE_DIMENSIONS: {
  * Enterprise-overview payload for the `/enterprise` dashboard. Reuses the
  * `getWorkforceIntelligence` aggregation (department heatmap + totals) and adds
  * a vulnerability distribution and a real JST trend, all driven by live
- * account/assessment data for the institution. When an admin applies a filter,
- * every surface is recomputed over the filtered staff subset and `activeFilter`
- * echoes the applied slice; `filterOptions` always reflects the full roster.
+ * account/assessment data for the institution. When an admin applies one or more
+ * filters, every surface is recomputed over the intersection (AND) of those
+ * slices and `activeFilters` echoes the applied slices; `filterOptions` always
+ * reflects the full roster.
  */
 export type EnterpriseIntelligence = WorkforceIntelligence & {
   vulnerabilityDistribution: VulnerabilityBand[];
   jstTrend: JstTrendPoint[];
   filterOptions: WorkforceFilterOption[];
-  activeFilter: WorkforceFilter | null;
+  activeFilters: WorkforceFilter[];
 };
 
 export interface IStorage {
@@ -408,7 +409,7 @@ export interface IStorage {
   getWorkforceIntelligence(institution: string): Promise<WorkforceIntelligence>;
   getEnterpriseIntelligence(
     institution: string,
-    filter?: WorkforceFilter,
+    filters?: WorkforceFilter[],
   ): Promise<EnterpriseIntelligence>;
   /** Persist the most-recent connection-test outcome for a connector, upserted
    *  on (institution, adapter) so each connector keeps only its latest result. */
@@ -2516,11 +2517,12 @@ export class DatabaseStorage implements IStorage {
 
   async getEnterpriseIntelligence(
     institution: string,
-    filter?: WorkforceFilter,
+    filters?: WorkforceFilter[],
   ): Promise<EnterpriseIntelligence> {
     // Fetch the full roster once, derive the filter options from it (so the
     // dropdown always reflects the whole org), then optionally narrow to the
-    // requested slice before computing every downstream surface.
+    // intersection of the requested slices before computing every downstream
+    // surface.
     const allStaff = await this.getStaffRecords(institution);
 
     // Filter options: only dimensions with ≥2 distinct real values are worth
@@ -2536,17 +2538,30 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    // Validate the requested filter against the real options so a client can
-    // never inject a fabricated dimension/value; invalid → treated as no filter.
-    let activeFilter: WorkforceFilter | null = null;
-    let staff = allStaff;
-    if (filter) {
+    // Validate each requested filter against the real options so a client can
+    // never inject a fabricated dimension/value; invalid slices are dropped.
+    // At most one filter per dimension is honoured (a staff member has a single
+    // value per dimension, so two values on the same dimension can never both
+    // match) — the last one wins. Surviving filters are AND-ed together.
+    const activeFilters: WorkforceFilter[] = [];
+    const byDimension = new Map<WorkforceDimension, WorkforceFilter>();
+    for (const filter of filters ?? []) {
       const dim = WORKFORCE_DIMENSIONS.find((d) => d.dimension === filter.dimension);
       const opt = filterOptions.find((o) => o.dimension === filter.dimension);
       if (dim && opt && opt.values.includes(filter.value)) {
-        staff = allStaff.filter((s) => workforceKey(dim.keyOf(s)) === filter.value);
-        activeFilter = { dimension: filter.dimension, value: filter.value };
+        byDimension.set(filter.dimension, { dimension: filter.dimension, value: filter.value });
       }
+    }
+    // Preserve the canonical dimension order for a stable echo back to the client.
+    for (const dim of WORKFORCE_DIMENSIONS) {
+      const f = byDimension.get(dim.dimension);
+      if (f) activeFilters.push(f);
+    }
+
+    let staff = allStaff;
+    for (const f of activeFilters) {
+      const dim = WORKFORCE_DIMENSIONS.find((d) => d.dimension === f.dimension)!;
+      staff = staff.filter((s) => workforceKey(dim.keyOf(s)) === f.value);
     }
 
     // Reuse the workforce aggregation for totals + department heatmap over the
@@ -2575,12 +2590,12 @@ export class DatabaseStorage implements IStorage {
 
     // Trend is re-scoped to the filtered staff's linked accounts so it stays
     // consistent with the rest of the overview; unfiltered → whole institution.
-    const userIds = activeFilter
+    const userIds = activeFilters.length
       ? staff.map((s) => s.arkUserId).filter((id): id is string => !!id)
       : undefined;
     const jstTrend = await this.getInstitutionJstTrend(institution, 6, userIds);
 
-    return { ...intel, vulnerabilityDistribution, jstTrend, filterOptions, activeFilter };
+    return { ...intel, vulnerabilityDistribution, jstTrend, filterOptions, activeFilters };
   }
 
   // Institution-wide monthly average JST from ark_score_history, restricted to

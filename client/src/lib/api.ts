@@ -68,10 +68,12 @@ export const api = {
       body: JSON.stringify({ ids }),
     }),
 
-  getEnterpriseIntelligence: (filter?: { dimension: string; value: string }) => {
-    const qs = filter
-      ? `?dimension=${encodeURIComponent(filter.dimension)}&value=${encodeURIComponent(filter.value)}`
-      : "";
+  getEnterpriseIntelligence: (filters?: { dimension: string; value: string }[]) => {
+    const params = (filters ?? []).flatMap((f) => [
+      `dimension=${encodeURIComponent(f.dimension)}`,
+      `value=${encodeURIComponent(f.value)}`,
+    ]);
+    const qs = params.length ? `?${params.join("&")}` : "";
     return apiRequest(`/api/enterprise/intelligence${qs}`);
   },
 

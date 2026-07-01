@@ -3034,16 +3034,20 @@ export async function registerRoutes(
     requireInstitutionAdmin,
     async (req, res) => {
       try {
-        // Optional slice: ?dimension=<tenureBand|compensationBand|manager|location>&value=<bucket>.
-        // Storage validates both against the real roster and ignores anything
+        // Optional slices: repeated ?dimension=<tenureBand|compensationBand|manager|location>&value=<bucket>
+        // pairs, zipped positionally and AND-ed together (e.g. tenure AND location).
+        // Storage validates every pair against the real roster and drops anything
         // that doesn't match, so bad params degrade to the unfiltered overview.
-        const dimension = typeof req.query.dimension === "string" ? req.query.dimension : undefined;
-        const value = typeof req.query.value === "string" ? req.query.value : undefined;
-        const filter =
-          dimension && value
-            ? ({ dimension: dimension as WorkforceDimension, value })
-            : undefined;
-        const intel = await storage.getEnterpriseIntelligence(req.institutionScope!, filter);
+        const dimensions = ([] as string[]).concat(req.query.dimension as any ?? []).filter(
+          (d): d is string => typeof d === "string",
+        );
+        const values = ([] as string[]).concat(req.query.value as any ?? []).filter(
+          (v): v is string => typeof v === "string",
+        );
+        const filters = dimensions
+          .map((dimension, i) => ({ dimension: dimension as WorkforceDimension, value: values[i] }))
+          .filter((f) => typeof f.value === "string");
+        const intel = await storage.getEnterpriseIntelligence(req.institutionScope!, filters);
         return res.json(intel);
       } catch (err: any) {
         return res.status(500).json({ message: err.message });

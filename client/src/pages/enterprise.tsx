@@ -52,7 +52,7 @@ interface EnterpriseIntelligence {
   vulnerabilityDistribution: { name: string; value: number }[];
   jstTrend: { month: string; avgJst: number }[];
   filterOptions: WorkforceFilterOption[];
-  activeFilter: WorkforceFilter | null;
+  activeFilters: WorkforceFilter[];
 }
 
 const BAND_FILL: Record<string, string> = {
@@ -76,7 +76,7 @@ export default function EnterprisePage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<WorkforceFilter | null>(null);
+  const [filters, setFilters] = useState<WorkforceFilter[]>([]);
   const [expandedDept, setExpandedDept] = useState<string | null>(null);
   const [deptStaff, setDeptStaff] = useState<Record<string, StaffDrilldownRow[]>>({});
   const [staffLoading, setStaffLoading] = useState<string | null>(null);
@@ -116,6 +116,13 @@ export default function EnterprisePage() {
       .finally(() => setActionPending((cur) => (cur === staff.id ? null : cur)));
   }, [patchStaffRow]);
 
+  const setDimensionValue = useCallback((dimension: string, value: string) => {
+    setFilters((prev) => {
+      const rest = prev.filter((f) => f.dimension !== dimension);
+      return value ? [...rest, { dimension, value }] : rest;
+    });
+  }, []);
+
   const toggleDept = useCallback((dept: string) => {
     setExpandedDept((prev) => {
       if (prev === dept) return null;
@@ -133,12 +140,12 @@ export default function EnterprisePage() {
   useEffect(() => {
     let cancelled = false;
     setRefreshing(true);
-    api.getEnterpriseIntelligence(filter ?? undefined)
+    api.getEnterpriseIntelligence(filters)
       .then((data: EnterpriseIntelligence) => { if (!cancelled) setIntel(data); })
       .catch((e: any) => { if (!cancelled) setError(e?.message || "Unable to load workforce intelligence."); })
       .finally(() => { if (!cancelled) { setLoading(false); setRefreshing(false); } });
     return () => { cancelled = true; };
-  }, [filter]);
+  }, [filters]);
 
   const distribution = useMemo(
     () => (intel?.vulnerabilityDistribution ?? []).filter(d => d.value > 0).map(d => ({ ...d, fill: BAND_FILL[d.name] ?? "hsl(var(--muted-foreground))" })),
@@ -217,54 +224,46 @@ export default function EnterprisePage() {
             <span className="text-xs font-mono uppercase tracking-widest">Filter Workforce</span>
           </div>
 
-          <select
-            value={filter?.dimension ?? ""}
-            onChange={(e) => {
-              const dim = e.target.value;
-              if (!dim) { setFilter(null); return; }
-              const opt = intel.filterOptions.find((o) => o.dimension === dim);
-              if (opt && opt.values.length) setFilter({ dimension: dim, value: opt.values[0] });
-            }}
-            className="bg-black/40 border border-white/15 rounded px-3 py-1.5 font-mono text-sm text-white focus:border-primary focus:outline-none"
-            data-testid="select-filter-dimension"
-          >
-            <option value="">All staff</option>
-            {intel.filterOptions.map((o) => (
-              <option key={o.dimension} value={o.dimension}>{o.label}</option>
-            ))}
-          </select>
+          {intel.filterOptions.map((o) => {
+            const current = filters.find((f) => f.dimension === o.dimension)?.value ?? "";
+            return (
+              <label key={o.dimension} className="flex items-center gap-2">
+                <span className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground">
+                  {o.label}
+                </span>
+                <select
+                  value={current}
+                  onChange={(e) => setDimensionValue(o.dimension, e.target.value)}
+                  className="bg-black/40 border border-white/15 rounded px-3 py-1.5 font-mono text-sm text-white focus:border-primary focus:outline-none"
+                  data-testid={`select-filter-${o.dimension}`}
+                >
+                  <option value="">All</option>
+                  {o.values.map((v) => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
+              </label>
+            );
+          })}
 
-          {filter && (
-            <select
-              value={filter.value}
-              onChange={(e) => setFilter({ dimension: filter.dimension, value: e.target.value })}
-              className="bg-black/40 border border-white/15 rounded px-3 py-1.5 font-mono text-sm text-white focus:border-primary focus:outline-none"
-              data-testid="select-filter-value"
-            >
-              {(intel.filterOptions.find((o) => o.dimension === filter.dimension)?.values ?? []).map((v) => (
-                <option key={v} value={v}>{v}</option>
-              ))}
-            </select>
-          )}
-
-          {filter && (
+          {filters.length > 0 && (
             <button
-              onClick={() => setFilter(null)}
+              onClick={() => setFilters([])}
               className="flex items-center gap-1 text-xs font-mono uppercase tracking-widest text-muted-foreground hover:text-white transition-colors"
               data-testid="button-clear-filter"
             >
-              <X className="w-3.5 h-3.5" /> Clear
+              <X className="w-3.5 h-3.5" /> Clear all
             </button>
           )}
 
           {refreshing && <Loader2 className="w-4 h-4 text-primary animate-spin sm:ml-auto" />}
 
-          {intel.activeFilter && (
+          {intel.activeFilters.length > 0 && (
             <span
               className="sm:ml-auto text-[11px] font-mono uppercase tracking-widest text-primary"
               data-testid="text-active-filter"
             >
-              Showing {totals.staff} of this slice
+              Showing {totals.staff} across {intel.activeFilters.length} filter{intel.activeFilters.length > 1 ? "s" : ""}
             </span>
           )}
         </div>
