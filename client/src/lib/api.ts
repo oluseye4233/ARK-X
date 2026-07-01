@@ -68,8 +68,6 @@ export const api = {
       body: JSON.stringify({ ids }),
     }),
 
-  getDepartments: () => apiRequest("/api/departments"),
-
   getEnterpriseIntelligence: () => apiRequest("/api/enterprise/intelligence"),
 
   getContextCraftLevels: () => apiRequest("/api/context-craft/levels"),

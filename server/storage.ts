@@ -86,6 +86,23 @@ export type WorkforceIntelligence = {
   byLocation: WorkforceBreakdownRow[];
 };
 
+/** One AI-vulnerability stratum + how many assessed staff fall in it. */
+export type VulnerabilityBand = { name: string; value: number };
+
+/** One month's institution-wide average JST (from ark_score_history). */
+export type JstTrendPoint = { month: string; avgJst: number };
+
+/**
+ * Enterprise-overview payload for the `/enterprise` dashboard. Reuses the
+ * `getWorkforceIntelligence` aggregation (department heatmap + totals) and adds
+ * a vulnerability distribution and a real JST trend, all driven by live
+ * account/assessment data for the institution.
+ */
+export type EnterpriseIntelligence = WorkforceIntelligence & {
+  vulnerabilityDistribution: VulnerabilityBand[];
+  jstTrend: JstTrendPoint[];
+};
+
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -332,6 +349,7 @@ export interface IStorage {
    *  (across institutions) when they register/log in. Returns rows linked. */
   reconcileStaffInvitesForUser(userId: string, email: string): Promise<number>;
   getWorkforceIntelligence(institution: string): Promise<WorkforceIntelligence>;
+  getEnterpriseIntelligence(institution: string): Promise<EnterpriseIntelligence>;
   /** Persist the most-recent connection-test outcome for a connector, upserted
    *  on (institution, adapter) so each connector keeps only its latest result. */
   recordConnectorTest(test: InsertHrConnectorTest): Promise<HrConnectorTest>;
@@ -2345,6 +2363,79 @@ export class DatabaseStorage implements IStorage {
       byManager: aggregate((s) => s.manager),
       byLocation: aggregate((s) => s.location),
     };
+  }
+
+  async getEnterpriseIntelligence(institution: string): Promise<EnterpriseIntelligence> {
+    // Reuse the workforce aggregation for totals + department heatmap, then
+    // layer on the two enterprise-only visuals (vulnerability strata + JST
+    // trend) from the same underlying account/assessment data.
+    const [intel, staff] = await Promise.all([
+      this.getWorkforceIntelligence(institution),
+      this.getStaffRecords(institution),
+    ]);
+
+    // Vulnerability distribution over assessed staff. Higher replacement % =
+    // worse; bands mirror the 5 strata rendered by the enterprise dashboard.
+    const bands = { Critical: 0, "At Risk": 0, Transitional: 0, Resilient: 0, Flourishing: 0 };
+    for (const s of staff) {
+      if (s.assessmentStatus !== "complete" || !s.ark) continue;
+      const v = s.ark.vulnerabilityPct;
+      if (v >= 80) bands.Critical++;
+      else if (v >= 60) bands["At Risk"]++;
+      else if (v >= 40) bands.Transitional++;
+      else if (v >= 20) bands.Resilient++;
+      else bands.Flourishing++;
+    }
+    const vulnerabilityDistribution: VulnerabilityBand[] = [
+      { name: "Critical", value: bands.Critical },
+      { name: "At Risk", value: bands["At Risk"] },
+      { name: "Transitional", value: bands.Transitional },
+      { name: "Resilient", value: bands.Resilient },
+      { name: "Flourishing", value: bands.Flourishing },
+    ];
+
+    const jstTrend = await this.getInstitutionJstTrend(institution, 6);
+
+    return { ...intel, vulnerabilityDistribution, jstTrend };
+  }
+
+  // Institution-wide monthly average JST from ark_score_history, restricted to
+  // the institution's linked staff accounts. Real time-series — sparse months
+  // simply don't appear rather than being padded with fabricated points.
+  async getInstitutionJstTrend(institution: string, months = 6): Promise<JstTrendPoint[]> {
+    const since = new Date();
+    since.setMonth(since.getMonth() - (months - 1));
+    since.setDate(1);
+    since.setHours(0, 0, 0, 0);
+
+    const rows = await db
+      .select({ createdAt: arkScoreHistory.createdAt, jstIndex: arkScoreHistory.jstIndex })
+      .from(arkScoreHistory)
+      .innerJoin(
+        staffRecords,
+        and(
+          eq(staffRecords.arkUserId, arkScoreHistory.userId),
+          eq(staffRecords.institution, institution),
+        ),
+      )
+      .where(sql`${arkScoreHistory.createdAt} >= ${since}`)
+      .orderBy(arkScoreHistory.createdAt);
+
+    const buckets = new Map<string, { label: string; sum: number; n: number; order: number }>();
+    for (const r of rows) {
+      const d = new Date(r.createdAt);
+      const order = d.getFullYear() * 12 + d.getMonth();
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      const label = d.toLocaleDateString("en-US", { month: "short" });
+      const b = buckets.get(key) ?? { label, sum: 0, n: 0, order };
+      b.sum += r.jstIndex;
+      b.n += 1;
+      buckets.set(key, b);
+    }
+
+    return Array.from(buckets.values())
+      .sort((a, b) => a.order - b.order)
+      .map((b) => ({ month: b.label, avgJst: Math.round(b.sum / b.n) }));
   }
 
   async recordConnectorTest(test: InsertHrConnectorTest): Promise<HrConnectorTest> {

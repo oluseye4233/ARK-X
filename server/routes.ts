@@ -2828,25 +2828,6 @@ export async function registerRoutes(
     }
   });
 
-  // Enterprise dashboard (/enterprise) — the macro workforce-risk overview.
-  // Reuses the SAME aggregation as /workforce (institutionWorkforce) rather
-  // than re-implementing it; gated by its own `enterpriseDashboard` flag plus
-  // institution-admin scoping so the org is always derived from the session.
-  app.get(
-    "/api/enterprise/intelligence",
-    requireFeature("enterpriseDashboard"),
-    requireAuth,
-    requireInstitutionAdmin,
-    async (req, res) => {
-      try {
-        const intel = await storage.getWorkforceIntelligence(req.institutionScope!);
-        return res.json(intel);
-      } catch (err: any) {
-        return res.status(500).json({ message: err.message });
-      }
-    },
-  );
-
   // Workforce intelligence CSV export — same breakdowns as the on-screen
   // dashboard, flattened into one file for board/HR reviews. Mirrors the cohort
   // grades.csv pattern (gated identically by flag + requireInstitutionAdmin).
@@ -3020,14 +3001,42 @@ export async function registerRoutes(
   });
 
   // ── Enterprise / Departments ──────────────────────────
-  app.get("/api/departments", requireFeature("enterpriseDashboard"), async (_req, res) => {
-    try {
-      const depts = await storage.getAllDepartments();
-      return res.json(depts);
-    } catch (err: any) {
-      return res.status(500).json({ message: err.message });
-    }
-  });
+  // Enterprise overview intelligence — reuses the workforce aggregation
+  // (department heatmap + totals) and adds a vulnerability distribution + real
+  // JST trend. Gated identically to the workforce tools: institution admins
+  // only, scoped to the session's institution (never the body).
+  app.get(
+    "/api/enterprise/intelligence",
+    requireFeature("enterpriseDashboard"),
+    requireAuth,
+    requireInstitutionAdmin,
+    async (req, res) => {
+      try {
+        const intel = await storage.getEnterpriseIntelligence(req.institutionScope!);
+        return res.json(intel);
+      } catch (err: any) {
+        return res.status(500).json({ message: err.message });
+      }
+    },
+  );
+
+  // Legacy reference endpoint (superseded by /api/enterprise/intelligence).
+  // Gated identically to the enterprise overview — institution admins only —
+  // so flipping the flag ON never exposes org data to the public.
+  app.get(
+    "/api/departments",
+    requireFeature("enterpriseDashboard"),
+    requireAuth,
+    requireInstitutionAdmin,
+    async (_req, res) => {
+      try {
+        const depts = await storage.getAllDepartments();
+        return res.json(depts);
+      } catch (err: any) {
+        return res.status(500).json({ message: err.message });
+      }
+    },
+  );
 
   // ── CCGE: Context Craft Game Engine ──────────────────
   app.get("/api/ccge/cards", async (_req, res) => {
