@@ -2961,6 +2961,28 @@ export async function registerRoutes(
     }
   });
 
+  // Nudge an assessed staff member toward upskilling. Records nudgedAt so the
+  // drill-down reflects the action; only valid for staff linked to an assessed
+  // ARK account (the "assessed-but-at-risk" cohort). Institution-scoped +
+  // admin-gated identically to the invite route — the id is validated against
+  // the session's institution, never trusted as an identity.
+  app.post("/api/workforce/staff/:id/nudge", ...workforceGate, async (req, res) => {
+    try {
+      const result = await storage.nudgeStaff(String(req.params.id), req.institutionScope!);
+      if (!result) {
+        return res.status(422).json({
+          message: "Cannot nudge: staff member isn't linked to a completed ARK assessment yet.",
+        });
+      }
+      return res.json({
+        staff: result,
+        message: "Upskilling nudge sent — this staff member has been prompted to close their skill gaps.",
+      });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
   // ── Jnomics Cards (CODEC Primitives) ─────────────────
   // Card rows in Postgres carry the canonical id/name/tier/type/emoji/
   // description/basePts. The CODEC catalog enriches each row with persona,

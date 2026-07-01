@@ -95,6 +95,7 @@ export type StaffDrilldownRow = {
   jstIndex: number | null;
   arkScore: number | null;
   vulnerabilityPct: number | null;
+  nudgedAt: string | null;
 };
 
 /** One AI-vulnerability stratum + how many assessed staff fall in it. */
@@ -397,6 +398,10 @@ export interface IStorage {
    *  immediately if an account already exists for their email, else records the
    *  invite (invitedAt) so registration reconciliation links it on signup. */
   inviteStaff(id: string, institution: string): Promise<StaffRecordWithArk | null>;
+  /** Nudge an assessed staff member toward upskilling: records nudgedAt so the
+   *  drill-down reflects the action. Institution-scoped; returns the updated row,
+   *  or null if the staff member isn't linked to an assessed ARK account. */
+  nudgeStaff(id: string, institution: string): Promise<StaffRecordWithArk | null>;
   /** Auto-link any still-unlinked staff records matching this user's email
    *  (across institutions) when they register/log in. Returns rows linked. */
   reconcileStaffInvitesForUser(userId: string, email: string): Promise<number>;
@@ -2259,6 +2264,7 @@ export class DatabaseStorage implements IStorage {
         jstIndex: s.ark ? s.ark.jstIndex : null,
         arkScore: s.ark ? s.ark.arkScore : null,
         vulnerabilityPct: s.ark ? s.ark.vulnerabilityPct : null,
+        nudgedAt: s.nudgedAt ? s.nudgedAt.toISOString() : null,
       }))
       // Assessed staff first, then most-vulnerable at the top so the admin sees
       // who needs a nudge without scrolling; unassessed sink to the bottom.
@@ -2365,6 +2371,52 @@ export class DatabaseStorage implements IStorage {
               vulnerabilityPct: matched!.resumeReplacementPct ?? 0,
             }
           : null,
+      };
+    });
+  }
+
+  async nudgeStaff(id: string, institution: string): Promise<StaffRecordWithArk | null> {
+    return await db.transaction(async (tx) => {
+      const [staff] = await tx
+        .select()
+        .from(staffRecords)
+        .where(and(eq(staffRecords.id, id), eq(staffRecords.institution, institution)));
+      if (!staff) return null;
+      // A nudge only makes sense once the staff member is linked to an assessed
+      // ARK account — that's the "assessed-but-at-risk" cohort the drill-down
+      // surfaces. Unlinked/pending staff should be invited instead.
+      if (!staff.arkUserId) return null;
+      const [matched] = await tx
+        .select({
+          id: users.id,
+          arkScore: users.arkScore,
+          jstIndex: users.jstIndex,
+          ccmi: users.ccmi,
+          resumeReplacementPct: users.resumeReplacementPct,
+        })
+        .from(users)
+        .where(eq(users.id, staff.arkUserId));
+      const assessed = !!matched?.id && (matched.arkScore ?? 0) > 0;
+      if (!assessed) return null;
+
+      const now = new Date();
+      await tx
+        .update(staffRecords)
+        .set({ nudgedAt: now, updatedAt: now })
+        .where(eq(staffRecords.id, id));
+
+      return {
+        ...staff,
+        nudgedAt: now,
+        updatedAt: now,
+        assessmentStatus: "complete",
+        tenureBand: tenureBandFromHireDate(staff.hireDate),
+        ark: {
+          arkScore: matched!.arkScore ?? 0,
+          jstIndex: matched!.jstIndex ?? 0,
+          ccmi: matched!.ccmi ?? 0,
+          vulnerabilityPct: matched!.resumeReplacementPct ?? 0,
+        },
       };
     });
   }

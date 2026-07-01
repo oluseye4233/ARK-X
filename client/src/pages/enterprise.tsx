@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
-import { Users, Target, ShieldAlert, Activity, Loader2, ChevronRight, SlidersHorizontal, X } from "lucide-react";
+import { Users, Target, ShieldAlert, Activity, Loader2, ChevronRight, SlidersHorizontal, X, UserPlus, TrendingUp, Check } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 
@@ -22,6 +22,7 @@ interface StaffDrilldownRow {
   jstIndex: number | null;
   arkScore: number | null;
   vulnerabilityPct: number | null;
+  nudgedAt: string | null;
 }
 
 interface WorkforceFilterOption {
@@ -34,6 +35,8 @@ interface WorkforceFilter {
   dimension: string;
   value: string;
 }
+
+const AT_RISK_THRESHOLD = 60;
 
 interface EnterpriseIntelligence {
   institution: string;
@@ -78,6 +81,40 @@ export default function EnterprisePage() {
   const [deptStaff, setDeptStaff] = useState<Record<string, StaffDrilldownRow[]>>({});
   const [staffLoading, setStaffLoading] = useState<string | null>(null);
   const [staffError, setStaffError] = useState<Record<string, string>>({});
+  const [actionPending, setActionPending] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<Record<string, { text: string; error: boolean }>>({});
+
+  const patchStaffRow = useCallback((dept: string, staffId: string, patch: Partial<StaffDrilldownRow>) => {
+    setDeptStaff((s) => {
+      const rows = s[dept];
+      if (!rows) return s;
+      return { ...s, [dept]: rows.map((r) => (r.id === staffId ? { ...r, ...patch } : r)) };
+    });
+  }, []);
+
+  const handleInvite = useCallback((dept: string, staff: StaffDrilldownRow) => {
+    setActionPending(staff.id);
+    setActionMessage((m) => { const n = { ...m }; delete n[staff.id]; return n; });
+    api.inviteStaffMember(staff.id)
+      .then((res: { staff: { assessmentStatus: StaffDrilldownRow["assessmentStatus"] }; message: string }) => {
+        patchStaffRow(dept, staff.id, { assessmentStatus: res.staff.assessmentStatus });
+        setActionMessage((m) => ({ ...m, [staff.id]: { text: res.message, error: false } }));
+      })
+      .catch((e: any) => setActionMessage((m) => ({ ...m, [staff.id]: { text: e?.message || "Unable to invite.", error: true } })))
+      .finally(() => setActionPending((cur) => (cur === staff.id ? null : cur)));
+  }, [patchStaffRow]);
+
+  const handleNudge = useCallback((dept: string, staff: StaffDrilldownRow) => {
+    setActionPending(staff.id);
+    setActionMessage((m) => { const n = { ...m }; delete n[staff.id]; return n; });
+    api.nudgeStaffMember(staff.id)
+      .then((res: { staff: { nudgedAt: string | null }; message: string }) => {
+        patchStaffRow(dept, staff.id, { nudgedAt: res.staff.nudgedAt ?? new Date().toISOString() });
+        setActionMessage((m) => ({ ...m, [staff.id]: { text: res.message, error: false } }));
+      })
+      .catch((e: any) => setActionMessage((m) => ({ ...m, [staff.id]: { text: e?.message || "Unable to nudge.", error: true } })))
+      .finally(() => setActionPending((cur) => (cur === staff.id ? null : cur)));
+  }, [patchStaffRow]);
 
   const toggleDept = useCallback((dept: string) => {
     setExpandedDept((prev) => {
@@ -388,27 +425,72 @@ export default function EnterprisePage() {
                             <div className="space-y-2">
                               {deptStaff[dept.key].map((p) => {
                                 const assessed = p.assessmentStatus === "complete";
+                                const atRisk = assessed && (p.vulnerabilityPct ?? 0) >= AT_RISK_THRESHOLD;
+                                const busy = actionPending === p.id;
+                                const msg = actionMessage[p.id];
+                                const canInvite = p.assessmentStatus === "unlinked";
+                                const canNudge = atRisk;
+                                const nudged = !!p.nudgedAt;
                                 return (
-                                  <div key={p.id} className="flex items-center justify-between gap-4 p-3 rounded-md bg-white/5 border border-white/5" data-testid={`row-staff-${p.id}`}>
-                                    <div className="min-w-0 flex-1">
-                                      <p className="font-sans text-sm text-white truncate" data-testid={`text-staff-name-${p.id}`}>{p.fullName}</p>
-                                      {p.jobTitle && <p className="text-[11px] font-mono text-muted-foreground truncate">{p.jobTitle}</p>}
-                                    </div>
-                                    {assessed ? (
-                                      <div className="flex items-center gap-4 shrink-0">
-                                        <div className="text-right">
-                                          <span className="font-mono text-sm text-primary block leading-none" data-testid={`text-staff-jst-${p.id}`}>{p.jstIndex}</span>
-                                          <span className="text-[9px] uppercase tracking-widest text-muted-foreground">JST</span>
-                                        </div>
-                                        <div className="text-right min-w-[52px]">
-                                          <span className="font-mono text-sm text-white block leading-none" data-testid={`text-staff-vuln-${p.id}`}>{Math.round(p.vulnerabilityPct ?? 0)}%</span>
-                                          <span className="text-[9px] uppercase tracking-widest text-muted-foreground">Risk</span>
-                                        </div>
+                                  <div key={p.id} className="p-3 rounded-md bg-white/5 border border-white/5" data-testid={`row-staff-${p.id}`}>
+                                    <div className="flex items-center justify-between gap-4">
+                                      <div className="min-w-0 flex-1">
+                                        <p className="font-sans text-sm text-white truncate" data-testid={`text-staff-name-${p.id}`}>{p.fullName}</p>
+                                        {p.jobTitle && <p className="text-[11px] font-mono text-muted-foreground truncate">{p.jobTitle}</p>}
                                       </div>
-                                    ) : (
-                                      <span className="shrink-0 px-2 py-1 rounded font-mono text-[10px] uppercase tracking-widest bg-white/10 text-muted-foreground border border-white/10" data-testid={`badge-staff-status-${p.id}`}>
-                                        {p.assessmentStatus === "pending" ? "Awaiting assessment" : p.assessmentStatus === "invited" ? "Invited" : "Not linked"}
-                                      </span>
+                                      <div className="flex items-center gap-4 shrink-0">
+                                        {assessed ? (
+                                          <>
+                                            <div className="text-right">
+                                              <span className="font-mono text-sm text-primary block leading-none" data-testid={`text-staff-jst-${p.id}`}>{p.jstIndex}</span>
+                                              <span className="text-[9px] uppercase tracking-widest text-muted-foreground">JST</span>
+                                            </div>
+                                            <div className="text-right min-w-[52px]">
+                                              <span className="font-mono text-sm text-white block leading-none" data-testid={`text-staff-vuln-${p.id}`}>{Math.round(p.vulnerabilityPct ?? 0)}%</span>
+                                              <span className="text-[9px] uppercase tracking-widest text-muted-foreground">Risk</span>
+                                            </div>
+                                          </>
+                                        ) : (
+                                          <span className="px-2 py-1 rounded font-mono text-[10px] uppercase tracking-widest bg-white/10 text-muted-foreground border border-white/10" data-testid={`badge-staff-status-${p.id}`}>
+                                            {p.assessmentStatus === "pending" ? "Awaiting assessment" : p.assessmentStatus === "invited" ? "Invited" : "Not linked"}
+                                          </span>
+                                        )}
+                                        {canInvite && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleInvite(dept.key, p)}
+                                            disabled={busy}
+                                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded font-mono text-[10px] uppercase tracking-widest bg-primary/15 text-primary border border-primary/40 hover:bg-primary/25 transition-colors disabled:opacity-50"
+                                            data-testid={`button-invite-staff-${p.id}`}
+                                          >
+                                            {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserPlus className="w-3 h-3" />}
+                                            Invite
+                                          </button>
+                                        )}
+                                        {canNudge && (
+                                          nudged ? (
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded font-mono text-[10px] uppercase tracking-widest bg-secondary/15 text-secondary border border-secondary/40" data-testid={`badge-nudged-${p.id}`}>
+                                              <Check className="w-3 h-3" /> Nudged
+                                            </span>
+                                          ) : (
+                                            <button
+                                              type="button"
+                                              onClick={() => handleNudge(dept.key, p)}
+                                              disabled={busy}
+                                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded font-mono text-[10px] uppercase tracking-widest bg-orange-500/15 text-orange-400 border border-orange-500/40 hover:bg-orange-500/25 transition-colors disabled:opacity-50"
+                                              data-testid={`button-nudge-staff-${p.id}`}
+                                            >
+                                              {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <TrendingUp className="w-3 h-3" />}
+                                              Nudge to upskill
+                                            </button>
+                                          )
+                                        )}
+                                      </div>
+                                    </div>
+                                    {msg && (
+                                      <p className={`mt-2 font-mono text-[10px] ${msg.error ? "text-destructive" : "text-secondary"}`} data-testid={`text-action-message-${p.id}`}>
+                                        {msg.text}
+                                      </p>
                                     )}
                                   </div>
                                 );

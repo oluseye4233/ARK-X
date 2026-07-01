@@ -78,6 +78,16 @@ export const api = {
   getDepartmentStaff: (department: string) =>
     apiRequest(`/api/enterprise/departments/${encodeURIComponent(department)}/staff`),
 
+  inviteStaffMember: (staffId: string) =>
+    apiRequest(`/api/workforce/staff/${encodeURIComponent(staffId)}/invite`, {
+      method: "POST",
+    }),
+
+  nudgeStaffMember: (staffId: string) =>
+    apiRequest(`/api/workforce/staff/${encodeURIComponent(staffId)}/nudge`, {
+      method: "POST",
+    }),
+
   getContextCraftLevels: () => apiRequest("/api/context-craft/levels"),
 
   updateContextCraftCert: (userId: string, level: string) =>

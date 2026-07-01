@@ -1556,6 +1556,9 @@ export const staffRecords = pgTable("staff_records", {
   // Set when an admin invites an as-yet-unmatched staff member to create their
   // ARK profile. Reconciled (auto-linked) when that email registers/logs in.
   invitedAt: timestamp("invited_at"),
+  // Set when an admin nudges an assessed-but-at-risk staff member toward
+  // upskilling from the workforce drill-down. Mirrors the invitedAt pattern.
+  nudgedAt: timestamp("nudged_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (t) => [
