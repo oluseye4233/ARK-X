@@ -103,10 +103,8 @@ export default function Home() {
         >
           <span aria-hidden="true" className="absolute left-0 top-0 bottom-0 w-[3px] bg-gradient-to-b from-primary via-fuchsia-400 to-secondary" />
           <p className="font-display font-bold text-sm sm:text-base md:text-lg tracking-wide leading-snug text-white uppercase">
-            We don't build AI agents.{" "}
-            <span className="text-primary neon-text">We engineer the DNA that governs them</span>
-            {" "}— powered by your cognition,{" "}
-            <span className="text-secondary">owned by you.</span>
+            Apply Context Craft to your career and{" "}
+            <span className="text-primary neon-text">thrive!</span>
           </p>
         </div>
 
