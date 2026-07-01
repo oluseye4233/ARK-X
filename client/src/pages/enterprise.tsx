@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { useSearch, useLocation } from "wouter";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
-import { Users, Target, ShieldAlert, Activity, Loader2, ChevronRight, SlidersHorizontal, Search, X, UserPlus, TrendingUp, Check } from "lucide-react";
+import { Users, Target, ShieldAlert, Activity, Loader2, ChevronRight, SlidersHorizontal, Search, X, UserPlus, TrendingUp, Check, Filter } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 
@@ -86,15 +87,28 @@ export default function EnterprisePage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState<WorkforceFilter[]>([]);
+  const search = useSearch();
+  const [, navigate] = useLocation();
+  const filters = useMemo<WorkforceFilter[]>(() => {
+    const params = new URLSearchParams(search);
+    const out: WorkforceFilter[] = [];
+    params.forEach((value, dimension) => {
+      if (dimension && value) out.push({ dimension, value });
+    });
+    return out;
+  }, [search]);
+  const writeFilters = useCallback((next: WorkforceFilter[]) => {
+    const params = new URLSearchParams();
+    next.forEach((f) => { if (f.value) params.set(f.dimension, f.value); });
+    const qs = params.toString();
+    navigate(qs ? `/enterprise?${qs}` : "/enterprise");
+  }, [navigate]);
   const [expandedDept, setExpandedDept] = useState<string | null>(null);
 
   const setDimensionValue = useCallback((dimension: string, value: string) => {
-    setFilters((prev) => {
-      const rest = prev.filter((f) => f.dimension !== dimension);
-      return value ? [...rest, { dimension, value }] : rest;
-    });
-  }, []);
+    const rest = filters.filter((f) => f.dimension !== dimension);
+    writeFilters(value ? [...rest, { dimension, value }] : rest);
+  }, [filters, writeFilters]);
 
   const toggleDept = useCallback((dept: string) => {
     setExpandedDept((prev) => (prev === dept ? null : dept));
@@ -109,6 +123,17 @@ export default function EnterprisePage() {
       .finally(() => { if (!cancelled) { setLoading(false); setRefreshing(false); } });
     return () => { cancelled = true; };
   }, [filters]);
+
+  const activeFilterLabel = useMemo(() => {
+    if (!intel?.activeFilters?.length) return null;
+    return intel.activeFilters
+      .map((af) => {
+        const opt = intel.filterOptions.find((o) => o.dimension === af.dimension);
+        const dimLabel = opt?.label ?? af.dimension;
+        return `${dimLabel}: ${af.value}`;
+      })
+      .join(" · ");
+  }, [intel]);
 
   const distribution = useMemo(
     () => (intel?.vulnerabilityDistribution ?? []).filter(d => d.value > 0).map(d => ({ ...d, fill: BAND_FILL[d.name] ?? "hsl(var(--muted-foreground))" })),
@@ -174,6 +199,23 @@ export default function EnterprisePage() {
           <p className="text-muted-foreground font-mono text-sm mt-1" data-testid="text-institution-name">
             {intel.institution} — macro-level organizational risk and readiness analytics.
           </p>
+          {activeFilterLabel ? (
+            <div
+              className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 bg-primary/15 border border-primary/40 rounded font-mono text-xs text-primary uppercase tracking-widest"
+              data-testid="badge-active-slice"
+            >
+              <Filter className="w-3.5 h-3.5" />
+              Filtered slice — {activeFilterLabel}
+            </div>
+          ) : (
+            <div
+              className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded font-mono text-xs text-muted-foreground uppercase tracking-widest"
+              data-testid="badge-active-slice"
+            >
+              <Users className="w-3.5 h-3.5" />
+              Full organization
+            </div>
+          )}
         </div>
         <div className="px-4 py-2 bg-primary/10 border border-primary/30 rounded font-mono text-xs text-primary uppercase shadow-[0_0_15px_rgba(var(--primary),0.2)]">
           Live Data Feed Active
@@ -211,7 +253,7 @@ export default function EnterprisePage() {
 
           {filters.length > 0 && (
             <button
-              onClick={() => setFilters([])}
+              onClick={() => writeFilters([])}
               className="flex items-center gap-1 text-xs font-mono uppercase tracking-widest text-muted-foreground hover:text-white transition-colors"
               data-testid="button-clear-filter"
             >
@@ -221,12 +263,12 @@ export default function EnterprisePage() {
 
           {refreshing && <Loader2 className="w-4 h-4 text-primary animate-spin sm:ml-auto" />}
 
-          {intel.activeFilters.length > 0 && (
+          {activeFilterLabel && (
             <span
               className="sm:ml-auto text-[11px] font-mono uppercase tracking-widest text-primary"
               data-testid="text-active-filter"
             >
-              Showing {totals.staff} across {intel.activeFilters.length} filter{intel.activeFilters.length > 1 ? "s" : ""}
+              {activeFilterLabel} — {totals.staff} staff
             </span>
           )}
         </div>
@@ -268,7 +310,10 @@ export default function EnterprisePage() {
           <h3 className="font-display font-bold text-lg text-white uppercase tracking-widest mb-2">
             Global Vulnerability Distribution
           </h3>
-          <p className="text-xs font-mono text-muted-foreground mb-6">AI Replacement Risk Strata ({assessedTotal} assessed)</p>
+          <p className="text-xs font-mono text-muted-foreground mb-6">
+            AI Replacement Risk Strata ({assessedTotal} assessed)
+            {activeFilterLabel && <span className="text-primary"> · {activeFilterLabel}</span>}
+          </p>
 
           <div className="h-[250px] w-full relative">
             {distribution.length > 0 ? (
@@ -302,7 +347,10 @@ export default function EnterprisePage() {
           <h3 className="font-display font-bold text-lg text-white uppercase tracking-widest mb-2">
             Organization JST Trajectory
           </h3>
-          <p className="text-xs font-mono text-muted-foreground mb-6">Monthly average JST across linked staff</p>
+          <p className="text-xs font-mono text-muted-foreground mb-6">
+            Monthly average JST across linked staff
+            {activeFilterLabel && <span className="text-primary"> · {activeFilterLabel}</span>}
+          </p>
 
           <div className="h-[250px] w-full">
             {trend.length > 0 ? (
@@ -330,7 +378,10 @@ export default function EnterprisePage() {
             <h3 className="font-display font-bold text-lg text-white uppercase tracking-widest">
               Department Automation Exposure
             </h3>
-            <p className="text-xs font-mono text-muted-foreground mt-1">Vulnerability broken down by functional unit — click a unit to drill into its staff</p>
+            <p className="text-xs font-mono text-muted-foreground mt-1">
+              Vulnerability broken down by functional unit — click a unit to drill into its staff
+              {activeFilterLabel && <span className="text-primary"> · {activeFilterLabel}</span>}
+            </p>
           </div>
         </div>
 
