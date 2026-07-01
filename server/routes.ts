@@ -3020,6 +3020,28 @@ export async function registerRoutes(
     },
   );
 
+  // Department drill-down — the individual staff members behind one department
+  // row on the enterprise heatmap (per-person JST + vulnerability + assessment
+  // status). Gated identically to the overview (institution admins only) and
+  // scoped to the session's institution; the department name is a filter, never
+  // an identity, so the actor can only ever see their own org's staff.
+  app.get(
+    "/api/enterprise/departments/:department/staff",
+    requireFeature("enterpriseDashboard"),
+    requireAuth,
+    requireInstitutionAdmin,
+    async (req, res) => {
+      try {
+        const raw = req.params.department;
+        const department = decodeURIComponent(Array.isArray(raw) ? raw[0] ?? "" : raw ?? "");
+        const staff = await storage.getDepartmentStaff(req.institutionScope!, department);
+        return res.json(staff);
+      } catch (err: any) {
+        return res.status(500).json({ message: err.message });
+      }
+    },
+  );
+
   // Legacy reference endpoint (superseded by /api/enterprise/intelligence).
   // Gated identically to the enterprise overview — institution admins only —
   // so flipping the flag ON never exposes org data to the public.

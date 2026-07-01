@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
-import { Users, Target, ShieldAlert, Activity, Loader2 } from "lucide-react";
+import { Users, Target, ShieldAlert, Activity, Loader2, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 
@@ -12,6 +12,16 @@ interface WorkforceBreakdownRow {
   avgArk: number;
   avgJst: number;
   avgVulnerability: number;
+}
+
+interface StaffDrilldownRow {
+  id: string;
+  fullName: string;
+  jobTitle: string | null;
+  assessmentStatus: "complete" | "pending" | "invited" | "unlinked";
+  jstIndex: number | null;
+  arkScore: number | null;
+  vulnerabilityPct: number | null;
 }
 
 interface EnterpriseIntelligence {
@@ -49,6 +59,24 @@ export default function EnterprisePage() {
   const [intel, setIntel] = useState<EnterpriseIntelligence | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedDept, setExpandedDept] = useState<string | null>(null);
+  const [deptStaff, setDeptStaff] = useState<Record<string, StaffDrilldownRow[]>>({});
+  const [staffLoading, setStaffLoading] = useState<string | null>(null);
+  const [staffError, setStaffError] = useState<Record<string, string>>({});
+
+  const toggleDept = useCallback((dept: string) => {
+    setExpandedDept((prev) => {
+      if (prev === dept) return null;
+      if (!deptStaff[dept]) {
+        setStaffLoading(dept);
+        api.getDepartmentStaff(dept)
+          .then((rows: StaffDrilldownRow[]) => setDeptStaff((s) => ({ ...s, [dept]: rows })))
+          .catch((e: any) => setStaffError((s) => ({ ...s, [dept]: e?.message || "Unable to load staff." })))
+          .finally(() => setStaffLoading((cur) => (cur === dept ? null : cur)));
+      }
+      return dept;
+    });
+  }, [deptStaff]);
 
   useEffect(() => {
     api.getEnterpriseIntelligence()
@@ -225,7 +253,7 @@ export default function EnterprisePage() {
             <h3 className="font-display font-bold text-lg text-white uppercase tracking-widest">
               Department Automation Exposure
             </h3>
-            <p className="text-xs font-mono text-muted-foreground mt-1">Vulnerability broken down by functional unit</p>
+            <p className="text-xs font-mono text-muted-foreground mt-1">Vulnerability broken down by functional unit — click a unit to drill into its staff</p>
           </div>
         </div>
 
@@ -233,27 +261,86 @@ export default function EnterprisePage() {
           <AnimatePresence mode="popLayout">
             {intel.byDepartment.map((dept, i) => {
               const risk = Math.round(dept.avgVulnerability);
+              const isOpen = expandedDept === dept.key;
               return (
-                <motion.div key={dept.key} layout initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.3, delay: i * 0.05 }} className={`p-4 rounded-lg border flex items-center justify-between hover:scale-[1.01] transition-transform group ${getRiskColor(risk)}`} data-testid={`row-department-${i}`}>
-                  <div className="flex-1">
-                    <span className="font-sans font-medium text-white">{dept.key}</span>
-                    <div className="flex items-center gap-3 mt-1 opacity-70">
-                      <span className="text-[10px] font-mono uppercase tracking-widest">{dept.count} HC</span>
-                      <span className="w-1 h-1 rounded-full bg-current" />
-                      <span className="text-[10px] font-mono uppercase tracking-widest">{dept.assessedCount} assessed</span>
-                      <span className="w-1 h-1 rounded-full bg-current" />
-                      <span className="text-[10px] font-mono uppercase tracking-widest">JST {dept.avgJst}</span>
+                <motion.div key={dept.key} layout initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.3, delay: i * 0.05 }} className={`rounded-lg border overflow-hidden ${getRiskColor(risk)}`}>
+                  <button
+                    type="button"
+                    onClick={() => toggleDept(dept.key)}
+                    aria-expanded={isOpen}
+                    className="w-full p-4 flex items-center justify-between text-left hover:bg-white/5 transition-colors group"
+                    data-testid={`row-department-${i}`}
+                  >
+                    <div className="flex-1 flex items-center gap-3">
+                      <ChevronRight className={`w-4 h-4 shrink-0 transition-transform ${isOpen ? "rotate-90" : ""}`} data-testid={`icon-expand-${i}`} />
+                      <div>
+                        <span className="font-sans font-medium text-white">{dept.key}</span>
+                        <div className="flex items-center gap-3 mt-1 opacity-70">
+                          <span className="text-[10px] font-mono uppercase tracking-widest">{dept.count} HC</span>
+                          <span className="w-1 h-1 rounded-full bg-current" />
+                          <span className="text-[10px] font-mono uppercase tracking-widest">{dept.assessedCount} assessed</span>
+                          <span className="w-1 h-1 rounded-full bg-current" />
+                          <span className="text-[10px] font-mono uppercase tracking-widest">JST {dept.avgJst}</span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-4 w-1/3 justify-end">
-                    <div className="w-full max-w-[150px] h-2 bg-black/40 rounded-full overflow-hidden hidden sm:block">
-                      <motion.div className="h-full bg-current opacity-80" initial={{ width: "0%" }} animate={{ width: `${risk}%` }} transition={{ duration: 1, delay: i * 0.1, ease: "easeOut" }} />
+                    <div className="flex items-center gap-4 w-1/3 justify-end">
+                      <div className="w-full max-w-[150px] h-2 bg-black/40 rounded-full overflow-hidden hidden sm:block">
+                        <motion.div className="h-full bg-current opacity-80" initial={{ width: "0%" }} animate={{ width: `${risk}%` }} transition={{ duration: 1, delay: i * 0.1, ease: "easeOut" }} />
+                      </div>
+                      <div className="text-right min-w-[60px]">
+                        <span className="font-mono text-lg text-white block leading-none" data-testid={`text-risk-${i}`}>{risk}%</span>
+                        <span className="text-[9px] uppercase tracking-widest opacity-70">Risk</span>
+                      </div>
                     </div>
-                    <div className="text-right min-w-[60px]">
-                      <span className="font-mono text-lg text-white block leading-none" data-testid={`text-risk-${i}`}>{risk}%</span>
-                      <span className="text-[9px] uppercase tracking-widest opacity-70">Risk</span>
-                    </div>
-                  </div>
+                  </button>
+                  <AnimatePresence initial={false}>
+                    {isOpen && (
+                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25 }} className="overflow-hidden border-t border-white/10 bg-black/20">
+                        <div className="p-4" data-testid={`panel-department-staff-${i}`}>
+                          {staffLoading === dept.key ? (
+                            <div className="flex items-center justify-center py-6 text-muted-foreground font-mono text-xs">
+                              <Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading staff...
+                            </div>
+                          ) : staffError[dept.key] ? (
+                            <div className="py-6 text-center text-destructive font-mono text-xs" data-testid={`text-staff-error-${i}`}>{staffError[dept.key]}</div>
+                          ) : (deptStaff[dept.key]?.length ?? 0) === 0 ? (
+                            <div className="py-6 text-center text-muted-foreground font-mono text-xs">No staff records in this unit.</div>
+                          ) : (
+                            <div className="space-y-2">
+                              {deptStaff[dept.key].map((p) => {
+                                const assessed = p.assessmentStatus === "complete";
+                                return (
+                                  <div key={p.id} className="flex items-center justify-between gap-4 p-3 rounded-md bg-white/5 border border-white/5" data-testid={`row-staff-${p.id}`}>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="font-sans text-sm text-white truncate" data-testid={`text-staff-name-${p.id}`}>{p.fullName}</p>
+                                      {p.jobTitle && <p className="text-[11px] font-mono text-muted-foreground truncate">{p.jobTitle}</p>}
+                                    </div>
+                                    {assessed ? (
+                                      <div className="flex items-center gap-4 shrink-0">
+                                        <div className="text-right">
+                                          <span className="font-mono text-sm text-primary block leading-none" data-testid={`text-staff-jst-${p.id}`}>{p.jstIndex}</span>
+                                          <span className="text-[9px] uppercase tracking-widest text-muted-foreground">JST</span>
+                                        </div>
+                                        <div className="text-right min-w-[52px]">
+                                          <span className="font-mono text-sm text-white block leading-none" data-testid={`text-staff-vuln-${p.id}`}>{Math.round(p.vulnerabilityPct ?? 0)}%</span>
+                                          <span className="text-[9px] uppercase tracking-widest text-muted-foreground">Risk</span>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <span className="shrink-0 px-2 py-1 rounded font-mono text-[10px] uppercase tracking-widest bg-white/10 text-muted-foreground border border-white/10" data-testid={`badge-staff-status-${p.id}`}>
+                                        {p.assessmentStatus === "pending" ? "Awaiting assessment" : p.assessmentStatus === "invited" ? "Invited" : "Not linked"}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </motion.div>
               );
             })}

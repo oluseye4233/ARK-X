@@ -86,6 +86,17 @@ export type WorkforceIntelligence = {
   byLocation: WorkforceBreakdownRow[];
 };
 
+/** One staff member surfaced in a department drill-down (no PII beyond name/title). */
+export type StaffDrilldownRow = {
+  id: string;
+  fullName: string;
+  jobTitle: string | null;
+  assessmentStatus: StaffAssessmentStatus;
+  jstIndex: number | null;
+  arkScore: number | null;
+  vulnerabilityPct: number | null;
+};
+
 /** One AI-vulnerability stratum + how many assessed staff fall in it. */
 export type VulnerabilityBand = { name: string; value: number };
 
@@ -337,6 +348,10 @@ export interface IStorage {
     records: NormalizedHrRecord[],
   ): Promise<{ inserted: number; updated: number; linked: number }>;
   getStaffRecords(institution: string): Promise<StaffRecordWithArk[]>;
+  /** Institution-scoped drill-down: the individual staff members in one
+   *  department (matched to the same normalized key the workforce aggregation
+   *  uses), each with per-person JST/vulnerability/assessment status. */
+  getDepartmentStaff(institution: string, department: string): Promise<StaffDrilldownRow[]>;
   getStaffRecord(id: string): Promise<StaffRecord | undefined>;
   /** Match a staff row to an existing ARK account by email and set arkUserId.
    *  Returns the updated row, or null if no account matches. Institution-scoped. */
@@ -2176,6 +2191,42 @@ export class DatabaseStorage implements IStorage {
           : null,
       };
     });
+  }
+
+  async getDepartmentStaff(
+    institution: string,
+    department: string,
+  ): Promise<StaffDrilldownRow[]> {
+    // Match against the same normalized key the workforce aggregation uses so a
+    // clicked department row resolves exactly (including the "Unspecified" bucket
+    // for staff with no department). Filtering happens server-side within the
+    // institution scope — the department is a filter, never an identity.
+    const wanted = (department ?? "").trim() || "Unspecified";
+    const staff = await this.getStaffRecords(institution);
+    const rank: Record<StaffAssessmentStatus, number> = {
+      complete: 0,
+      pending: 1,
+      invited: 2,
+      unlinked: 3,
+    };
+    return staff
+      .filter((s) => ((s.department ?? "").trim() || "Unspecified") === wanted)
+      .map((s) => ({
+        id: s.id,
+        fullName: s.fullName,
+        jobTitle: s.jobTitle,
+        assessmentStatus: s.assessmentStatus,
+        jstIndex: s.ark ? s.ark.jstIndex : null,
+        arkScore: s.ark ? s.ark.arkScore : null,
+        vulnerabilityPct: s.ark ? s.ark.vulnerabilityPct : null,
+      }))
+      // Assessed staff first, then most-vulnerable at the top so the admin sees
+      // who needs a nudge without scrolling; unassessed sink to the bottom.
+      .sort((a, b) => {
+        const r = rank[a.assessmentStatus] - rank[b.assessmentStatus];
+        if (r !== 0) return r;
+        return (b.vulnerabilityPct ?? -1) - (a.vulnerabilityPct ?? -1);
+      });
   }
 
   async getStaffRecord(id: string): Promise<StaffRecord | undefined> {
