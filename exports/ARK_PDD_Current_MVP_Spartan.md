@@ -62,8 +62,8 @@ SPARTAN's benchmark card cites "90–98% infrastructure cost reduction" and list
 |--------|------------------------------|
 | Atomic Prompts | 51 across 7 phases + 1 special block (adds ARK RESUME, Talent Exchange, verification DATA-evidence + Name-Job-Role guide) |
 | API endpoints | 153 `/api` routes (incl. `/ark-resume`, `/confirmations`, `/matchmaking/*`, `/verification/*`) |
-| Drizzle tables | 55 · Migrations | 23 (0000–0021; two `0020_*` files: `_confirmation_invites` + `_matchmaking`) |
-| Client routes | 44 `<Route>` · Feature flags | 24 (**7 ON**: `investorDemo`, `executiveReport`, `cardVerification`, `trainingProviders`, `f1000Promo`, `arkResume`, `matchmaking`) |
+| Drizzle tables | 55 · Migrations 23 (0000–0021; two `0020_*` files: `_confirmation_invites` + `_matchmaking`) |
+| Client routes | 44 `<Route>` · Feature flags 24 (**7 ON**: `investorDemo`, `executiveReport`, `cardVerification`, `trainingProviders`, `f1000Promo`, `arkResume`, `matchmaking`) |
 | Server / client modules | ~50 / ~140 |
 
 ### Step 2 · PROFILE — Classification Result
