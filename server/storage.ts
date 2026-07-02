@@ -54,6 +54,7 @@ import {
   opportunityApplications, type OpportunityApplication, type InsertOpportunityApplication,
   confirmationInvites, type ConfirmationInvite, type ConfirmationType,
   CONFIRMATION_INVITE_TTL_DAYS,
+  UPSKILL_NUDGE_COOLDOWN_DAYS,
 } from "@shared/schema";
 import { or } from "drizzle-orm";
 
@@ -100,8 +101,10 @@ export type StaffDrilldownRow = {
 
 /** Days an admin must wait before re-nudging the same staff member. Keeps the
  *  nudge respectful: within this window a re-nudge is acknowledged but no
- *  duplicate email/in-app notification is delivered. */
-export const UPSKILL_NUDGE_COOLDOWN_DAYS = 7;
+ *  duplicate email/in-app notification is delivered. Canonical value lives in
+ *  shared/schema.ts so the client badge/button flip uses the same window;
+ *  re-exported here for existing server/test imports. */
+export { UPSKILL_NUDGE_COOLDOWN_DAYS };
 
 /** Result of a nudge attempt on a valid (assessed, in-scope) staff member.
  *  `suppressed: true` means a nudge was already sent within the cooldown —

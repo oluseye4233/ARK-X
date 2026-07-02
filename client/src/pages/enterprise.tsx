@@ -4,8 +4,26 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, LineChart, Line, XAx
 import { Users, Target, ShieldAlert, Activity, Loader2, ChevronRight, SlidersHorizontal, Search, X, UserPlus, TrendingUp, Check, Filter } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
+import { UPSKILL_NUDGE_COOLDOWN_DAYS } from "@shared/schema";
 
 const STAFF_PAGE_SIZE = 25;
+const NUDGE_COOLDOWN_MS = UPSKILL_NUDGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+
+/** When the nudge cooldown lifts for a row, or null if never nudged / bad date. */
+function nudgeCooldownLiftsAt(nudgedAt: string | null): Date | null {
+  if (!nudgedAt) return null;
+  const t = new Date(nudgedAt).getTime();
+  if (Number.isNaN(t)) return null;
+  return new Date(t + NUDGE_COOLDOWN_MS);
+}
+
+/** Compact relative age for the "Nudged Xd ago" badge. */
+function nudgedAgoLabel(nudgedAt: string): string {
+  const days = Math.floor((Date.now() - new Date(nudgedAt).getTime()) / 86_400_000);
+  if (days <= 0) return "today";
+  return `${days}d ago`;
+}
+
 const STAFF_SEARCH_RESULT_LIMIT = 25;
 
 interface WorkforceBreakdownRow {
@@ -620,7 +638,8 @@ function DepartmentStaffPanel({ department, index, initialSearch }: { department
               const msg = actionMessage[p.id];
               const canInvite = p.assessmentStatus === "unlinked";
               const canNudge = atRisk;
-              const nudged = !!p.nudgedAt;
+              const nudgeLiftsAt = nudgeCooldownLiftsAt(p.nudgedAt);
+              const nudgeOnCooldown = !!nudgeLiftsAt && Date.now() < nudgeLiftsAt.getTime();
               return (
                 <div key={p.id} className="p-3 rounded-md bg-white/5 border border-white/5" data-testid={`row-staff-${p.id}`}>
                   <div className="flex items-center justify-between gap-4">
@@ -658,9 +677,13 @@ function DepartmentStaffPanel({ department, index, initialSearch }: { department
                         </button>
                       )}
                       {canNudge && (
-                        nudged ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded font-mono text-[10px] uppercase tracking-widest bg-secondary/15 text-secondary border border-secondary/40" data-testid={`badge-nudged-${p.id}`}>
-                            <Check className="w-3 h-3" /> Nudged
+                        nudgeOnCooldown ? (
+                          <span
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded font-mono text-[10px] uppercase tracking-widest bg-secondary/15 text-secondary border border-secondary/40"
+                            title={`Next nudge available ${nudgeLiftsAt!.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`}
+                            data-testid={`badge-nudged-${p.id}`}
+                          >
+                            <Check className="w-3 h-3" /> Nudged {nudgedAgoLabel(p.nudgedAt!)}
                           </span>
                         ) : (
                           <button
@@ -671,7 +694,7 @@ function DepartmentStaffPanel({ department, index, initialSearch }: { department
                             data-testid={`button-nudge-staff-${p.id}`}
                           >
                             {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <TrendingUp className="w-3 h-3" />}
-                            Nudge to upskill
+                            {p.nudgedAt ? "Nudge again" : "Nudge to upskill"}
                           </button>
                         )
                       )}

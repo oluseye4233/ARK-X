@@ -96,6 +96,11 @@ export const JCSE_TIER_THRESHOLDS = {
   PLATINUM: 48,
 } as const;
 
+// Days an institution admin must wait before re-nudging the same staff member
+// toward upskilling. Shared so the server cooldown gate and the staff
+// drill-down UI (badge → button flip) can never drift apart.
+export const UPSKILL_NUDGE_COOLDOWN_DAYS = 7;
+
 // JCSE score → CC certification level earned this session (auto-promotion).
 // Returns NONE for sub-Bronze sessions so applyFlywheel will not promote
 // users from NONE → CC_100 just for engaging — CC_100 (Foundational) is
