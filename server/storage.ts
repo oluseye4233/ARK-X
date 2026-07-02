@@ -114,6 +114,20 @@ export type DepartmentStaffPage = {
   offset: number;
 };
 
+/** A staff member surfaced by the institution-wide search, tagged with the
+ *  department (normalized key) the drill-down can jump into. */
+export type WorkforceStaffSearchRow = StaffDrilldownRow & { department: string };
+
+/** A bounded page of institution-wide search results. `total` is the whole
+ *  roster size, `filtered` is how many rows match the search term. */
+export type WorkforceStaffSearchPage = {
+  rows: WorkforceStaffSearchRow[];
+  total: number;
+  filtered: number;
+  limit: number;
+  offset: number;
+};
+
 /** Hard ceiling on rows returned per drill-down request, so a unit with hundreds
  *  of staff can never return an unbounded payload. */
 export const DEPARTMENT_STAFF_MAX_LIMIT = 100;
@@ -417,6 +431,14 @@ export interface IStorage {
     department: string,
     query?: DepartmentStaffQuery,
   ): Promise<DepartmentStaffPage>;
+  /** Institution-wide staff search: matches name/title across EVERY department
+   *  (not just one expanded unit), tagging each result with the department key so
+   *  the caller can jump straight into that unit's drill-down. Bounded with the
+   *  same limit/offset ceilings as the per-department drill-down. */
+  searchWorkforceStaff(
+    institution: string,
+    query?: DepartmentStaffQuery,
+  ): Promise<WorkforceStaffSearchPage>;
   getStaffRecord(id: string): Promise<StaffRecord | undefined>;
   /** Match a staff row to an existing ARK account by email and set arkUserId.
    *  Returns the updated row, or null if no account matches. Institution-scoped. */
@@ -2319,6 +2341,61 @@ export class DatabaseStorage implements IStorage {
     // Bound the response: default to a top-N page of the most at-risk staff, and
     // hard-cap the client-requested size so no single unit can return an
     // unbounded payload.
+    const rawLimit = query.limit ?? DEPARTMENT_STAFF_DEFAULT_LIMIT;
+    const limit = Math.max(1, Math.min(DEPARTMENT_STAFF_MAX_LIMIT, Math.floor(rawLimit)));
+    const offset = Math.max(0, Math.floor(query.offset ?? 0));
+    const rows = matched.slice(offset, offset + limit);
+
+    return { rows, total, filtered, limit, offset };
+  }
+
+  async searchWorkforceStaff(
+    institution: string,
+    query: DepartmentStaffQuery = {},
+  ): Promise<WorkforceStaffSearchPage> {
+    // Institution-wide sibling of getDepartmentStaff: an admin who knows a name
+    // but not the unit can find anyone in one search. Same institution scope,
+    // same rank/sort, same bounded pagination — the only difference is we span
+    // every department and tag each row with its (normalized) department key.
+    const staff = await this.getStaffRecords(institution);
+    const rank: Record<StaffAssessmentStatus, number> = {
+      complete: 0,
+      pending: 1,
+      invited: 2,
+      unlinked: 3,
+    };
+    const all = staff
+      .map((s) => ({
+        id: s.id,
+        fullName: s.fullName,
+        jobTitle: s.jobTitle,
+        department: (s.department ?? "").trim() || "Unspecified",
+        assessmentStatus: s.assessmentStatus,
+        jstIndex: s.ark ? s.ark.jstIndex : null,
+        arkScore: s.ark ? s.ark.arkScore : null,
+        vulnerabilityPct: s.ark ? s.ark.vulnerabilityPct : null,
+        nudgedAt: s.nudgedAt ? s.nudgedAt.toISOString() : null,
+      }))
+      // Assessed first, then most-vulnerable at the top — same ordering as the
+      // per-department drill-down so results read consistently.
+      .sort((a, b) => {
+        const r = rank[a.assessmentStatus] - rank[b.assessmentStatus];
+        if (r !== 0) return r;
+        return (b.vulnerabilityPct ?? -1) - (a.vulnerabilityPct ?? -1);
+      });
+
+    const total = all.length;
+
+    const term = (query.search ?? "").trim().toLowerCase();
+    const matched = term
+      ? all.filter(
+          (s) =>
+            s.fullName.toLowerCase().includes(term) ||
+            (s.jobTitle ?? "").toLowerCase().includes(term),
+        )
+      : all;
+    const filtered = matched.length;
+
     const rawLimit = query.limit ?? DEPARTMENT_STAFF_DEFAULT_LIMIT;
     const limit = Math.max(1, Math.min(DEPARTMENT_STAFF_MAX_LIMIT, Math.floor(rawLimit)));
     const offset = Math.max(0, Math.floor(query.offset ?? 0));

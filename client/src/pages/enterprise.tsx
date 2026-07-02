@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 
 const STAFF_PAGE_SIZE = 25;
+const STAFF_SEARCH_RESULT_LIMIT = 25;
 
 interface WorkforceBreakdownRow {
   key: string;
@@ -26,6 +27,18 @@ interface StaffDrilldownRow {
   arkScore: number | null;
   vulnerabilityPct: number | null;
   nudgedAt: string | null;
+}
+
+interface WorkforceStaffSearchRow extends StaffDrilldownRow {
+  department: string;
+}
+
+interface WorkforceStaffSearchPage {
+  rows: WorkforceStaffSearchRow[];
+  total: number;
+  filtered: number;
+  limit: number;
+  offset: number;
 }
 
 interface WorkforceFilterOption {
@@ -104,6 +117,10 @@ export default function EnterprisePage() {
     navigate(qs ? `/enterprise?${qs}` : "/enterprise");
   }, [navigate]);
   const [expandedDept, setExpandedDept] = useState<string | null>(null);
+  // When an admin jumps to a person from the top-level search, we open their
+  // department and seed that unit's drill-down search with their name so the
+  // person is already surfaced.
+  const [pendingPanelSearch, setPendingPanelSearch] = useState<{ dept: string; term: string } | null>(null);
 
   const setDimensionValue = useCallback((dimension: string, value: string) => {
     const rest = filters.filter((f) => f.dimension !== dimension);
@@ -111,7 +128,21 @@ export default function EnterprisePage() {
   }, [filters, writeFilters]);
 
   const toggleDept = useCallback((dept: string) => {
+    // A manual expand/collapse clears any pending jump seed so we don't re-apply
+    // a stale person's name the next time this unit is opened.
+    setPendingPanelSearch(null);
     setExpandedDept((prev) => (prev === dept ? null : dept));
+  }, []);
+
+  const jumpToStaff = useCallback((department: string, name: string) => {
+    setPendingPanelSearch({ dept: department, term: name });
+    setExpandedDept(department);
+    // Let the panel mount/expand, then bring the unit into view.
+    setTimeout(() => {
+      document
+        .getElementById(`dept-${department}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
   }, []);
 
   useEffect(() => {
@@ -221,6 +252,8 @@ export default function EnterprisePage() {
           Live Data Feed Active
         </div>
       </div>
+
+      <WorkforceStaffSearch onJump={jumpToStaff} />
 
       {intel.filterOptions.length > 0 && (
         <div className="glass-card p-4 rounded-lg flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
@@ -391,7 +424,7 @@ export default function EnterprisePage() {
               const risk = Math.round(dept.avgVulnerability);
               const isOpen = expandedDept === dept.key;
               return (
-                <motion.div key={dept.key} layout initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.3, delay: i * 0.05 }} className={`rounded-lg border overflow-hidden ${getRiskColor(risk)}`}>
+                <motion.div id={`dept-${dept.key}`} key={dept.key} layout initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.3, delay: i * 0.05 }} className={`rounded-lg border overflow-hidden ${getRiskColor(risk)}`}>
                   <button
                     type="button"
                     onClick={() => toggleDept(dept.key)}
@@ -425,7 +458,7 @@ export default function EnterprisePage() {
                   <AnimatePresence initial={false}>
                     {isOpen && (
                       <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25 }} className="overflow-hidden border-t border-white/10 bg-black/20">
-                        <DepartmentStaffPanel department={dept.key} index={i} />
+                        <DepartmentStaffPanel department={dept.key} index={i} initialSearch={pendingPanelSearch?.dept === dept.key ? pendingPanelSearch.term : ""} />
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -444,11 +477,11 @@ export default function EnterprisePage() {
   );
 }
 
-function DepartmentStaffPanel({ department, index }: { department: string; index: number }) {
+function DepartmentStaffPanel({ department, index, initialSearch }: { department: string; index: number; initialSearch?: string }) {
   const [rows, setRows] = useState<StaffDrilldownRow[]>([]);
   const [total, setTotal] = useState(0);
   const [filtered, setFiltered] = useState(0);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch ?? "");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -483,6 +516,12 @@ function DepartmentStaffPanel({ department, index }: { department: string; index
       .catch((e: any) => setActionMessage((m) => ({ ...m, [staff.id]: { text: e?.message || "Unable to nudge.", error: true } })))
       .finally(() => setActionPending((cur) => (cur === staff.id ? null : cur)));
   }, [patchStaffRow]);
+
+  // Re-seed the search when a fresh jump targets this already-open unit (a new
+  // person's name arrives via initialSearch after the panel is mounted).
+  useEffect(() => {
+    if (initialSearch) setSearch(initialSearch);
+  }, [initialSearch]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -663,6 +702,152 @@ function DepartmentStaffPanel({ department, index }: { department: string; index
             </button>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+// Top-level, institution-wide staff search. Lets an admin who knows a name (but
+// not the unit) find anyone across every department and jump straight into that
+// person's drill-down. Results are bounded (reuses the same limit ceiling as the
+// per-department drill-down).
+function WorkforceStaffSearch({ onJump }: { onJump: (department: string, name: string) => void }) {
+  const [search, setSearch] = useState("");
+  const [debounced, setDebounced] = useState("");
+  const [results, setResults] = useState<WorkforceStaffSearchRow[]>([]);
+  const [filtered, setFiltered] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    if (!debounced) {
+      setResults([]);
+      setFiltered(0);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    api.searchWorkforceStaff({ q: debounced, limit: STAFF_SEARCH_RESULT_LIMIT, offset: 0 })
+      .then((page: WorkforceStaffSearchPage) => {
+        if (cancelled) return;
+        setResults(page.rows);
+        setFiltered(page.filtered);
+      })
+      .catch((e: any) => {
+        if (!cancelled) setError(e?.message || "Unable to search staff.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [debounced]);
+
+  const active = debounced.length > 0;
+
+  return (
+    <div className="glass-card p-4 rounded-lg" data-testid="panel-workforce-search">
+      <div className="flex items-center gap-2 text-muted-foreground mb-3">
+        <Search className="w-4 h-4" />
+        <span className="text-xs font-mono uppercase tracking-widest">Find Anyone</span>
+      </div>
+      <div className="relative">
+        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search staff by name or title across all departments..."
+          className="w-full bg-black/30 border border-white/10 rounded-md py-2 pl-9 pr-9 text-sm text-white font-sans placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 transition-colors"
+          data-testid="input-workforce-search"
+        />
+        {search && (
+          <button
+            type="button"
+            onClick={() => setSearch("")}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white transition-colors"
+            aria-label="Clear search"
+            data-testid="button-workforce-search-clear"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
+      {active && (
+        <div className="mt-3">
+          {loading ? (
+            <div className="flex items-center justify-center py-4 text-muted-foreground font-mono text-xs">
+              <Loader2 className="w-4 h-4 animate-spin mr-2" /> Searching...
+            </div>
+          ) : error ? (
+            <div className="py-4 text-center text-destructive font-mono text-xs" data-testid="text-workforce-search-error">{error}</div>
+          ) : results.length === 0 ? (
+            <div className="py-4 text-center text-muted-foreground font-mono text-xs" data-testid="text-workforce-search-empty">
+              No staff match your search.
+            </div>
+          ) : (
+            <>
+              <div className="mb-2 px-1">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground" data-testid="text-workforce-search-count">
+                  {filtered} match{filtered === 1 ? "" : "es"}{filtered > results.length ? ` — showing first ${results.length}` : ""}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {results.map((p) => {
+                  const assessed = p.assessmentStatus === "complete";
+                  const atRisk = assessed && (p.vulnerabilityPct ?? 0) >= AT_RISK_THRESHOLD;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => onJump(p.department, p.fullName)}
+                      className="w-full text-left p-3 rounded-md bg-white/5 border border-white/5 hover:bg-white/10 hover:border-primary/40 transition-colors flex items-center justify-between gap-4 group"
+                      data-testid={`row-workforce-search-${p.id}`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-sans text-sm text-white truncate" data-testid={`text-workforce-search-name-${p.id}`}>{p.fullName}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {p.jobTitle && <span className="text-[11px] font-mono text-muted-foreground truncate">{p.jobTitle}</span>}
+                          {p.jobTitle && <span className="w-1 h-1 rounded-full bg-muted-foreground/50 shrink-0" />}
+                          <span className="text-[11px] font-mono uppercase tracking-widest text-primary/80 truncate" data-testid={`text-workforce-search-dept-${p.id}`}>{p.department}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 shrink-0">
+                        {assessed ? (
+                          <>
+                            <div className="text-right">
+                              <span className="font-mono text-sm text-primary block leading-none">{p.jstIndex}</span>
+                              <span className="text-[9px] uppercase tracking-widest text-muted-foreground">JST</span>
+                            </div>
+                            <div className="text-right min-w-[52px]">
+                              <span className={`font-mono text-sm block leading-none ${atRisk ? "text-orange-400" : "text-white"}`}>{Math.round(p.vulnerabilityPct ?? 0)}%</span>
+                              <span className="text-[9px] uppercase tracking-widest text-muted-foreground">Risk</span>
+                            </div>
+                          </>
+                        ) : (
+                          <span className="px-2 py-1 rounded font-mono text-[10px] uppercase tracking-widest bg-white/10 text-muted-foreground border border-white/10">
+                            {p.assessmentStatus === "pending" ? "Awaiting assessment" : p.assessmentStatus === "invited" ? "Invited" : "Not linked"}
+                          </span>
+                        )}
+                        <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
       )}
     </div>
   );

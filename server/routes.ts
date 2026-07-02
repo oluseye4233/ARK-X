@@ -3133,6 +3133,33 @@ export async function registerRoutes(
     },
   );
 
+  // Institution-wide staff search — spans EVERY department so an admin who knows
+  // a name but not the unit can jump straight to that person. Each result is
+  // tagged with its department so the client can open that unit's drill-down.
+  // Gated + scoped identically to the department drill-down (institution admins
+  // only, own org); the response is bounded by the same limit/offset ceilings.
+  app.get(
+    "/api/enterprise/staff/search",
+    requireFeature("enterpriseDashboard"),
+    requireAuth,
+    requireInstitutionAdmin,
+    async (req, res) => {
+      try {
+        const search = typeof req.query.q === "string" ? req.query.q : undefined;
+        const limitRaw = typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
+        const offsetRaw = typeof req.query.offset === "string" ? Number(req.query.offset) : undefined;
+        const page = await storage.searchWorkforceStaff(req.institutionScope!, {
+          search,
+          limit: Number.isFinite(limitRaw) ? limitRaw : undefined,
+          offset: Number.isFinite(offsetRaw) ? offsetRaw : undefined,
+        });
+        return res.json(page);
+      } catch (err: any) {
+        return res.status(500).json({ message: err.message });
+      }
+    },
+  );
+
   // Legacy reference endpoint (superseded by /api/enterprise/intelligence).
   // Gated identically to the enterprise overview — institution admins only —
   // so flipping the flag ON never exposes org data to the public.
