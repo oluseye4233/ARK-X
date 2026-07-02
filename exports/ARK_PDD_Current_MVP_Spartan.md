@@ -1,15 +1,15 @@
 <div class="cover">
 <div class="cover-inner">
 
-<div class="tag">SPARTAN SI · MVP COMPRESSION · SPRT-ATLAS-MVP-SI-2026-001 · 02 JUN 2026</div>
+<div class="tag">SPARTAN SI · MVP COMPRESSION · SPRT-ATLAS-MVP-SI-2026-001 · 02 JUL 2026</div>
 
 <h1>ARK Platform<br/>SPARTAN MVP PDD</h1>
 
-<div class="subtitle">Produced by <strong>SPARTAN SI</strong> (ATLAS MVP Compression Engine, DISC&nbsp;DC · WOLF) executing the <strong>7-Step SCM</strong> on the published ARK Platform ATLAS Living PDD (<code>JNGL-ARK-PDD-CUR-2026-011</code>, v11). Every prompt classified CLASS&nbsp;A&nbsp;/&nbsp;B&nbsp;/&nbsp;C; CLASS&nbsp;C deferred with a documented upgrade trigger. 100% feature fidelity, zero bloat — now including the live growth-and-monetization funnel, verification flywheel, and the <strong>F1000 (First 1000) soft-launch promo</strong>.</div>
+<div class="subtitle">Produced by <strong>SPARTAN SI</strong> (ATLAS MVP Compression Engine, DISC&nbsp;DC · WOLF) executing the <strong>7-Step SCM</strong> on the published ARK Platform ATLAS Living PDD (<code>JNGL-ARK-PDD-CUR-2026-011</code>, v11). Every prompt classified CLASS&nbsp;A&nbsp;/&nbsp;B&nbsp;/&nbsp;C; every former CLASS&nbsp;C deferral has now been <strong>activated</strong> — all 24 feature flags default ON. 100% feature fidelity, zero bloat — including the live growth-and-monetization funnel, verification flywheel, the <strong>F1000 (First 1000) soft-launch promo</strong>, and the fully-built <strong>Enterprise Workforce Intelligence</strong> suite (filters, drill-down, org-wide search, upskill nudges).</div>
 
 <div class="manifesto">
 <strong>"A Spartan soldier carried only what was needed to win. SPARTAN carries only what the user needs to launch."</strong><br/>
-Every deferred line is not a loss — it is a decision with a documented return path.
+Every deferral was a decision with a documented return path — and every return path has now been taken: all 24 flags are ON.
 </div>
 
 <div class="meta">
@@ -40,7 +40,7 @@ ATANDA Studio · FORGE Institute
   - incl. **Special Block · F1000 Soft-Launch Promo** (First 1000)
 - **PART 4 · ZPOS+5 Optimisation Report**
 - **PART 5 · Session Plan** (single-developer execution sequence)
-- **APPENDIX · Upgrade Path Document** (CLASS C triggers)
+- **APPENDIX · Re-Gate Path Document** (former CLASS C triggers — all activated)
 - **Quality Gates &amp; FORGE Certification**
 
 </div>
@@ -50,7 +50,7 @@ ATANDA Studio · FORGE Institute
 > **Invocation:** `Run SPARTAN on [ARK_PDD_Current_ATLAS.md v11] targeting [AUTO].`
 > **GRO DNA:** SAFE_LIFE · **FORGE Step:** Stage 3 (runs after full PDD exists) · **Input route:** PDD Compression Path (`.md` ATLAS structure detected).
 
-SPARTAN received the published v11 ATLAS Living PDD and compressed it to its minimum-viable, fully-deployable form. The MVP retains 100% of user-facing features that exist *today* — and the deployed surface has **widened again** since the previous compression: the **Suggested Training Providers** funnel, the **INDIVIDUAL_EXPLORER** free tier, the **Primitive Card Verification** flywheel (now with **DATA-pillar evidence uploads** and a **Name-Job-Role O*NET/SFIA/WEF guide**), the one-page **ARK REPORT**, the shareable **ARK RESUME** ATS artifact, the **ARK Talent Exchange** (Cognitive Talent Exchange matchmaking), and the **F1000 (First 1000) soft-launch promo** are all live and therefore **promoted into the retained CLASS A set** — **7 flags ON**. Everything still deferred is feature-flagged **off** behind a documented commercial trigger, so no current user loses anything.
+SPARTAN received the published v11 ATLAS Living PDD and compressed it to its minimum-viable, fully-deployable form. The MVP retains 100% of user-facing features that exist *today* — and as of **02 JUL 2026** the deferral era is over: **all 24 feature flags default ON**. Beyond the previously-promoted surfaces (Training-Providers funnel, INDIVIDUAL_EXPLORER tier, Primitive Card Verification with **DATA-pillar evidence** and the **Name-Job-Role O*NET/SFIA/WEF guide**, **ARK REPORT**, **ARK RESUME**, **ARK Talent Exchange**, **F1000 promo**), this pass captures three further waves: (1) the 15 fully-built former CLASS C modules were flag-flipped live (cohorts, GUIN+ public profiles, notifications, Claude narrative, subscription cancel, institution workforce, corporate marketplace, DOCX export, DRM, custom scenarios, admin CCGE import, context-craft page, revenue guardrail, book companion, advanced SPHINX); (2) the two former stubs were **completed, not just flipped** — `enterpriseDashboard` now renders real aggregated Workforce Intelligence and `assessmentEmail` sends a real plain-text summary via the shared Gmail transport; (3) the Workforce Intelligence suite grew a full admin toolset — AND-stacked dimension filters, bounded department drill-down (top-25 page, 100-row cap, search + offset paging), org-wide staff search, and an **upskill nudge** that delivers a real in-app SSE notification + best-effort email with a 7-day anti-spam cooldown and truthful delivery status. The upgrade-path appendix is retained as the **re-gate path**: any surface can be turned off again with a one-line env overlay.
 
 ### Honesty Gate (threat_model G3)
 
@@ -58,23 +58,23 @@ SPARTAN's benchmark card cites "90–98% infrastructure cost reduction" and list
 
 ### Step 1 · SCAN — Input Manifest
 
-| Metric | Source (Full ATLAS PDD v11) |
+| Metric | Source (Full ATLAS PDD v11 + live platform, 02 JUL 2026) |
 |--------|------------------------------|
-| Atomic Prompts | 51 across 7 phases + 1 special block (adds ARK RESUME, Talent Exchange, verification DATA-evidence + Name-Job-Role guide) |
-| API endpoints | 153 `/api` routes (incl. `/ark-resume`, `/confirmations`, `/matchmaking/*`, `/verification/*`) |
-| Drizzle tables | 55 · Migrations 23 (0000–0021; two `0020_*` files: `_confirmation_invites` + `_matchmaking`) |
-| Client routes | 44 `<Route>` · Feature flags 24 (**7 ON**: `investorDemo`, `executiveReport`, `cardVerification`, `trainingProviders`, `f1000Promo`, `arkResume`, `matchmaking`) |
+| Atomic Prompts | 57 across 8 phases + 1 special block (adds Enterprise Workforce Intelligence suite: filters, drill-down, search, nudge) |
+| API endpoints | 153 `/api` routes (incl. `/enterprise/intelligence`, `/enterprise/staff/search`, `/workforce/staff/:id/nudge`, `/ark-resume`, `/matchmaking/*`, `/verification/*`, `/f1000/*`) |
+| Drizzle tables | 55 · Migrations 24 (0000–0022; two `0020_*` files; `0022_staff_nudge` adds `staff_records.nudged_at`) |
+| Client routes | 44 `<Route>` · Feature flags 24 (**ALL 24 ON** — none deferred) |
 | Server / client modules | ~50 / ~140 |
 
 ### Step 2 · PROFILE — Classification Result
 
 | CLASS | Meaning | Count | Action |
 |-------|---------|-------|--------|
-| **A — KEEP** | User-facing feature or system-correctness (auth, data, scoring, cost-safety, funnel, verification, résumé/matchmaking, F1000 growth) | 46 prompts | Retained unchanged in MVP |
+| **A — KEEP** | User-facing feature or system-correctness (auth, data, scoring, cost-safety, funnel, verification, résumé/matchmaking, F1000 growth, workforce intelligence) | 52 prompts | Retained unchanged in MVP |
 | **B — SYNTHESISE** | Infrastructure replaceable by a platform-native equivalent, no UX loss | 2 prompts | Collapsed (see Part 2) |
-| **C — DEFER** | Serves scale not yet reached; no user sees it until a trigger fires | 17 flag families | Moved to Upgrade Path (Appendix) |
+| **C — DEFER** | Serves scale not yet reached | **0 flag families** | All 17 former deferrals ACTIVATED — Appendix is now the reversible re-gate path |
 
-**Prompt reduction: 51 ATLAS prompts → 46 retained CLASS A (~10%); the headline compression is token-level (Part 4, ~54%) — SPARTAN strips ATLAS prose to terse, I/O-typed tables. Feature Fidelity Score: 100%** — every MVP user-facing feature present; all deferrals are already 404 behind flags. *(The lower prompt-reduction vs earlier passes is expected: Stage-1 has widened from 1 ON flag to 7, so the funnel + verification + report + ARK RESUME + Talent Exchange + F1000 promo are now KEEP, not DEFER.)*
+**Prompt classification: 57 live prompts → 52 retained CLASS A; the headline compression remains token-level (Part 4, ~54%) — SPARTAN strips ATLAS prose to terse, I/O-typed tables. Feature Fidelity Score: 100%** — every user-facing feature present. *(This is the first pass with ZERO deferrals: Stage-1 widened from 1 ON flag → 7 → all 24. The DEFER class survives structurally — any flag can return to 404 via a one-line env overlay — but nothing is deferred today.)*
 
 ### Step 3 · ASSESS — VIBE DJ Verdict
 
@@ -124,7 +124,7 @@ ARK is **already collapsed** — SPARTAN confirms the production stack never acc
 
 # PART 3 · Compressed MVP ATLAS PDD
 
-The retained CLASS A prompt set — the live MVP surfaces (Identity, Resume Analyzer, CCGE Arena, **Card Verification** incl. DATA-evidence + Name-Job-Role guide, SPHINX MVP, **Training-Providers funnel + Explorer tier**, **ARK REPORT**, **ARK RESUME**, **ARK Talent Exchange**, Bonsai onboarding, Billing FREE+PRO+Explorer, GDPR) plus their system-correctness foundations. Token text ZPOS+5-optimised (Part 4).
+The retained CLASS A prompt set — the live MVP surfaces (Identity, Resume Analyzer, CCGE Arena, **Card Verification** incl. DATA-evidence + Name-Job-Role guide, SPHINX MVP, **Training-Providers funnel + Explorer tier**, **ARK REPORT**, **ARK RESUME**, **ARK Talent Exchange**, **Enterprise Workforce Intelligence**, Bonsai onboarding, Billing FREE+PRO+Explorer, GDPR) plus their system-correctness foundations. Token text ZPOS+5-optimised (Part 4).
 
 ### MVP Phase 1 — Foundation (🔴 P0)
 
@@ -205,6 +205,19 @@ The surfaces promoted into CLASS A since the last compression: two Card-Verifica
 | MVP-A45 | ARK Talent Exchange: match people ↔ opportunities (JOB/PROJECT) — coverage·.7 + jstFactor·.2 + archetypeFit·.1; under-tier verifications = 0.5 partial | `npm run test:matchmaking`; verified-only scoring | `server/matchmaking.ts` (`0020_matchmaking`) |
 | MVP-A46 | Talent Exchange team formation: greedy one-per-role → TXS = coverage·.6 + archetypeDiversity·.25 + jstDepth·.15 | PROJECT detail returns team | `server/matchmaking.ts::assembleTeam` |
 
+### MVP Phase 8 — Enterprise Workforce Intelligence (🟡 P1, live)
+
+The former stub `enterpriseDashboard` is now a real admin suite: the `/enterprise` overview aggregates the institution roster live, and admins can slice, drill down, search org-wide, and act (nudge) — with tests locking in the bounded-query and cohort-isolation contracts. `assessmentEmail` is likewise real (plain-text summary via the shared Gmail transport, recipient always the authenticated user's own address).
+
+| ID | Description | Validation | Owner |
+|----|-------------|------------|-------|
+| MVP-A47 | `/enterprise` real aggregation — headcount, avg JST, avg vulnerability, critical-risk units, vuln-strata pie, per-dept JST bars, automation-exposure heatmap | `requireFeature`+`requireAuth`+`requireInstitutionAdmin`; org from session | `GET /api/enterprise/intelligence` |
+| MVP-A48 | AND-stacked dimension filters (tenure band, location) — intersection, never union; invalid slices dropped, degrade to unfiltered | `test:workforce-filters` 5/5 | `storage.getWorkforceIntelligence` |
+| MVP-A49 | Bounded department drill-down — top-25 default, 100-row hard cap, name/title search, offset paging, most-at-risk first | `test:department-staff` 11/11 + route-level 10/10 (bad limit/offset can't 500) | `storage.getDepartmentStaff` |
+| MVP-A50 | Org-wide staff search across every department; result click jumps into the unit drill-down seeded with the name | same gates + bounded limits as drill-down | `GET /api/enterprise/staff/search` |
+| MVP-A51 | Upskill nudge — real in-app SSE notification + best-effort email to the linked account's own address; truthful `inAppDelivered`/`emailSent`/`emailError` (no silent success) | `test:staff-nudge-invite` 12/12 | `POST /api/workforce/staff/:id/nudge` |
+| MVP-A52 | Nudge anti-spam — 7-day cooldown; suppressed repeat never re-emails, never re-stamps `nudgedAt`, responds truthfully with next-available date | cooldown tests green | `storage.nudgeStaff` (`0022_staff_nudge`) |
+
 ### Special Block · F1000 Soft-Launch Promo (🟡 P1, growth)
 
 The **F1000 (First 1000)** soft-launch promo — a scarcity-bound, public-QR founding-member campaign. 1,000 single-use numbered codes → free Explorer entry + price-capped upgrade. CLASS A (live, `f1000Promo` ON). Condensed from the ATLAS Special Chapter.
@@ -225,9 +238,15 @@ The **F1000 (First 1000)** soft-launch promo — a scarcity-bound, public-QR fou
 | MVP-B01 | Redis cache + cache service | in-process `server/ai/cache.ts` |
 | MVP-B02 | Separate seed/admin service | dev-only `/api/seed` (403 in prod), seeds live SPCs + 4 providers / 8 courses |
 
-### Retained ON flags (7)
+### Retained ON flags (24 — ALL)
 
-`investorDemo` (public `/demo` + `/demo-tour`; home CTAs depend on it) · `executiveReport` (`/report` one-pager export) · `cardVerification` (Primitive Card Verification quests + badges + DATA evidence + Name-Job-Role guide) · `trainingProviders` (Suggested Training Providers funnel + Explorer tier) · `f1000Promo` (F1000 soft-launch promo: `/f1000` + `/api/f1000/*` + landing QR) · `arkResume` (`/ark-resume` ATS résumé artifact + confirmations + headshot) · `matchmaking` (ARK Talent Exchange `/matchmaking` + `/api/matchmaking/*`). All seven are CLASS A for the current stage.
+**Core seven** (promoted in earlier passes): `investorDemo` (public `/demo` + `/demo-tour`; home CTAs depend on it — the landing page now shows ONLY the F1000 QR promo as its scarcity badge) · `executiveReport` · `cardVerification` · `trainingProviders` · `f1000Promo` · `arkResume` · `matchmaking`.
+
+**Activated fifteen** (fully-built, flag-flipped live): `cohorts` · `guinPublic` · `notifications` · `claudeNarrative` · `subscriptionCancel` · `institutionWorkforce` · `corporateMarketplace` · `forgeLabDocx` · `drm` · `customScenarios` · `adminCcgeImport` · `contextCraftPage` · `revenueGuardrail` · `bookCompanion` · `sphinxAdvanced`.
+
+**Completed two** (former stubs, now fully implemented): `enterpriseDashboard` (Phase 8) · `assessmentEmail` (real summary email).
+
+All 24 default ON in `shared/featureFlags.ts::FEATURES`; re-gate any surface with `FEATURE_<SNAKE_CASE>=false` — no code change, no redeploy of defaults.
 
 ---
 
@@ -262,36 +281,37 @@ The MVP is already deployed; this is the SPARTAN replay order a single developer
 | 9 | Billing stub + GDPR export/delete | audit + purge | A35–A36 |
 | 10 | Verification DATA-evidence + Name-Job-Role guide; ARK RESUME + confirmations; ARK Talent Exchange + team formation | `test:matchmaking` green; résumé Pro+/Silver+ gate | A41–A46 |
 | 11 | F1000 promo: invite allocation + claim/stats/me + price-cap at checkout + landing QR | idempotent claim; `409 sold_out` at 1,000 | A37–A40 |
-| 12 | Feature flags wired; 7 ON; seed canonical data | CLASS C → 404 | A06, B02 |
-| 13 | Deploy to Autoscale | live URL | FFS 100% |
+| 12 | Enterprise Workforce Intelligence: real aggregation + filters + drill-down + search + nudge (cooldown) | filter/drill-down/nudge suites green | A47–A52 |
+| 13 | Feature flags wired; ALL 24 ON; seed canonical data | env overlay re-gates → 404 | A06, B02 |
+| 14 | Deploy to Autoscale | live URL | FFS 100% |
 
 ---
 
-# APPENDIX · Upgrade Path Document (CLASS C Triggers)
+# APPENDIX · Re-Gate Path Document (former CLASS C Triggers — ALL ACTIVATED)
 
-Every deferral has a documented return trigger (SPARTAN C-04). Lifting is a one-line `FEATURE_<KEY>=true` env flip — **no rebuild** (SPARTAN reversibility guarantee). 17 flag families remain deferred (`executiveReport`, `cardVerification`, `trainingProviders`, `f1000Promo`, `investorDemo`, `arkResume`, `matchmaking` are the 7 lifted into CLASS A).
+Every former deferral had a documented return trigger (SPARTAN C-04). As of 02 JUL 2026 **all 17 families are live** — the table below is preserved as the **re-gate path**: any surface returns to 404 with a one-line `FEATURE_<SNAKE_CASE>=false` env flip — **no rebuild** (SPARTAN reversibility guarantee, now exercised in the opposite direction).
 
-| CLASS C item | Flag | Upgrade trigger |
-|--------------|------|-----------------|
-| Public GUIN+ profiles + endorsements + knight ranks | `guinPublic` | ≥25 creators |
-| Notification bell + stream | `notifications` | ≥25 creators |
-| SPHINX synergies / pairs / roundtable / synthesis | `sphinxAdvanced` | ≥100 listings |
-| Corporate marketplace + star feedback | `corporateMarketplace` | ≥100 listings |
-| Claude Sonnet resume narrative | `claudeNarrative` | PRO billing live |
-| Subscription cancel + dunning | `subscriptionCancel` | PRO billing live |
-| Assessment summary email | `assessmentEmail` | PRO billing live |
-| Institutional cohorts (`/school`, grades) | `cohorts` | first SCHOOL_STUDENT licence |
-| Enterprise workforce dashboard | `enterpriseDashboard` | school/enterprise SKU |
-| Institution workforce intelligence + HR connectors | `institutionWorkforce` | school/enterprise SKU |
-| Forge Lab `.docx` ingest | `forgeLabDocx` | 100+ Forge Lab requests |
-| DRM event ingest + violators | `drm` | support load / scale |
-| Admin scenario gen + user custom CCGE | `customScenarios` | support load / scale |
-| Admin CCGE compendium bulk import | `adminCcgeImport` | support load / scale |
-| `/context-craft` reference page | `contextCraftPage` | post-launch SEO push |
-| Cost-cap second gate + V2 budgets | `revenueGuardrail` | first $1k MRR or 80% cap crossing |
-| Book Companion journey + `/b/:slug` QR + ledger | `bookCompanion` | book launch / first reader cohort |
+| Activated item | Flag | Original trigger (historical) | Status |
+|--------------|------|-----------------|--------|
+| Public GUIN+ profiles + endorsements + knight ranks | `guinPublic` | ≥25 creators | ✅ ON |
+| Notification bell + stream | `notifications` | ≥25 creators | ✅ ON |
+| SPHINX synergies / pairs / roundtable / synthesis | `sphinxAdvanced` | ≥100 listings | ✅ ON |
+| Corporate marketplace + star feedback | `corporateMarketplace` | ≥100 listings | ✅ ON |
+| Claude Sonnet resume narrative | `claudeNarrative` | PRO billing live | ✅ ON |
+| Subscription cancel + dunning | `subscriptionCancel` | PRO billing live | ✅ ON |
+| Assessment summary email | `assessmentEmail` | PRO billing live | ✅ ON — **completed** (real Gmail-transport send, own-address only, truthful 502 on failure) |
+| Institutional cohorts (`/school`, grades) | `cohorts` | first SCHOOL_STUDENT licence | ✅ ON |
+| Enterprise workforce dashboard | `enterpriseDashboard` | school/enterprise SKU | ✅ ON — **completed** (Phase 8 real aggregation + filters + drill-down + search + nudge) |
+| Institution workforce intelligence + HR connectors | `institutionWorkforce` | school/enterprise SKU | ✅ ON |
+| Forge Lab `.docx` ingest | `forgeLabDocx` | 100+ Forge Lab requests | ✅ ON |
+| DRM event ingest + violators | `drm` | support load / scale | ✅ ON |
+| Admin scenario gen + user custom CCGE | `customScenarios` | support load / scale | ✅ ON |
+| Admin CCGE compendium bulk import | `adminCcgeImport` | support load / scale | ✅ ON |
+| `/context-craft` reference page | `contextCraftPage` | post-launch SEO push | ✅ ON |
+| Cost-cap second gate + V2 budgets | `revenueGuardrail` | first $1k MRR or 80% cap crossing | ✅ ON |
+| Book Companion journey + `/b/:slug` QR + ledger | `bookCompanion` | book launch / first reader cohort | ✅ ON |
 
-**Data forward-compatibility (SPARTAN C-08):** all 55 tables already exist in the deployed schema — CLASS C surfaces are gated at the *route* layer, not removed from the data model, so no migration is needed when a flag flips. Auth, scoring, billing, and funnel contracts are untouched by any deferral (C-02 satisfied).
+**Data forward-compatibility (SPARTAN C-08):** all 55 tables already existed in the deployed schema when the flags flipped — surfaces were gated at the *route* layer, not removed from the data model, so activation required **zero migrations** (except `0022_staff_nudge` for the new nudge feature itself). Auth, scoring, billing, and funnel contracts were untouched by activation (C-02 satisfied).
 
 ---
 
@@ -302,18 +322,18 @@ Every deferral has a documented return trigger (SPARTAN C-04). Lifting is a one-
 | **FFS** — Feature Fidelity Score | 100% | **100%** | Every current user-facing feature retained |
 | **CIS** — Code Integrity Score | ≥95% | **99%** | No API/schema/auth/funnel contract broken |
 | **AVS** — Atomic Validity Score | ≥95% | **98%** | Each MVP prompt is single-op, I/O-typed |
-| **UIS** — Upgrade Integrity Score | ≥95% | **100%** | All 17 deferrals have triggers + reversible flips |
+| **UIS** — Upgrade Integrity Score | ≥95% | **100%** | All 17 former deferrals activated; re-gate remains a reversible one-line flip |
 | **GRO state** | SAFE_LIFE | **SAFE_LIFE** | No containment escalation (all scores ≥95%) |
 
 ```
 ╔══════════════════════════════════════════════════════════════════╗
 ║  SPARTAN SI — FORGE CERTIFICATION                                ║
 ║  Input:  ARK_PDD_Current_ATLAS.md  (PDD-CUR-2026-011, v11)      ║
-║  Output: ARK_PDD_Current_MVP_Spartan  (PDD-MVP-2026-012)        ║
-║  Prompt reduction 51→46 (~10%) · Token reduction ~54%           ║
+║  Output: ARK_PDD_Current_MVP_Spartan  (PDD-MVP-2026-013)        ║
+║  Prompt classification 57→52 CLASS A · Token reduction ~54%     ║
 ║  FFS 100 · CIS 99 · AVS 98 · UIS 100 · JCSE 49/50 PLATINUM      ║
 ║  Honesty Gate G3: ENFORCED (no ROI/savings, no ideafactory bill) ║
 ╚══════════════════════════════════════════════════════════════════╝
 ```
 
-> *SPARTAN compression complete. ATLAS MVP v12 delivered — funnel + verification (incl. DATA-evidence + Name-Job-Role guide) + ARK REPORT + ARK RESUME + ARK Talent Exchange + F1000 promo promoted to CLASS A (7 flags ON), 17 families deferred with reversible triggers.*
+> *SPARTAN compression complete. ATLAS MVP v13 delivered (02 JUL 2026) — ALL 24 feature flags ON: core seven + fifteen activated modules + two completed stubs (real Workforce Intelligence suite with filters / drill-down / org-wide search / cooldown-guarded upskill nudges, real assessment-summary email). Zero deferrals; the Appendix now documents the reversible re-gate path.*
