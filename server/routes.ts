@@ -2974,12 +2974,35 @@ export async function registerRoutes(
   // the session's institution, never trusted as an identity.
   app.post("/api/workforce/staff/:id/nudge", ...workforceGate, async (req, res) => {
     try {
-      const result = await storage.nudgeStaff(String(req.params.id), req.institutionScope!);
-      if (!result) {
+      const outcome = await storage.nudgeStaff(String(req.params.id), req.institutionScope!);
+      if (!outcome) {
         return res.status(422).json({
           message: "Cannot nudge: staff member isn't linked to a completed ARK assessment yet.",
         });
       }
+
+      // Cooldown: a nudge was already sent recently. Acknowledge the admin's
+      // intent truthfully — no duplicate email or in-app notification is sent,
+      // and we never claim "sent" when nothing was delivered.
+      if (outcome.suppressed) {
+        const lastSent = new Date(outcome.lastNudgedAt).toLocaleDateString("en-US", {
+          month: "short", day: "numeric", year: "numeric",
+        });
+        const availableAt = new Date(outcome.nextNudgeAvailableAt).toLocaleDateString("en-US", {
+          month: "short", day: "numeric", year: "numeric",
+        });
+        return res.json({
+          staff: outcome.staff,
+          inAppDelivered: false,
+          emailSent: false,
+          suppressed: true,
+          lastNudgedAt: outcome.lastNudgedAt,
+          nextNudgeAvailableAt: outcome.nextNudgeAvailableAt,
+          message: `A nudge was already sent on ${lastSent}. To avoid spamming this staff member, another nudge can be sent from ${availableAt}.`,
+        });
+      }
+
+      const result = outcome.staff;
 
       // Actually close the loop: deliver a real prompt to the nudged person.
       // nudgeStaff only succeeds for staff linked to an assessed ARK account,
@@ -3025,6 +3048,8 @@ export async function registerRoutes(
         inAppDelivered,
         emailSent,
         emailError,
+        suppressed: false,
+        nextNudgeAvailableAt: outcome.nextNudgeAvailableAt,
         message,
       });
     } catch (err: any) {

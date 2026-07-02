@@ -98,6 +98,23 @@ export type StaffDrilldownRow = {
   nudgedAt: string | null;
 };
 
+/** Days an admin must wait before re-nudging the same staff member. Keeps the
+ *  nudge respectful: within this window a re-nudge is acknowledged but no
+ *  duplicate email/in-app notification is delivered. */
+export const UPSKILL_NUDGE_COOLDOWN_DAYS = 7;
+
+/** Result of a nudge attempt on a valid (assessed, in-scope) staff member.
+ *  `suppressed: true` means a nudge was already sent within the cooldown —
+ *  nudgedAt was NOT re-stamped and no delivery should happen. */
+export type NudgeStaffOutcome = {
+  staff: StaffRecordWithArk;
+  suppressed: boolean;
+  /** When the last nudge was actually delivered (ISO). */
+  lastNudgedAt: string;
+  /** When the cooldown lifts (ISO); only meaningful when suppressed. */
+  nextNudgeAvailableAt: string;
+};
+
 /** Query options for a bounded, searchable department drill-down. */
 export type DepartmentStaffQuery = {
   search?: string;
@@ -448,9 +465,12 @@ export interface IStorage {
    *  invite (invitedAt) so registration reconciliation links it on signup. */
   inviteStaff(id: string, institution: string): Promise<StaffRecordWithArk | null>;
   /** Nudge an assessed staff member toward upskilling: records nudgedAt so the
-   *  drill-down reflects the action. Institution-scoped; returns the updated row,
-   *  or null if the staff member isn't linked to an assessed ARK account. */
-  nudgeStaff(id: string, institution: string): Promise<StaffRecordWithArk | null>;
+   *  drill-down reflects the action. Institution-scoped; returns null if the
+   *  staff member isn't linked to an assessed ARK account. When a nudge was
+   *  already sent within the cooldown window (UPSKILL_NUDGE_COOLDOWN_DAYS),
+   *  returns `suppressed: true` with the unchanged row — no nudgedAt re-stamp,
+   *  so the route can skip re-delivery and tell the admin truthfully. */
+  nudgeStaff(id: string, institution: string): Promise<NudgeStaffOutcome | null>;
   /** Auto-link any still-unlinked staff records matching this user's email
    *  (across institutions) when they register/log in. Returns rows linked. */
   reconcileStaffInvitesForUser(userId: string, email: string): Promise<number>;
@@ -2504,7 +2524,7 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async nudgeStaff(id: string, institution: string): Promise<StaffRecordWithArk | null> {
+  async nudgeStaff(id: string, institution: string): Promise<NudgeStaffOutcome | null> {
     return await db.transaction(async (tx) => {
       const [staff] = await tx
         .select()
@@ -2529,23 +2549,53 @@ export class DatabaseStorage implements IStorage {
       if (!assessed) return null;
 
       const now = new Date();
+      const ark = {
+        arkScore: matched!.arkScore ?? 0,
+        jstIndex: matched!.jstIndex ?? 0,
+        ccmi: matched!.ccmi ?? 0,
+        vulnerabilityPct: matched!.resumeReplacementPct ?? 0,
+      };
+
+      // Cooldown: if a nudge was already sent within the window, do NOT
+      // re-stamp nudgedAt (it must keep reflecting the last real delivery) and
+      // signal the caller to suppress re-delivery. The row is returned
+      // unchanged so the drill-down still shows the original nudge.
+      const cooldownMs = UPSKILL_NUDGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+      if (staff.nudgedAt) {
+        const last = new Date(staff.nudgedAt);
+        const liftsAt = new Date(last.getTime() + cooldownMs);
+        if (now.getTime() < liftsAt.getTime()) {
+          return {
+            staff: {
+              ...staff,
+              assessmentStatus: "complete",
+              tenureBand: tenureBandFromHireDate(staff.hireDate),
+              ark,
+            },
+            suppressed: true,
+            lastNudgedAt: last.toISOString(),
+            nextNudgeAvailableAt: liftsAt.toISOString(),
+          };
+        }
+      }
+
       await tx
         .update(staffRecords)
         .set({ nudgedAt: now, updatedAt: now })
         .where(eq(staffRecords.id, id));
 
       return {
-        ...staff,
-        nudgedAt: now,
-        updatedAt: now,
-        assessmentStatus: "complete",
-        tenureBand: tenureBandFromHireDate(staff.hireDate),
-        ark: {
-          arkScore: matched!.arkScore ?? 0,
-          jstIndex: matched!.jstIndex ?? 0,
-          ccmi: matched!.ccmi ?? 0,
-          vulnerabilityPct: matched!.resumeReplacementPct ?? 0,
+        staff: {
+          ...staff,
+          nudgedAt: now,
+          updatedAt: now,
+          assessmentStatus: "complete",
+          tenureBand: tenureBandFromHireDate(staff.hireDate),
+          ark,
         },
+        suppressed: false,
+        lastNudgedAt: now.toISOString(),
+        nextNudgeAvailableAt: new Date(now.getTime() + cooldownMs).toISOString(),
       };
     });
   }

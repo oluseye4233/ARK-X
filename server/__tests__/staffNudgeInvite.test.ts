@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import { db } from "../db";
 import { eq, sql } from "drizzle-orm";
 import { users, staffRecords } from "@shared/schema";
-import { storage } from "../storage";
+import { storage, UPSKILL_NUDGE_COOLDOWN_DAYS } from "../storage";
 import { requireInstitutionAdmin } from "../auth";
 
 // ─────────────────────────────────────────────────────────────
@@ -116,7 +116,8 @@ test("nudgeStaff: a staff id from institution B is rejected under institution A'
   // Correct scope still works — proving the null above was scope, not a broken record.
   const rightScope = await storage.nudgeStaff(staffB, INST_B);
   assert.ok(rightScope, "same-institution nudge on an assessed member succeeds");
-  assert.ok(rightScope!.nudgedAt, "same-institution nudge stamps nudgedAt");
+  assert.equal(rightScope!.suppressed, false, "first nudge is not suppressed");
+  assert.ok(rightScope!.staff.nudgedAt, "same-institution nudge stamps nudgedAt");
 });
 
 test("inviteStaff: a staff id from institution B is rejected under institution A's scope", async () => {
@@ -172,6 +173,74 @@ test("nudgeStaff: a linked-but-pending (not-yet-assessed) staff member returns n
 });
 
 // ─────────────────────────────────────────────────────────────
+// Cooldown — re-nudging inside the window is suppressed (no nudgedAt re-stamp,
+// caller told to skip delivery); once the window passes, the nudge sends again.
+// ─────────────────────────────────────────────────────────────
+test("nudgeStaff: re-nudge within the cooldown window is suppressed and does not re-stamp nudgedAt", async () => {
+  const assessed = await makeUser(`cool-assessed-${SUFFIX}@x.test`, 450);
+  const staff = await makeStaff({
+    institution: INST_A,
+    fullName: "Cora Cooldown",
+    email: `cora-${SUFFIX}@x.test`,
+    department: "Engineering",
+    arkUserId: assessed,
+  });
+
+  const first = await storage.nudgeStaff(staff, INST_A);
+  assert.ok(first, "first nudge succeeds");
+  assert.equal(first!.suppressed, false, "first nudge delivers");
+  const firstStamp = first!.staff.nudgedAt;
+  assert.ok(firstStamp, "first nudge stamps nudgedAt");
+
+  const second = await storage.nudgeStaff(staff, INST_A);
+  assert.ok(second, "re-nudge still resolves the staff member (not a 422)");
+  assert.equal(second!.suppressed, true, "re-nudge within cooldown is suppressed");
+  assert.equal(
+    second!.lastNudgedAt,
+    new Date(firstStamp as any).toISOString(),
+    "suppressed result reports the ORIGINAL delivery time",
+  );
+  assert.ok(
+    new Date(second!.nextNudgeAvailableAt).getTime() > Date.now(),
+    "cooldown lift time is in the future",
+  );
+
+  // The DB row keeps the original stamp — the cooldown never slides forward.
+  const [row] = await db
+    .select({ nudgedAt: staffRecords.nudgedAt })
+    .from(staffRecords)
+    .where(eq(staffRecords.id, staff));
+  assert.equal(
+    row.nudgedAt!.toISOString(),
+    new Date(firstStamp as any).toISOString(),
+    "suppressed re-nudge must not re-stamp nudgedAt",
+  );
+});
+
+test(`nudgeStaff: a nudge older than ${UPSKILL_NUDGE_COOLDOWN_DAYS} days re-sends (cooldown expired)`, async () => {
+  const assessed = await makeUser(`stale-assessed-${SUFFIX}@x.test`, 450);
+  const staff = await makeStaff({
+    institution: INST_A,
+    fullName: "Stan Stale",
+    email: `stan-${SUFFIX}@x.test`,
+    department: "Engineering",
+    arkUserId: assessed,
+  });
+
+  // Backdate the last nudge to just past the cooldown window.
+  const stale = new Date(Date.now() - (UPSKILL_NUDGE_COOLDOWN_DAYS * 24 + 1) * 60 * 60 * 1000);
+  await db.update(staffRecords).set({ nudgedAt: stale }).where(eq(staffRecords.id, staff));
+
+  const result = await storage.nudgeStaff(staff, INST_A);
+  assert.ok(result, "expired-cooldown nudge resolves");
+  assert.equal(result!.suppressed, false, "expired cooldown → nudge delivers again");
+  assert.ok(
+    new Date(result!.staff.nudgedAt as any).getTime() > stale.getTime(),
+    "nudgedAt is re-stamped to the new delivery time",
+  );
+});
+
+// ─────────────────────────────────────────────────────────────
 // Invite flips an unlinked staff member to "invited".
 // ─────────────────────────────────────────────────────────────
 test("inviteStaff: an unlinked staff member (no ARK account) flips to invited", async () => {
@@ -218,8 +287,8 @@ test("getDepartmentStaff: reflects a nudge (complete status + nudgedAt) and an i
 
   // Baseline: nudged member not yet nudged, invited member still unlinked.
   const before = await storage.getDepartmentStaff(INST_A, dept);
-  const beforeNudge = before.find((r) => r.id === nudgeStaffId);
-  const beforeInvite = before.find((r) => r.id === inviteStaffId);
+  const beforeNudge = before.rows.find((r) => r.id === nudgeStaffId);
+  const beforeInvite = before.rows.find((r) => r.id === inviteStaffId);
   assert.ok(beforeNudge && beforeInvite, "both staff appear in the drill-down");
   assert.equal(beforeNudge!.nudgedAt, null, "not nudged yet");
   assert.equal(beforeNudge!.assessmentStatus, "complete", "assessed staff shows complete");
@@ -231,8 +300,8 @@ test("getDepartmentStaff: reflects a nudge (complete status + nudgedAt) and an i
 
   // The drill-down row now reflects both actions.
   const after = await storage.getDepartmentStaff(INST_A, dept);
-  const afterNudge = after.find((r) => r.id === nudgeStaffId);
-  const afterInvite = after.find((r) => r.id === inviteStaffId);
+  const afterNudge = after.rows.find((r) => r.id === nudgeStaffId);
+  const afterInvite = after.rows.find((r) => r.id === inviteStaffId);
   assert.ok(afterNudge!.nudgedAt, "drill-down row now carries nudgedAt");
   assert.equal(afterNudge!.assessmentStatus, "complete");
   assert.equal(afterInvite!.assessmentStatus, "invited", "drill-down row flips to invited");

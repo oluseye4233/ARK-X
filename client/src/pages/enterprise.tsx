@@ -487,7 +487,7 @@ function DepartmentStaffPanel({ department, index, initialSearch }: { department
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionPending, setActionPending] = useState<string | null>(null);
-  const [actionMessage, setActionMessage] = useState<Record<string, { text: string; error: boolean }>>({});
+  const [actionMessage, setActionMessage] = useState<Record<string, { text: string; error: boolean; muted?: boolean }>>({});
 
   const patchStaffRow = useCallback((staffId: string, patch: Partial<StaffDrilldownRow>) => {
     setRows((prev) => prev.map((r) => (r.id === staffId ? { ...r, ...patch } : r)));
@@ -509,9 +509,9 @@ function DepartmentStaffPanel({ department, index, initialSearch }: { department
     setActionPending(staff.id);
     setActionMessage((m) => { const n = { ...m }; delete n[staff.id]; return n; });
     api.nudgeStaffMember(staff.id)
-      .then((res: { staff: { nudgedAt: string | null }; message: string }) => {
+      .then((res: { staff: { nudgedAt: string | null }; suppressed?: boolean; message: string }) => {
         patchStaffRow(staff.id, { nudgedAt: res.staff.nudgedAt ?? new Date().toISOString() });
-        setActionMessage((m) => ({ ...m, [staff.id]: { text: res.message, error: false } }));
+        setActionMessage((m) => ({ ...m, [staff.id]: { text: res.message, error: false, muted: !!res.suppressed } }));
       })
       .catch((e: any) => setActionMessage((m) => ({ ...m, [staff.id]: { text: e?.message || "Unable to nudge.", error: true } })))
       .finally(() => setActionPending((cur) => (cur === staff.id ? null : cur)));
@@ -678,7 +678,7 @@ function DepartmentStaffPanel({ department, index, initialSearch }: { department
                     </div>
                   </div>
                   {msg && (
-                    <p className={`mt-2 font-mono text-[10px] ${msg.error ? "text-destructive" : "text-secondary"}`} data-testid={`text-action-message-${p.id}`}>
+                    <p className={`mt-2 font-mono text-[10px] ${msg.error ? "text-destructive" : msg.muted ? "text-orange-400" : "text-secondary"}`} data-testid={`text-action-message-${p.id}`}>
                       {msg.text}
                     </p>
                   )}
