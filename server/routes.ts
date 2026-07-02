@@ -3117,7 +3117,18 @@ export async function registerRoutes(
     async (req, res) => {
       try {
         const raw = req.params.department;
-        const department = decodeURIComponent(Array.isArray(raw) ? raw[0] ?? "" : raw ?? "");
+        const rawStr = Array.isArray(raw) ? raw[0] ?? "" : raw ?? "";
+        // Express has already URL-decoded the path param once. A second decode
+        // catches doubly-encoded links, but must never crash the page: a
+        // department whose real name contains a literal "%" (e.g. "Top 10%")
+        // makes decodeURIComponent throw, so fall back to the once-decoded
+        // value instead of 500ing.
+        let department = rawStr;
+        try {
+          department = decodeURIComponent(rawStr);
+        } catch {
+          department = rawStr;
+        }
         const search = typeof req.query.q === "string" ? req.query.q : undefined;
         const limitRaw = typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
         const offsetRaw = typeof req.query.offset === "string" ? Number(req.query.offset) : undefined;
