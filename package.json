@@ -27,7 +27,8 @@
     "test:assessment-email": "tsx --test server/__tests__/assessmentSummaryEmail.test.ts",
     "test:staff-nudge-invite": "tsx --test server/__tests__/staffNudgeInvite.test.ts",
     "test:department-staff": "tsx --test server/__tests__/departmentStaff.test.ts",
-    "test:department-staff-route": "tsx --test server/__tests__/departmentStaffRoute.test.ts"
+    "test:department-staff-route": "tsx --test server/__tests__/departmentStaffRoute.test.ts",
+    "test:nudge-email": "tsx --test server/__tests__/upskillNudgeEmail.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",

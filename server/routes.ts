@@ -43,9 +43,7 @@ import { sendMail, isMailConfigured } from "./mail";
 import { deliverConfirmationInvite } from "./confirmationInviteEmail";
 import { handleAssessmentSummary } from "./assessmentSummaryEmail";
 import {
-  buildUpskillNudgeEmail,
-  deliverUpskillNudge,
-  isValidEmail as isValidNudgeEmail,
+  resolveNudgeEmailDelivery,
   UPSKILL_NUDGE_PATH,
 } from "./upskillNudgeEmail";
 import { scoreSessionWithClaude } from "./ai/kcse";
@@ -3021,20 +3019,10 @@ export async function registerRoutes(
         payload: { staffRecordId: result.id },
       });
 
-      // Best-effort email to the linked account's own address. Never throws;
-      // a delivery failure surfaces truthfully instead of a silent success.
-      let emailSent = false;
-      let emailError: string | undefined;
-      const recipient = (linkedUser?.username ?? "").trim();
-      if (isValidNudgeEmail(recipient)) {
-        const { subject, body } = buildUpskillNudgeEmail(linkedUser?.name ?? undefined);
-        const delivery = await deliverUpskillNudge({ to: recipient, subject, body });
-        emailSent = delivery.emailSent;
-        emailError = delivery.emailError;
-      } else {
-        emailError =
-          "No valid email on the linked account, so no email was sent — but the in-app nudge was delivered.";
-      }
+      // Best-effort email to the linked account's own address (never a
+      // client-supplied one). Never throws; a delivery failure surfaces
+      // truthfully instead of a silent success.
+      const { emailSent, emailError } = await resolveNudgeEmailDelivery(linkedUser);
 
       const inAppDelivered = !!notification;
       const message = emailSent

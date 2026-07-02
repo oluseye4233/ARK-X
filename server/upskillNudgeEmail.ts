@@ -89,3 +89,37 @@ const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 export function isValidEmail(value: string | null | undefined): boolean {
   return EMAIL_RE.test((value ?? "").trim());
 }
+
+// Minimal view of the linked ARK account the nudge route needs. Structurally
+// satisfied by the full `User` record, so `storage.getUser` output can be
+// passed directly.
+export interface NudgeLinkedUser {
+  username: string | null;
+  name: string | null;
+}
+
+// Resolves the email leg of a nudge from the LINKED ACCOUNT ONLY.
+//
+// The recipient is always derived from the linked user's own account email —
+// never from client input — so the nudge route cannot be abused as an open
+// mail relay. A missing or invalid account email short-circuits to a truthful
+// emailSent:false WITHOUT ever invoking the transport. Never throws.
+export async function resolveNudgeEmailDelivery(
+  linkedUser: NudgeLinkedUser | undefined,
+  deliver: (args: {
+    to: string;
+    subject: string;
+    body: string;
+  }) => Promise<UpskillNudgeResult> = deliverUpskillNudge,
+): Promise<UpskillNudgeResult> {
+  const recipient = (linkedUser?.username ?? "").trim();
+  if (!isValidEmail(recipient)) {
+    return {
+      emailSent: false,
+      emailError:
+        "No valid email on the linked account, so no email was sent — but the in-app nudge was delivered.",
+    };
+  }
+  const { subject, body } = buildUpskillNudgeEmail(linkedUser?.name ?? undefined);
+  return deliver({ to: recipient, subject, body });
+}

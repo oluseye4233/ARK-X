@@ -286,6 +286,7 @@ test("getDepartmentStaff: reflects a nudge (complete status + nudgedAt) and an i
   });
 
   // Baseline: nudged member not yet nudged, invited member still unlinked.
+  // getDepartmentStaff returns a paginated page — rows carry the drill-down.
   const before = await storage.getDepartmentStaff(INST_A, dept);
   const beforeNudge = before.rows.find((r) => r.id === nudgeStaffId);
   const beforeInvite = before.rows.find((r) => r.id === inviteStaffId);
