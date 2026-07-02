@@ -13,11 +13,14 @@
  */
 import { test, before, after, mock } from "node:test";
 import assert from "node:assert/strict";
+import express from "express";
+import { createServer } from "http";
 import { db } from "../db";
 import { eq, sql } from "drizzle-orm";
-import { users, staffRecords } from "@shared/schema";
+import { users, staffRecords, notifications } from "@shared/schema";
 import { storage, UPSKILL_NUDGE_COOLDOWN_DAYS } from "../storage";
 import { requireInstitutionAdmin } from "../auth";
+import { registerRoutes } from "../routes";
 
 // ─────────────────────────────────────────────────────────────
 // Shared fixtures — two institutions, isolated by a per-run suffix so parallel
@@ -382,5 +385,150 @@ test("requireInstitutionAdmin: ENTERPRISE admin → next() with session-derived 
     assert.equal(req.institutionScope, "Vance Industries", "scope derived from session user, never the client");
   } finally {
     spy.mock.restore();
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// ROUTE-LEVEL double-delivery guard (Task #100).
+//
+// The cooldown suppression above is storage-level; this test drives the REAL
+// Express route (real middleware chain: feature flag → auth → institution-
+// admin gate → handler) end-to-end against the live DB and proves that a
+// second POST to /api/workforce/staff/:id/nudge inside the cooldown window:
+//   • sends ZERO emails      — the mail transport's outbound fetch (connector
+//     credential proxy + Gmail send) is spied; no new calls may occur
+//   • creates ZERO in-app notifications — `persistAndBroadcastNotification`
+//     writes to the `notifications` table, so the row count must not move
+//   • answers truthfully     — suppressed:true, emailSent:false,
+//     inAppDelivered:false, and a message naming when the next nudge opens.
+//
+// The first POST establishes the baseline (exactly one email attempt + one
+// notification row), so the "zero deltas" on the second POST are meaningful
+// and can't pass vacuously (e.g. if delivery were broken entirely).
+// ─────────────────────────────────────────────────────────────
+test("route: a repeat nudge within the cooldown sends zero emails and zero in-app notifications", async () => {
+  const ROUTE_ADMIN_ID = `route-admin-${SUFFIX}`;
+
+  // Live-DB fixtures: an assessed, linked, emailable staff member in INST_A.
+  const assessed = await makeUser(`route-assessed-${SUFFIX}@x.test`, 500);
+  const staff = await makeStaff({
+    institution: INST_A,
+    fullName: "Rhea Route",
+    email: `rhea-${SUFFIX}@x.test`,
+    department: "Engineering",
+    arkUserId: assessed,
+  });
+
+  // Real routes + real middleware; only the session cookie plumbing is
+  // stubbed (we inject the userId a real session would have carried).
+  const app = express();
+  app.use((req, _res, next) => {
+    (req as any).session = { userId: ROUTE_ADMIN_ID };
+    next();
+  });
+  const server = await registerRoutes(createServer(app), app);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const addr = server.address();
+  if (!addr || typeof addr === "string") throw new Error("no ephemeral port");
+  const nudgeUrl = `http://127.0.0.1:${addr.port}/api/workforce/staff/${staff}/nudge`;
+
+  // The admin gate looks the caller up via storage.getUser; every OTHER
+  // lookup (e.g. the route resolving the nudged person's account for the
+  // email recipient) passes through to the real implementation.
+  const originalGetUser = storage.getUser.bind(storage);
+  const getUserSpy = mock.method(storage, "getUser", async (id: string) =>
+    id === ROUTE_ADMIN_ID
+      ? ({ id: ROUTE_ADMIN_ID, subscriptionPlan: "ENTERPRISE", institution: INST_A } as any)
+      : originalGetUser(id),
+  );
+
+  // Force the mail transport down its real code path (env present) but spy
+  // the global fetch so (a) no real email ever leaves the test and (b) every
+  // outbound transport call is COUNTED. Requests to our own test server pass
+  // through to the real fetch.
+  const realFetch = globalThis.fetch.bind(globalThis);
+  const prevHost = process.env.REPLIT_CONNECTORS_HOSTNAME;
+  const prevIdentity = process.env.REPL_IDENTITY;
+  process.env.REPLIT_CONNECTORS_HOSTNAME = "connectors.nudge-test.invalid";
+  if (!process.env.REPL_IDENTITY && !process.env.WEB_REPL_RENEWAL) {
+    process.env.REPL_IDENTITY = "nudge-test-identity";
+  }
+
+  let credentialFetches = 0;
+  let gmailSends = 0;
+  const fetchSpy = mock.method(globalThis, "fetch", async (input: any, init?: any) => {
+    const url = String(typeof input === "string" ? input : (input?.url ?? input));
+    if (url.startsWith(`http://127.0.0.1:${addr.port}`)) return realFetch(input, init);
+    if (url.includes("connectors.nudge-test.invalid")) {
+      credentialFetches++;
+      return new Response(
+        JSON.stringify({ items: [{ settings: { access_token: "fake-test-token" } }] }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    if (url.includes("gmail.googleapis.com")) {
+      gmailSends++;
+      return new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    throw new Error(`unexpected outbound fetch during nudge route test: ${url}`);
+  });
+
+  const notificationCount = async (): Promise<number> => {
+    const rows = await db
+      .select({ id: notifications.id })
+      .from(notifications)
+      .where(eq(notifications.userId, assessed));
+    return rows.length;
+  };
+
+  try {
+    assert.equal(await notificationCount(), 0, "clean slate: no notifications yet");
+
+    // ── First POST: real delivery (against the stubbed transport). ──
+    const firstRes = await realFetch(nudgeUrl, { method: "POST" });
+    assert.equal(firstRes.status, 200);
+    const first = await firstRes.json();
+    assert.equal(first.suppressed, false, "first nudge is not suppressed");
+    assert.equal(first.emailSent, true, "first nudge sends the email");
+    assert.equal(first.inAppDelivered, true, "first nudge delivers the in-app alert");
+    assert.equal(gmailSends, 1, "exactly one email left the transport");
+    assert.equal(await notificationCount(), 1, "exactly one in-app notification row created");
+
+    const credsAfterFirst = credentialFetches;
+
+    // ── Second POST inside the cooldown: must deliver NOTHING. ──
+    const secondRes = await realFetch(nudgeUrl, { method: "POST" });
+    assert.equal(secondRes.status, 200, "suppression is a truthful 200, not an error");
+    const second = await secondRes.json();
+
+    assert.equal(second.suppressed, true, "second nudge is suppressed");
+    assert.equal(second.emailSent, false, "response admits no email was sent");
+    assert.equal(second.inAppDelivered, false, "response admits no in-app alert was sent");
+    assert.ok(second.nextNudgeAvailableAt, "response carries the cooldown lift time");
+
+    // The message names WHEN the next nudge becomes available.
+    const expectedAvailable = new Date(second.nextNudgeAvailableAt).toLocaleDateString("en-US", {
+      month: "short", day: "numeric", year: "numeric",
+    });
+    assert.ok(
+      typeof second.message === "string" && second.message.includes(expectedAvailable),
+      `message must name the next-available date "${expectedAvailable}" (got: ${second.message})`,
+    );
+
+    // The hard guarantees: zero emails, zero notifications on the repeat.
+    assert.equal(gmailSends, 1, "repeat nudge sent ZERO additional emails");
+    assert.equal(credentialFetches, credsAfterFirst, "repeat nudge never even fetched mail credentials");
+    assert.equal(await notificationCount(), 1, "repeat nudge created ZERO additional notifications");
+  } finally {
+    fetchSpy.mock.restore();
+    getUserSpy.mock.restore();
+    if (prevHost === undefined) delete process.env.REPLIT_CONNECTORS_HOSTNAME;
+    else process.env.REPLIT_CONNECTORS_HOSTNAME = prevHost;
+    if (prevIdentity === undefined && process.env.REPL_IDENTITY === "nudge-test-identity") {
+      delete process.env.REPL_IDENTITY;
+    }
+    // Notifications created by the first POST are cleaned up with the user
+    // via deleteUserCascade in the suite's after() hook; close the server.
+    await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
