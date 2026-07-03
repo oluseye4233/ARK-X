@@ -1,4 +1,5 @@
-import { getAnthropic, MODELS, isClaudeAvailable, assertModelAllowed } from "./client";
+import { MODELS } from "./client";
+import { resolveModelChain, generateWithChain } from "./providers";
 import { cacheGet, cacheSet, cacheKey } from "./cache";
 import { logUsage, enforceBudget, enforceCostBudget } from "./usage";
 import type { CcgeCard, CcgeScenario, KcseBreakdown, SubscriptionPlan } from "@shared/schema";
@@ -64,67 +65,66 @@ export async function scoreSessionWithClaude(opts: {
   playedCards: CcgeCard[];
   deterministic: KcseBreakdown;
   customCard?: { name: string; body: string };
+  preferredModel?: string | null;
 }): Promise<ClaudeKcseResult | null> {
-  if (!isClaudeAvailable()) return null;
+  let chain: string[];
+  try {
+    await enforceBudget(opts.userId, opts.plan);
+    await enforceCostBudget(opts.userId, opts.plan);
+    // No Anthropic-only precheck: resolveModelChain throws when no provider
+    // is usable, and the catch below degrades to deterministic scoring.
+    chain = resolveModelChain({
+      plan: opts.plan,
+      kind: "kcse",
+      preferred: opts.preferredModel,
+      defaultModel: MODELS.HAIKU,
+    });
+  } catch (err) {
+    console.warn("[ai/kcse] budget/policy blocked, falling back to deterministic");
+    return null;
+  }
 
   const sortedIds = [...opts.playedCards.map(c => c.id)].sort();
   // Fold the authored card into the cache key so a different prompt body never
   // reuses a prior verdict (the authored prompt is the dominant scored artifact).
+  // Keyed on the intended primary model so switching models re-judges.
   const cardFingerprint = opts.customCard
     ? `${opts.customCard.name}::${opts.customCard.body}`
     : "";
-  const key = cacheKey(["kcse", KCSE_PROMPT_VERSION, MODELS.HAIKU, opts.scenario.id, ...sortedIds, cardFingerprint]);
+  const key = cacheKey(["kcse", KCSE_PROMPT_VERSION, chain[0], opts.scenario.id, ...sortedIds, cardFingerprint]);
   const cached = await cacheGet<{ kcseDelta: number; narrative: string; strengths: string[]; weaknesses: string[] }>(key);
   if (cached) {
     return { ...cached, viaClaude: true, cached: true };
   }
 
   try {
-    await enforceBudget(opts.userId, opts.plan);
-    await enforceCostBudget(opts.userId, opts.plan);
-    assertModelAllowed(opts.plan, MODELS.HAIKU, "kcse");
-  } catch (err) {
-    console.warn("[ai/kcse] budget/policy blocked, falling back to deterministic");
-    return null;
-  }
-
-  try {
-    const client = getAnthropic();
     const userPrompt = buildUserPrompt(opts.scenario, opts.playedCards, opts.deterministic, opts.customCard);
     const t0 = Date.now();
-    const callPromise = client.messages.create({
-      model: MODELS.HAIKU,
-      max_tokens: 8192,
+    const gen = await generateWithChain({
+      chain,
       system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userPrompt }],
+      prompt: userPrompt,
+      maxTokens: 8192,
+      timeoutMs: 10000,
     });
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Claude KCSE timeout 10s")), 10000),
-    );
-    const message = (await Promise.race([callPromise, timeoutPromise])) as Awaited<typeof callPromise> & {
-      content: Array<{ type: string; text?: string }>;
-      usage: { input_tokens: number; output_tokens: number };
-    };
 
-    const block = message.content[0];
-    const raw = block.type === "text" ? block.text : "";
-    const parsed = parseClaudeJson(raw);
+    const parsed = parseClaudeJson(gen.text);
 
     await logUsage({
       userId: opts.userId,
       kind: "kcse",
-      model: MODELS.HAIKU,
-      tokensIn: message.usage.input_tokens,
-      tokensOut: message.usage.output_tokens,
+      model: gen.model,
+      tokensIn: gen.tokensIn,
+      tokensOut: gen.tokensOut,
     });
 
     if (!parsed) {
-      console.warn("[ai/kcse] failed to parse Claude response, raw:", raw.slice(0, 200));
+      console.warn("[ai/kcse] failed to parse AI judge response, raw:", gen.text.slice(0, 200));
       return null;
     }
 
     await cacheSet(key, "kcse", parsed, KCSE_TTL_MS);
-    console.log(`[ai/kcse] scored in ${Date.now() - t0}ms tokens=${message.usage.input_tokens}/${message.usage.output_tokens}`);
+    console.log(`[ai/kcse] scored via ${gen.model} in ${Date.now() - t0}ms tokens=${gen.tokensIn}/${gen.tokensOut}`);
     return { ...parsed, viaClaude: true, cached: false };
   } catch (err) {
     console.error("[ai/kcse] failed, falling back:", err);

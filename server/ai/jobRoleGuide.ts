@@ -13,7 +13,8 @@
  * Job-role facts are user-independent, so results are cached GLOBALLY by the
  * normalized role string (30-day TTL) to keep cost near-zero on repeat lookups.
  */
-import { getAnthropic, MODELS, isClaudeAvailable, assertModelAllowed } from "./client";
+import { MODELS } from "./client";
+import { resolveModelChain, generateWithChain } from "./providers";
 import { logUsage, enforceBudget, enforceCostBudget } from "./usage";
 import { cacheKey, cacheGet, cacheSet, maybeSweepExpired } from "./cache";
 import type { SubscriptionPlan } from "@shared/schema";
@@ -75,34 +76,32 @@ export async function getJobRoleGuide(opts: {
   const cached = await cacheGet<JobRoleGuide>(key);
   if (cached) return cached;
 
-  if (!isClaudeAvailable()) {
-    const err: any = new Error("Job-role guidance is unavailable right now.");
-    err.status = 503;
-    throw err;
-  }
-
   await enforceBudget(opts.userId, opts.plan);
   await enforceCostBudget(opts.userId, opts.plan);
-  assertModelAllowed(opts.plan, MODELS.HAIKU, "job_role_guide");
+  // LLM-resilient: no Anthropic-only precheck; the chain falls back across
+  // providers and throws 503 only when nothing is usable.
+  const chain = resolveModelChain({
+    plan: opts.plan,
+    kind: "job_role_guide",
+    defaultModel: MODELS.HAIKU,
+  });
 
-  const client = getAnthropic();
-  const message = await client.messages.create({
-    model: MODELS.HAIKU,
-    max_tokens: 1200,
+  const gen = await generateWithChain({
+    chain,
     system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: `Job role: ${opts.role.slice(0, 80)}` }],
+    prompt: `Job role: ${opts.role.slice(0, 80)}`,
+    maxTokens: 1200,
   });
 
   await logUsage({
     userId: opts.userId,
     kind: "job_role_guide",
-    model: MODELS.HAIKU,
-    tokensIn: message.usage.input_tokens,
-    tokensOut: message.usage.output_tokens,
+    model: gen.model,
+    tokensIn: gen.tokensIn,
+    tokensOut: gen.tokensOut,
   });
 
-  const block = message.content[0];
-  const raw = block.type === "text" ? block.text : "";
+  const raw = gen.text;
   let obj: any;
   try {
     obj = JSON.parse(raw.trim().replace(/^```json\s*|\s*```$/g, ""));

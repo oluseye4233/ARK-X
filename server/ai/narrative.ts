@@ -1,4 +1,5 @@
-import { getAnthropic, MODELS, isClaudeAvailable, assertModelAllowed } from "./client";
+import { MODELS } from "./client";
+import { resolveModelChain, generateWithChain } from "./providers";
 import { cacheGet, cacheSet, cacheKey } from "./cache";
 import { logUsage, enforceBudget, enforceCostBudget } from "./usage";
 import type { Assessment, SubscriptionPlan } from "@shared/schema";
@@ -59,45 +60,49 @@ export async function generateResumeNarrative(opts: {
   userId: string;
   plan: SubscriptionPlan;
   assessment: Assessment;
+  preferredModel?: string | null;
 }): Promise<ResumeNarrative> {
   if (!PRO_TIERS.includes(opts.plan)) throw new ProTierRequiredError();
-  if (!isClaudeAvailable()) {
-    const err: any = new Error("Claude AI not configured on this server.");
-    err.status = 503;
-    throw err;
-  }
 
-  const key = cacheKey(["narrative", NARRATIVE_PROMPT_VERSION, MODELS.SONNET, opts.assessment.id]);
+  // Guardrail order: budget gates BEFORE model resolution/generation.
+  await enforceBudget(opts.userId, opts.plan);
+  await enforceCostBudget(opts.userId, opts.plan);
+
+  // resolveModelChain throws 503 NoAiProviderAvailableError when no
+  // provider is usable — no Anthropic-only precheck (LLM-resilient).
+  const chain = resolveModelChain({
+    plan: opts.plan,
+    kind: "narrative",
+    preferred: opts.preferredModel,
+    defaultModel: MODELS.SONNET,
+  });
+
+  // Cache is keyed on the intended primary model so switching models
+  // regenerates rather than serving another model's cached output.
+  const key = cacheKey(["narrative", NARRATIVE_PROMPT_VERSION, chain[0], opts.assessment.id]);
   const cached = await cacheGet<Omit<ResumeNarrative, "cached">>(key);
   if (cached) {
     return { ...cached, cached: true };
   }
 
-  await enforceBudget(opts.userId, opts.plan);
-  await enforceCostBudget(opts.userId, opts.plan);
-  assertModelAllowed(opts.plan, MODELS.SONNET, "narrative");
-
-  const client = getAnthropic();
-  const message = await client.messages.create({
-    model: MODELS.SONNET,
-    max_tokens: 8192,
+  const gen = await generateWithChain({
+    chain,
     system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: buildPrompt(opts.assessment) }],
+    prompt: buildPrompt(opts.assessment),
+    maxTokens: 8192,
   });
 
   await logUsage({
     userId: opts.userId,
     kind: "narrative",
-    model: MODELS.SONNET,
-    tokensIn: message.usage.input_tokens,
-    tokensOut: message.usage.output_tokens,
+    model: gen.model,
+    tokensIn: gen.tokensIn,
+    tokensOut: gen.tokensOut,
   });
 
-  const block = message.content[0];
-  const raw = block.type === "text" ? block.text : "";
-  const parsed = parseNarrative(raw);
+  const parsed = parseNarrative(gen.text);
   if (!parsed) {
-    const err: any = new Error("Failed to parse Claude narrative response.");
+    const err: any = new Error("Failed to parse AI narrative response.");
     err.status = 502;
     throw err;
   }

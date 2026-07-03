@@ -8,7 +8,8 @@
  * Fully degrades to deterministic fallback templates when Claude is unavailable
  * (no API key, budget exceeded, parse error). Never throws.
  */
-import { getAnthropic, MODELS, isClaudeAvailable, assertModelAllowed } from "./client";
+import { MODELS } from "./client";
+import { resolveModelChain, generateWithChain } from "./providers";
 import { logUsage, enforceBudget, enforceCostBudget } from "./usage";
 import {
   CCMI_PILLAR_LABELS,
@@ -71,13 +72,17 @@ export async function generateIdentityNarrative(opts: {
     generatedAt: new Date().toISOString(),
   });
 
-  if (!isClaudeAvailable()) return fallback();
-
   try {
     await enforceBudget(opts.userId, opts.plan);
     await enforceCostBudget(opts.userId, opts.plan);
-    assertModelAllowed(opts.plan, MODELS.SONNET, "narrative");
-    const client = getAnthropic();
+    // LLM-resilient: chain replaces the Anthropic-only precheck; any
+    // failure (no provider, policy, budget) degrades to the deterministic
+    // fallback via the catch below.
+    const chain = resolveModelChain({
+      plan: opts.plan,
+      kind: "narrative",
+      defaultModel: MODELS.SONNET,
+    });
     const userPayload = JSON.stringify({
       jst: { index: opts.snapshot.jstIndex, sub: opts.snapshot.jstSub, replacementPct: opts.snapshot.resumeReplacementPct },
       ccmi: {
@@ -102,18 +107,13 @@ export async function generateIdentityNarrative(opts: {
       trigger: opts.trigger,
     });
 
-    const resp = await client.messages.create({
-      model: MODELS.SONNET,
-      max_tokens: 600,
+    const gen = await generateWithChain({
+      chain,
       system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userPayload }],
+      prompt: userPayload,
+      maxTokens: 600,
     });
-    // Anthropic returns a discriminated union of content blocks; only `text`
-    // blocks carry a string payload. Use the SDK's discriminator to narrow.
-    const textBlock = resp.content.find(
-      (b): b is Extract<typeof resp.content[number], { type: "text" }> => b.type === "text",
-    );
-    const raw = (textBlock?.text ?? "").trim().replace(/^```json\s*|\s*```$/g, "");
+    const raw = gen.text.trim().replace(/^```json\s*|\s*```$/g, "");
     const parsed = JSON.parse(raw) as Partial<IdentityNarrative>;
     if (!parsed.jstParagraph || !parsed.ccmiParagraph || !parsed.arkParagraph) {
       return fallback();
@@ -122,9 +122,9 @@ export async function generateIdentityNarrative(opts: {
       await logUsage({
         userId: opts.userId,
         kind: "narrative",
-        model: MODELS.SONNET,
-        tokensIn: resp.usage?.input_tokens ?? 0,
-        tokensOut: resp.usage?.output_tokens ?? 0,
+        model: gen.model,
+        tokensIn: gen.tokensIn,
+        tokensOut: gen.tokensOut,
       });
     } catch {/* best-effort */}
     return {

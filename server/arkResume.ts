@@ -22,7 +22,8 @@ import {
 } from "@shared/schema";
 import { CODEC_BY_ID, type CodecPrimitive } from "@shared/codec-primitives";
 import { companyMatches } from "@shared/claimMatch";
-import { getAnthropic, isClaudeAvailable, MODELS } from "./ai/client";
+import { MODELS } from "./ai/client";
+import { resolveUtilityChain, generateWithChain } from "./ai/providers";
 
 const SILVER_PLUS = new Set(["Silver", "Gold", "Platinum"]);
 
@@ -288,11 +289,11 @@ export async function aiMapCardsToCompanies(
     workHistory,
     cards.map((c) => c.cardId),
   );
-  if (!isClaudeAvailable() || workHistory.length === 0 || cards.length === 0) {
+  const chain = resolveUtilityChain(MODELS.HAIKU);
+  if (chain.length === 0 || workHistory.length === 0 || cards.length === 0) {
     return fallback;
   }
   try {
-    const client = getAnthropic();
     const companies = workHistory.map((e, i) => ({
       index: i,
       company: e.company,
@@ -314,14 +315,13 @@ CARDS:
 ${JSON.stringify(cardList)}
 
 Respond with JSON like {"0":["codec-elephant"],"1":["codec-platform"]}.`;
-    const resp = await client.messages.create({
-      model: MODELS.HAIKU,
-      max_tokens: 700,
-      temperature: 0,
-      messages: [{ role: "user", content: prompt }],
+    const gen = await generateWithChain({
+      chain,
+      system: "You are a precise JSON-only mapping engine.",
+      prompt,
+      maxTokens: 700,
     });
-    const block = resp.content.find((b: any) => b.type === "text") as { text?: string } | undefined;
-    const raw = block?.text ?? "";
+    const raw = gen.text;
     const jsonStr = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
     if (!jsonStr) return fallback;
     const parsed = JSON.parse(jsonStr) as Record<string, unknown>;

@@ -1,4 +1,5 @@
-import { getAnthropic, isClaudeAvailable, MODELS } from "./ai/client";
+import { MODELS } from "./ai/client";
+import { resolveUtilityChain, generateWithChain } from "./ai/providers";
 import type { WorkHistoryEntry } from "@shared/schema";
 
 // Biographical fields scraped from the combined resume/LinkedIn intake text to
@@ -233,8 +234,8 @@ function asString(v: unknown): string | null {
 }
 
 async function claudeBio(text: string): Promise<ProfileBio | null> {
-  if (!isClaudeAvailable()) return null;
-  const client = getAnthropic();
+  const chain = resolveUtilityChain(MODELS.HAIKU);
+  if (chain.length === 0) return null;
   const prompt = `Extract structured profile facts from the resume / LinkedIn text below. Return ONLY a JSON object, no prose, with exactly these keys:
 {
   "full_name": string | null,            // the person's full name
@@ -263,14 +264,13 @@ Use null / [] when a value is not present. Do not invent facts.
 TEXT:
 ${text.slice(0, 12000)}`;
 
-  const resp = await client.messages.create({
-    model: MODELS.HAIKU,
-    max_tokens: 1800,
-    temperature: 0,
-    messages: [{ role: "user", content: prompt }],
+  const gen = await generateWithChain({
+    chain,
+    system: "You are a precise JSON-only extraction engine.",
+    prompt,
+    maxTokens: 1800,
   });
-  const block = resp.content.find((b: any) => b.type === "text") as { text?: string } | undefined;
-  const rawText = block?.text ?? "";
+  const rawText = gen.text;
   const jsonStr = rawText.slice(rawText.indexOf("{"), rawText.lastIndexOf("}") + 1);
   if (!jsonStr) return null;
   const parsed = JSON.parse(jsonStr);

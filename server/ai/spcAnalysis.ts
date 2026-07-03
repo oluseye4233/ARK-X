@@ -1,4 +1,5 @@
-import { getAnthropic, MODELS, isClaudeAvailable, assertModelAllowed } from "./client";
+import { MODELS } from "./client";
+import { resolveModelChain, generateWithChain } from "./providers";
 import { cacheGet, cacheSet, cacheKey } from "./cache";
 import { logUsage, enforceBudget, enforceCostBudget, enforceDailyQuota } from "./usage";
 import {
@@ -79,16 +80,29 @@ export async function analyzeSpcListing(opts: {
   listing: SpcListing;
 }): Promise<SpcAiAnalysis> {
   if (!PRO_TIERS.includes(opts.plan)) throw new SpcAnalysisProTierRequiredError();
-  if (!isClaudeAvailable()) {
-    const err: any = new Error("Claude AI not configured on this server.");
-    err.status = 503;
-    throw err;
-  }
 
+  // Guardrail order: quota + budget gates BEFORE model resolution.
+  // NB (Phase O): SPC analysis intentionally maps to the "narrative" AiKind —
+  // it shares the Haiku-cost-and-cadence profile of resume narrative gen. If
+  // product later wants distinct economics for SPC, add a new AiKind in
+  // shared/schema.ts and update AI_TIER_DAILY_QUOTA_V2 + MODEL_POLICY in lockstep.
+  await enforceDailyQuota(opts.userId, opts.plan, "narrative");
+  await enforceBudget(opts.userId, opts.plan);
+  await enforceCostBudget(opts.userId, opts.plan);
+  // LLM-resilient: chain falls back across providers; 503 only when no
+  // provider is usable (replaces the old Anthropic-only precheck).
+  const chain = resolveModelChain({
+    plan: opts.plan,
+    kind: "narrative",
+    defaultModel: MODELS.HAIKU,
+  });
+
+  // Cache is keyed on the resolved primary model so fallback output from a
+  // different provider never masquerades as another model's cached result.
   const key = cacheKey([
     "spc-analysis",
     PROMPT_VERSION,
-    MODELS.HAIKU,
+    chain[0],
     opts.listing.id,
     opts.listing.hiveScore,
     opts.listing.kcseScore,
@@ -98,38 +112,24 @@ export async function analyzeSpcListing(opts: {
   const cached = await cacheGet<Omit<SpcAiAnalysis, "cached">>(key);
   if (cached) return { ...cached, cached: true };
 
-  // Daily per-user quota check — only fresh Claude calls count; cache
-  // hits above already short-circuited.
-  // NB (Phase O): SPC analysis intentionally maps to the "narrative" AiKind —
-  // it shares the Haiku-cost-and-cadence profile of resume narrative gen. If
-  // product later wants distinct economics for SPC, add a new AiKind in
-  // shared/schema.ts and update AI_TIER_DAILY_QUOTA_V2 + MODEL_POLICY in lockstep.
-  await enforceDailyQuota(opts.userId, opts.plan, "narrative");
-  await enforceBudget(opts.userId, opts.plan);
-  await enforceCostBudget(opts.userId, opts.plan);
-  assertModelAllowed(opts.plan, MODELS.HAIKU, "narrative");
-
-  const client = getAnthropic();
-  const message = await client.messages.create({
-    model: MODELS.HAIKU,
-    max_tokens: 1500,
+  const gen = await generateWithChain({
+    chain,
     system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: buildUserPrompt(opts.listing) }],
+    prompt: buildUserPrompt(opts.listing),
+    maxTokens: 1500,
   });
 
   await logUsage({
     userId: opts.userId,
     kind: "narrative",
-    model: MODELS.HAIKU,
-    tokensIn: message.usage.input_tokens,
-    tokensOut: message.usage.output_tokens,
+    model: gen.model,
+    tokensIn: gen.tokensIn,
+    tokensOut: gen.tokensOut,
   });
 
-  const block = message.content[0];
-  const raw = block.type === "text" ? block.text : "";
-  const parsed = parseAnalysis(raw);
+  const parsed = parseAnalysis(gen.text);
   if (!parsed) {
-    const err: any = new Error("Failed to parse Claude analysis response.");
+    const err: any = new Error("Failed to parse AI analysis response.");
     err.status = 502;
     throw err;
   }

@@ -1,6 +1,7 @@
 - [Feature flag layering](feature-flags.md) — re-check flagged-off surfaces inside always-on parent routes (e.g. `/marketplace/:id` can swallow reserved CLASS C slugs).
 - [Route patcher pitfalls](route-patcher.md) — when smoke-testing flagged routes, use the correct HTTP verb; a wrong-verb 404 masks real flag-coverage gaps.
 - [Revenue guardrail two-gate budget](revenue-guardrail.md) — AI calls need both token-cap AND cost-cap gates; FREE and ENTERPRISE cost caps are absolute, not 10%-derived.
+- [AI cache keys](ai-cache-keys.md) — caches in front of chain-based AI calls must key on resolved `chain[0]`, never a hardcoded model literal; budgets/quota still gate before chain resolution.
 - [Radix double asChild/Slot swallows clicks](radix-slot-composition.md) — nesting two Radix primitives via asChild (TooltipTrigger asChild > TabsTrigger) silently kills the inner control's click under React 19; keep the interactive primitive outermost.
 - [Flywheel cap models](flywheel-cap-models.md) — two distinct cap mechanisms (CCGE daily-throttle vs SPHINX hard-cap); mirror the sibling the task references.
 - [Dev DB migration drift](dev-db-migration-drift.md) — migrations now auto-apply at startup (schema_migrations tracking); write idempotent SQL, unique monotonic prefixes, never semicolon-split files.

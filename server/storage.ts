@@ -214,6 +214,7 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: UpdateUser): Promise<User | undefined>;
+  setPreferredAiModel(userId: string, model: string | null): Promise<User | undefined>;
 
   createAssessment(assessment: InsertAssessment): Promise<Assessment>;
   getAssessment(id: string): Promise<Assessment | undefined>;
@@ -596,6 +597,17 @@ export class DatabaseStorage implements IStorage {
       patch = { ...data, password };
     }
     const [updated] = await db.update(users).set(patch).where(eq(users.id, id)).returning();
+    return updated;
+  }
+
+  // Dedicated narrow writer for the AI model preference — avoids widening
+  // the general profile-update surface with a privilege-adjacent field.
+  async setPreferredAiModel(userId: string, model: string | null): Promise<User | undefined> {
+    const [updated] = await db
+      .update(users)
+      .set({ preferredAiModel: model })
+      .where(eq(users.id, userId))
+      .returning();
     return updated;
   }
 

@@ -1,4 +1,5 @@
-import { getAnthropic, MODELS, isClaudeAvailable, assertModelAllowed } from "./client";
+import { MODELS } from "./client";
+import { resolveModelChain, generateWithChain } from "./providers";
 import { logUsage, enforceBudget, enforceCostBudget } from "./usage";
 import { ALL_CARD_PILLARS, CCGE_TIERS, type SubscriptionPlan, type InsertCcgeScenario } from "@shared/schema";
 
@@ -16,16 +17,18 @@ export async function generateScenario(opts: {
   industry?: string;
   role?: string;
   tierHint?: string;
+  preferredModel?: string | null;
 }): Promise<InsertCcgeScenario> {
-  if (!isClaudeAvailable()) {
-    const err: any = new Error("Claude AI not configured.");
-    err.status = 503;
-    throw err;
-  }
-
+  // No Anthropic-only precheck — resolveModelChain throws 503 when no
+  // provider at all is usable (LLM-resilient).
   await enforceBudget(opts.userId, opts.plan);
   await enforceCostBudget(opts.userId, opts.plan);
-  assertModelAllowed(opts.plan, MODELS.SONNET, "scenario_gen");
+  const chain = resolveModelChain({
+    plan: opts.plan,
+    kind: "scenario_gen",
+    preferred: opts.preferredModel,
+    defaultModel: MODELS.SONNET,
+  });
 
   const contextLines: string[] = [];
   if (opts.industry) contextLines.push(`Industry / Sector: ${opts.industry}`);
@@ -38,37 +41,35 @@ export async function generateScenario(opts: {
     );
   }
 
-  const client = getAnthropic();
-  const message = await client.messages.create({
-    model: MODELS.SONNET,
-    max_tokens: 8192,
+  const gen = await generateWithChain({
+    chain,
     system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: contextLines.join("\n") }],
+    prompt: contextLines.join("\n"),
+    maxTokens: 8192,
   });
 
   await logUsage({
     userId: opts.userId,
     kind: "scenario_gen",
-    model: MODELS.SONNET,
-    tokensIn: message.usage.input_tokens,
-    tokensOut: message.usage.output_tokens,
+    model: gen.model,
+    tokensIn: gen.tokensIn,
+    tokensOut: gen.tokensOut,
   });
 
-  const block = message.content[0];
-  const raw = block.type === "text" ? block.text : "";
+  const raw = gen.text;
   let obj: any;
   try {
     obj = JSON.parse(raw.trim().replace(/^```json\s*|\s*```$/g, ""));
   } catch {
-    const e: any = new Error("Failed to parse Claude scenario JSON.");
+    const e: any = new Error("Failed to parse AI scenario JSON.");
     e.status = 502; throw e;
   }
 
-  if (!CCGE_TIERS.includes(obj.tier)) { const e: any = new Error("Invalid tier from Claude."); e.status = 502; throw e; }
+  if (!CCGE_TIERS.includes(obj.tier)) { const e: any = new Error("Invalid tier from AI model."); e.status = 502; throw e; }
   const targetPillars: string[] = Array.isArray(obj.targetPillars)
     ? obj.targetPillars.filter((p: any) => (ALL_CARD_PILLARS as readonly string[]).includes(p))
     : [];
-  if (targetPillars.length < 2) { const e: any = new Error("Claude returned <2 valid target pillars."); e.status = 502; throw e; }
+  if (targetPillars.length < 2) { const e: any = new Error("AI model returned <2 valid target pillars."); e.status = 502; throw e; }
 
   return {
     id: String(obj.id || `gen-${Date.now()}`).slice(0, 40),

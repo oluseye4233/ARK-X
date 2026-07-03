@@ -26,6 +26,14 @@ export const api = {
 
   logout: () => apiRequest("/api/auth/logout", { method: "POST" }),
 
+  getAiModels: () => apiRequest("/api/ai/models"),
+
+  setAiModelPreference: (model: string | null) =>
+    apiRequest("/api/ai/model-preference", {
+      method: "PUT",
+      body: JSON.stringify({ model }),
+    }),
+
   importCcgeCompendium: (markdown: string, dryRun: boolean) =>
     apiRequest("/api/admin/ccge/import-compendium", {
       method: "POST",

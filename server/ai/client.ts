@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { AI_MODELS, AI_TIER_MODEL_POLICY, type AiKind, type SubscriptionPlan } from "@shared/schema";
+import { AI_MODELS, AI_PREMIUM_MODELS, AI_TIER_MODEL_POLICY, type AiKind, type SubscriptionPlan } from "@shared/schema";
 import { isFeatureEnabled } from "../featureFlags";
 
 let _client: Anthropic | null = null;
@@ -42,7 +42,9 @@ export function assertModelAllowed(plan: SubscriptionPlan, model: string, kind: 
   if (!policy.allowedModels.includes(model)) {
     throw new ModelPolicyViolationError(plan, model, kind);
   }
-  if (model === AI_MODELS.SONNET && !policy.sonnetKindsAllowed.includes(kind)) {
+  // Premium (Sonnet-class) models across every provider obey the same
+  // per-kind restriction Sonnet always had.
+  if (AI_PREMIUM_MODELS.includes(model) && !policy.sonnetKindsAllowed.includes(kind)) {
     throw new ModelPolicyViolationError(plan, model, kind);
   }
 }

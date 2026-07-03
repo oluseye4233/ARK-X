@@ -8,6 +8,8 @@ import {
   AI_TIER_MODEL_POLICY,
   AI_PRICING_PER_MTOK,
   AI_MODELS,
+  AI_ECONOMY_MODELS,
+  AI_PREMIUM_MODELS,
 } from "@shared/schema";
 
 // ─────────────────────────────────────────────────────────────
@@ -54,9 +56,20 @@ test("Phase O: V2 token cap × worst-case Sonnet-out cost ≤ cost cap", () => {
   }
 });
 
-test("Phase O: FREE plan is Haiku-only, useClaude disabled, kcse=1/day", () => {
+test("Phase O: FREE plan is economy-only, useClaude disabled, kcse=1/day", () => {
   const free = AI_TIER_MODEL_POLICY.INDIVIDUAL_FREE;
-  assert.deepEqual([...free.allowedModels], [AI_MODELS.HAIKU]);
+  // Multi-provider roster: FREE may use any economy-class model (Haiku cost
+  // class or cheaper) but never a premium (Sonnet-class) model.
+  assert.ok(free.allowedModels.includes(AI_MODELS.HAIKU), "FREE must keep Haiku");
+  assert.deepEqual(
+    [...free.allowedModels].sort(),
+    AI_ECONOMY_MODELS ? [...AI_ECONOMY_MODELS].sort() : [],
+    "FREE allow-list must equal the economy model set",
+  );
+  assert.ok(!free.allowedModels.includes(AI_MODELS.SONNET), "FREE must not get Sonnet");
+  for (const m of AI_PREMIUM_MODELS) {
+    assert.ok(!free.allowedModels.includes(m), `FREE must not get premium model ${m}`);
+  }
   assert.equal(free.allowUseClaude, false);
   assert.equal(free.sonnetKindsAllowed.length, 0);
   assert.equal(AI_TIER_DAILY_QUOTA_V2.INDIVIDUAL_FREE.kcse, 1);

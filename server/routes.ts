@@ -70,6 +70,8 @@ import {
 import { CONFIRMATION_TYPES, CONFIRMATION_STATUSES, CONFIRMATION_INVITE_TTL_DAYS, type ConfirmationType } from "@shared/schema";
 import { getTierStatus } from "./ai/usage";
 import { isClaudeAvailable, resolveUseClaude } from "./ai/client";
+import { isModelAvailable } from "./ai/providers";
+import { AI_TIER_MODEL_POLICY, SELECTABLE_AI_MODELS, SELECTABLE_AI_MODEL_IDS } from "@shared/schema";
 import {
   isPaidPlan,
   priceCentsForPlan,
@@ -394,6 +396,62 @@ export async function registerRoutes(
     }
   });
 
+  // ── LLM-resilient model selection ─────────────────────
+  // Roster of selectable models with per-plan allowance + live provider
+  // availability, plus the caller's current preference.
+  app.get("/api/ai/models", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const user = await storage.getUser(userId);
+      const plan = (user?.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
+      const policy = AI_TIER_MODEL_POLICY[plan as keyof typeof AI_TIER_MODEL_POLICY]
+        ?? AI_TIER_MODEL_POLICY.INDIVIDUAL_FREE;
+      const models = SELECTABLE_AI_MODELS.map(m => ({
+        ...m,
+        available: isModelAvailable(m.id),
+        allowedForPlan: policy.allowedModels.includes(m.id),
+      }));
+      return res.json({ models, preferred: user?.preferredAiModel ?? null, plan });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Set (or clear with null) the caller's own preferred AI model. Identity is
+  // session-derived; validated against the roster + tier policy + availability.
+  app.put("/api/ai/model-preference", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const schema = z.object({ model: z.string().min(1).max(60).nullable() });
+      const p = schema.safeParse(req.body);
+      if (!p.success) return res.status(400).json({ message: "Body must be { model: string | null }." });
+      const model = p.data.model;
+      if (model !== null) {
+        if (!SELECTABLE_AI_MODEL_IDS.includes(model)) {
+          return res.status(400).json({ message: `Unknown model: ${model}` });
+        }
+        if (!isModelAvailable(model)) {
+          return res.status(503).json({ message: `Model ${model} is not available on this server.` });
+        }
+        const user = await storage.getUser(userId);
+        const plan = (user?.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
+        const policy = AI_TIER_MODEL_POLICY[plan as keyof typeof AI_TIER_MODEL_POLICY]
+          ?? AI_TIER_MODEL_POLICY.INDIVIDUAL_FREE;
+        if (!policy.allowedModels.includes(model)) {
+          return res.status(403).json({
+            message: `Model ${model} is not permitted on plan ${plan}. Upgrade for full model access.`,
+            upgradePath: "/subscription",
+          });
+        }
+      }
+      const updated = await storage.setPreferredAiModel(userId, model);
+      if (!updated) return res.status(404).json({ message: "User not found" });
+      return res.json({ preferred: updated.preferredAiModel ?? null });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/ai/resume-narrative/:assessmentId", requireFeature("claudeNarrative"), requireAuth, async (req, res) => {
     try {
       const userId = currentUserId(req)!;
@@ -402,7 +460,7 @@ export async function registerRoutes(
       if (a.userId !== userId) return res.status(403).json({ message: "You may only generate narratives for your own assessments." });
       const user = await storage.getUser(userId);
       const plan = (user?.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
-      const narrative = await generateResumeNarrative({ userId, plan, assessment: a });
+      const narrative = await generateResumeNarrative({ userId, plan, assessment: a, preferredModel: user?.preferredAiModel });
       return res.json(narrative);
     } catch (err: any) {
       console.error("Resume narrative error:", err);
@@ -423,7 +481,7 @@ export async function registerRoutes(
       if (!p.success) return res.status(400).json({ message: "brief required (10–800 chars)" });
       const user = await storage.getUser(userId);
       const plan = (user?.subscriptionPlan as SubscriptionPlan) || "ENTERPRISE";
-      const scenario = await generateScenario({ userId, plan, brief: p.data.brief });
+      const scenario = await generateScenario({ userId, plan, brief: p.data.brief, preferredModel: user?.preferredAiModel });
       if (p.data.persist) {
         const saved = await storage.upsertCcgeScenario(scenario);
         return res.status(201).json({ scenario: saved, persisted: true });
@@ -3410,6 +3468,7 @@ export async function registerRoutes(
           playedCards,
           deterministic: breakdown,
           customCard: { name: customCardName, body: customCardBody },
+          preferredModel: actor?.preferredAiModel,
         });
         if (claudeKcse) {
           breakdown.final = Math.max(0, Math.min(50, Math.round((breakdown.final + claudeKcse.kcseDelta) * 10) / 10));

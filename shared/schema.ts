@@ -427,6 +427,10 @@ export const users = pgTable("users", {
   // base64 data URL on the user record (no object-storage dependency). Drives
   // the resume artifact header. Server-validated for mime + length on write.
   headshotDataUrl: text("headshot_data_url"),
+  // ── LLM-resilient model preference ── which AI model the user wants their
+  // AI features to run on (token-cost control). Null = platform default per
+  // feature. Validated against SELECTABLE_AI_MODELS + tier policy on write.
+  preferredAiModel: text("preferred_ai_model"),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({
@@ -1236,9 +1240,46 @@ export const AI_MODELS = {
   SONNET: "claude-sonnet-4-6",
 } as const;
 
+// ── LLM-resilient model roster ─────────────────────────────
+// Multi-provider selectable models. Providers are backed by Replit-managed
+// AI integrations (Anthropic / OpenAI / Gemini) — availability is checked
+// server-side per provider env credentials. `costTier` drives both the
+// user-facing dropdown grouping and the premium-kind policy gate
+// (premium models obey the same per-kind restrictions Sonnet always has).
+export const AI_PROVIDERS = ["anthropic", "openai", "gemini"] as const;
+export type AiProvider = typeof AI_PROVIDERS[number];
+
+export type SelectableAiModel = {
+  id: string;
+  provider: AiProvider;
+  label: string;
+  costTier: "economy" | "premium";
+  blurb: string;
+};
+
+export const SELECTABLE_AI_MODELS: readonly SelectableAiModel[] = [
+  { id: "claude-haiku-4-5", provider: "anthropic", label: "Claude Haiku 4.5", costTier: "economy", blurb: "Fast + lowest Claude cost. Platform default for scoring." },
+  { id: "claude-sonnet-4-6", provider: "anthropic", label: "Claude Sonnet 4.6", costTier: "premium", blurb: "Deep reasoning. Platform default for narratives." },
+  { id: "gpt-5-mini", provider: "openai", label: "GPT-5 Mini", costTier: "economy", blurb: "OpenAI economy model. Lowest token cost on the roster." },
+  { id: "gpt-5.4", provider: "openai", label: "GPT-5.4", costTier: "premium", blurb: "OpenAI flagship. Premium reasoning quality." },
+  { id: "gemini-2.5-flash", provider: "gemini", label: "Gemini 2.5 Flash", costTier: "economy", blurb: "Google economy model. Very fast, very cheap." },
+  { id: "gemini-2.5-pro", provider: "gemini", label: "Gemini 2.5 Pro", costTier: "premium", blurb: "Google flagship. Premium long-context reasoning." },
+] as const;
+
+export const SELECTABLE_AI_MODEL_IDS = SELECTABLE_AI_MODELS.map(m => m.id) as readonly string[];
+
+// Premium set = Sonnet-class models. assertModelAllowed applies the per-kind
+// `sonnetKindsAllowed` restriction to every model in this set, not just Sonnet.
+export const AI_PREMIUM_MODELS: readonly string[] =
+  SELECTABLE_AI_MODELS.filter(m => m.costTier === "premium").map(m => m.id);
+
 export const AI_PRICING_PER_MTOK = {
   "claude-haiku-4-5": { in: 80, out: 400 },
   "claude-sonnet-4-6": { in: 300, out: 1500 },
+  "gpt-5-mini": { in: 25, out: 200 },
+  "gpt-5.4": { in: 125, out: 1000 },
+  "gemini-2.5-flash": { in: 30, out: 250 },
+  "gemini-2.5-pro": { in: 125, out: 1000 },
 } as const;
 
 export const AI_TIER_MONTHLY_TOKENS = {
@@ -1292,28 +1333,34 @@ export const AI_TIER_DAILY_QUOTA_V2 = {
   ENTERPRISE:      { kcse: 200, narrative: 100, scenario_gen: 50 },
 } as const;
 
-// Per-tier model & kind allow-list. FREE is HAIKU-only; SCHOOL gets Sonnet
-// only for narrative; PRO gets Sonnet for any kind; ENTERPRISE unrestricted.
+// Per-tier model & kind allow-list. SCHOOL gets premium models only for
+// narrative; PRO gets premium for any kind; ENTERPRISE unrestricted.
 // `useClaude` (CCGE finish) is the only client-driven model upgrade — its
 // boolean is honored only when allowUseClaude=true.
+// FREE stays economy-only (any provider's economy model — same cost class as
+// Haiku or cheaper). Paid tiers may select any roster model, with premium
+// models still bound by the per-kind `sonnetKindsAllowed` restriction.
+export const AI_ECONOMY_MODELS: readonly string[] =
+  SELECTABLE_AI_MODELS.filter(m => m.costTier === "economy").map(m => m.id);
+
 export const AI_TIER_MODEL_POLICY = {
   INDIVIDUAL_FREE: {
-    allowedModels: ["claude-haiku-4-5"] as readonly string[],
+    allowedModels: AI_ECONOMY_MODELS,
     allowUseClaude: false,
     sonnetKindsAllowed: [] as readonly AiKind[],
   },
   SCHOOL_STUDENT: {
-    allowedModels: ["claude-haiku-4-5", "claude-sonnet-4-6"] as readonly string[],
+    allowedModels: SELECTABLE_AI_MODEL_IDS,
     allowUseClaude: true,
     sonnetKindsAllowed: ["narrative"] as readonly AiKind[],
   },
   INDIVIDUAL_PRO: {
-    allowedModels: ["claude-haiku-4-5", "claude-sonnet-4-6"] as readonly string[],
+    allowedModels: SELECTABLE_AI_MODEL_IDS,
     allowUseClaude: true,
     sonnetKindsAllowed: ["narrative", "kcse", "scenario_gen"] as readonly AiKind[],
   },
   ENTERPRISE: {
-    allowedModels: ["claude-haiku-4-5", "claude-sonnet-4-6"] as readonly string[],
+    allowedModels: SELECTABLE_AI_MODEL_IDS,
     allowUseClaude: true,
     sonnetKindsAllowed: ["narrative", "kcse", "scenario_gen"] as readonly AiKind[],
   },
