@@ -58,7 +58,7 @@ See `CHANGELOG.md → Phase J` for the full implementation note (new modules, en
 
 - **Frontend**: React + Vite + TailwindCSS + Recharts + Framer Motion + wouter routing.
 - **Backend**: Express.js on port 5000, serves API + Vite dev server.
-- **Database**: PostgreSQL with Drizzle ORM, `connect-pg-simple` PG-backed session store.
+- **Database**: PostgreSQL with Drizzle ORM, `connect-pg-simple` PG-backed session store. Migrations: `server/migrate.ts` auto-applies pending `migrations/*.sql` at startup (tracked in `schema_migrations`, advisory-locked, each file run as one multi-statement query); standalone via `npm run db:migrate`. Startup fails naming the offending file if a migration errors. Do NOT use `db:push` (interactive).
 - **AI**: Anthropic Claude via `javascript_anthropic_ai_integrations` blueprint (Haiku for KCSE, Sonnet for narrative + scenario gen). See `CHANGELOG.md → Phase F`.
 - **Auth**: Server-side sessions (`express-session`, cookie `ark.sid`, httpOnly + sameSite=lax, 14-day rolling). `SESSION_SECRET` required in production. Bcrypt passwords (cost 10) at the storage boundary with transparent legacy-plaintext rehash on first login. See `CHANGELOG.md → Phase D.1`.
 - **Authorization**: Two middlewares — `requireAuth` (session-derived identity) and `requireSelf(:param)` (path param must equal session userId). All mutations derive actor from `req.session.userId`, never from body/path. Object-ownership endpoints re-check inside transactions. Instructor-gated routes use `requireInstructor`.

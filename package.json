@@ -10,6 +10,7 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "db:push": "drizzle-kit push",
+    "db:migrate": "tsx scripts/applyMigrations.ts",
     "pdd:render": "tsx scripts/renderCurrentPdds.ts",
     "pdd:check": "tsx scripts/renderCurrentPdds.ts --check",
     "test": "tsx --test server/__tests__/*.test.ts",

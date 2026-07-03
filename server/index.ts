@@ -97,6 +97,12 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Apply pending migrations/*.sql before serving anything so the schema can
+  // never silently drift behind the code (Task #102). Fails fast with the
+  // offending migration's filename if a migration cannot be applied.
+  const { applyMigrations } = await import("./migrate");
+  await applyMigrations();
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {

@@ -3,7 +3,7 @@
 - [Revenue guardrail two-gate budget](revenue-guardrail.md) — AI calls need both token-cap AND cost-cap gates; FREE and ENTERPRISE cost caps are absolute, not 10%-derived.
 - [Radix double asChild/Slot swallows clicks](radix-slot-composition.md) — nesting two Radix primitives via asChild (TooltipTrigger asChild > TabsTrigger) silently kills the inner control's click under React 19; keep the interactive primitive outermost.
 - [Flywheel cap models](flywheel-cap-models.md) — two distinct cap mechanisms (CCGE daily-throttle vs SPHINX hard-cap); mirror the sibling the task references.
-- [Dev DB migration drift](dev-db-migration-drift.md) — merged migrations aren't auto-applied to dev DB; apply via psql, unique monotonic prefixes, avoid reserved words.
+- [Dev DB migration drift](dev-db-migration-drift.md) — migrations now auto-apply at startup (schema_migrations tracking); write idempotent SQL, unique monotonic prefixes, never semicolon-split files.
 - [PDD PDF rendering](pdd-rendering.md) — renderPdd.ts needs PUPPETEER_EXECUTABLE_PATH=$(which chromium); never `head -1` the nix glob (picks ancient ungoogled-98).
 - [Background procs die between bash calls](bash-background-procs.md) — a `&` server from one bash call is dead in the next; start+test+kill in ONE call, never pkill the workflow.
 - [HR connector adapters](hr-connectors.md) — file adapters impl `parse`, API adapters impl async `fetchRecords`; roster sync is on-demand (session-scoped) not a global scheduler (no per-tenant config).

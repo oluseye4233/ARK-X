@@ -1,30 +1,30 @@
 ---
 name: Dev DB migration drift
-description: Why merged task-agent schema changes can be absent from the dev DB, and how to fix "relation does not exist" at runtime.
+description: How migrations/*.sql are applied automatically at startup, and pitfalls when authoring new ones.
 ---
 
 # Dev DB migration drift
 
-When a task agent adds a table/column (schema in `shared/schema.ts` + a SQL file
-in `migrations/`), the merge does NOT automatically apply that SQL to the dev
-Postgres. Runtime then fails with Drizzle `relation "<table>" does not exist` or
-a missing-column error, even though the schema and migration file look correct.
+Migrations are now auto-applied: server startup runs an idempotent runner that
+executes pending `migrations/*.sql` in filename order and records them in a
+`schema_migrations` tracking table (advisory-locked). `npm run db:migrate` runs
+the same thing standalone. A failing migration aborts startup with an error
+naming the exact file.
 
-**Why:** `db:push` (drizzle-kit) is interactive in this environment, so merged
-task work that relied on it never ran against the shared dev DB. Each merged
-migration file lands in `migrations/` but is not executed.
+**Why:** `db:push` (drizzle-kit) is interactive in this environment and hangs
+on TTY prompts, so merged task work that relied on it never ran against the
+shared dev DB — code and schema silently drifted (e.g. a missing column broke
+an entire test suite with no obvious cause).
 
-**How to apply:** the migration files are written to be idempotent
-(`CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`,
-`CREATE UNIQUE INDEX IF NOT EXISTS`). Run the relevant one directly:
-`psql "$DATABASE_URL" -f migrations/<file>.sql`, then verify with `\d <table>`
-and an `information_schema.columns` check. Safe to re-run.
+**How to apply:** just write the SQL file — it gets applied on the next server
+start, or run `npm run db:migrate`. Files execute as ONE multi-statement query
+(they contain `DO $$` blocks; never semicolon-split them). Keep every migration
+idempotent (CREATE TABLE IF NOT EXISTS / ADD COLUMN IF NOT EXISTS) so a lost
+tracking table only costs a harmless re-run.
 
-**Naming:** migration files use a monotonic, unique 4-digit prefix. Before
-creating one, `ls migrations/*.sql` and take max prefix + 1 — never reuse an
-existing ordinal (e.g. a second `0001_*`), even with idempotent SQL, because
-duplicate prefixes create ambiguous ordering in tooling.
+**Naming:** monotonic, unique 4-digit prefix. `ls migrations/*.sql`, take max
+prefix + 1 — never reuse an ordinal. The runner sorts by full filename, so
+duplicate prefixes get lexicographic order, which may not match intent.
 
 **Gotcha:** `current_role` is a Postgres reserved word — quote it
-(`"current_role"`) in raw SQL. Drizzle auto-quotes, so the schema definition
-needs no special handling.
+(`"current_role"`) in raw SQL. Drizzle auto-quotes in schema definitions.
