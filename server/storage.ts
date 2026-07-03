@@ -1404,7 +1404,7 @@ export class DatabaseStorage implements IStorage {
 
   // ── SPHINX Marketplace ──────────────────────────────────────
   async createSpcListing(
-    listing: InsertSpcListing & { kcseScore: number; hiveScore: number; status?: string },
+    listing: InsertSpcListing & { kcseScore: number; hiveScore: number; status?: string; scope?: string; institution?: string | null },
   ): Promise<SpcListing> {
     const [created] = await db.insert(spcListings).values(listing).returning();
     return created;

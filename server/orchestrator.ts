@@ -42,9 +42,11 @@ export type ArkEventPayloads = {
   "cert.upgraded": { from: string; to: string };
   "spc.published": { listingId: string; title: string };
   "spc.purchased": {
-    listingId: string;
+    listingId?: string;
     asRole: "buyer" | "creator";
     isFirstSaleForCreator?: boolean;
+    sessionId?: string;
+    synthesis?: boolean;
   };
   "card.verified": {
     cardId: string;
