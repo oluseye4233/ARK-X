@@ -1,0 +1,18 @@
+{
+  "default_branch": "main",
+  "branches": [
+    "feature/living-resume-designer",
+    "main",
+    "origin"
+  ],
+  "parent": {
+    "feature/living-resume-designer": "main",
+    "main": null,
+    "origin": "main"
+  },
+  "order": [
+    "main",
+    "feature/living-resume-designer",
+    "origin"
+  ]
+}
