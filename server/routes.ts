@@ -51,6 +51,7 @@ import { generateResumeNarrative, ProTierRequiredError } from "./ai/narrative";
 import { CODEC_PRIMITIVES, CODEC_BY_ID } from "@shared/codec-primitives";
 import { generateScenario } from "./ai/scenarioGen";
 import { buildArkResume, checkResumeEligibility } from "./arkResume";
+import { buildLivingResumeDesignerPrefill } from "./livingResumeDesigner";
 import {
   scoreUserForOpportunity,
   skillGapForOpportunity,
@@ -1240,6 +1241,58 @@ export async function registerRoutes(
     }
   });
 
+  // ── Living Resume Designer telemetry (LRD-304) ───────────────────────
+  // Lightweight fire-and-forget session beacon (fields completed, tags
+  // selected, cards linked). No dedicated table — same rationale as the DRM
+  // beacon above: high volume, low per-event value, logs are enough. No
+  // consent/governance table exists anywhere else in this codebase to gate
+  // against, so none is introduced here. Resume content itself is never
+  // sent — only counts.
+  const LRD_RATE_WINDOW_MS = 10_000;
+  const LRD_RATE_MAX = 20;
+  const lrdRateBuckets = new Map<string, { count: number; windowStart: number }>();
+
+  app.post(
+    "/api/living-resume/telemetry",
+    requireFeature("livingResumeDesigner"),
+    async (req, res) => {
+      try {
+        const { fieldsCompleted, tagsSelected, cardsLinked } = req.body ?? {};
+        if (
+          typeof fieldsCompleted !== "number" ||
+          typeof tagsSelected !== "number" ||
+          typeof cardsLinked !== "number"
+        ) {
+          return res.status(400).json({ message: "Invalid telemetry payload." });
+        }
+        const userId = currentUserId(req) ?? "anon";
+        const rateKey = userId !== "anon" ? `u:${userId}` : `ip:${req.ip ?? "?"}`;
+        const now = Date.now();
+        const bucket = lrdRateBuckets.get(rateKey);
+        if (!bucket || now - bucket.windowStart > LRD_RATE_WINDOW_MS) {
+          lrdRateBuckets.set(rateKey, { count: 1, windowStart: now });
+        } else {
+          bucket.count += 1;
+          if (bucket.count > LRD_RATE_MAX) {
+            return res.status(204).end();
+          }
+        }
+        if (lrdRateBuckets.size > 5_000) {
+          Array.from(lrdRateBuckets.entries()).forEach(([k, v]) => {
+            if (now - v.windowStart > LRD_RATE_WINDOW_MS * 2) lrdRateBuckets.delete(k);
+          });
+        }
+        console.log(
+          `[living-resume-designer] user=${sanitizeDrmField(userId, 64)} fields=${Math.max(0, Math.min(999, fieldsCompleted))} tags=${Math.max(0, Math.min(999, tagsSelected))} cards=${Math.max(0, Math.min(999, cardsLinked))}`,
+        );
+        return res.status(204).end();
+      } catch (err: any) {
+        console.error("[/api/living-resume/telemetry] error:", err);
+        return res.status(500).json({ message: err.message });
+      }
+    },
+  );
+
   // Admin-only aggregation over the ring buffer. Returns the top N
   // (userId, contentType) pairs by violation count in the last 24h, plus
   // the raw recent-events tail. Lets ops spot scrapers without standing
@@ -2020,6 +2073,34 @@ export async function registerRoutes(
       return res.status(500).json({ message: err.message });
     }
   });
+
+  // ── LIVING RESUME DESIGNER (JNGL-PDD-ARKH-LRD-2026-001) ─────────────
+  // Self-service wizard that exports a shareable, self-contained resume
+  // artifact. Additive to ARK RESUME, not a replacement: reads the same
+  // identity/work-history source plus ARK Score and the user's own SPHINX
+  // listings. The wizard draft itself is client-side/localStorage state —
+  // this is a read-only prefill endpoint. Headshot upload reuses the
+  // existing /api/ark-resume/headshot endpoints above rather than
+  // duplicating storage. Pro+ gating for SPC panel / AI-app showcase /
+  // video intro / ARK Score badge / FORGE-Verified badge / export
+  // certificate is enforced client-side via `isProPlus` on this payload
+  // (same reportAccess-based gate used elsewhere) since none of it writes
+  // anything server-side.
+  app.get(
+    "/api/living-resume/prefill",
+    requireFeature("livingResumeDesigner"),
+    requireAuth,
+    async (req, res) => {
+      try {
+        const userId = currentUserId(req)!;
+        const payload = await buildLivingResumeDesignerPrefill(userId);
+        if (!payload) return res.status(404).json({ message: "User not found." });
+        return res.json(payload);
+      } catch (err: any) {
+        return res.status(500).json({ message: err.message });
+      }
+    },
+  );
 
   // List the current user's own confirmations (the trust layer of their resume).
   app.get("/api/confirmations", requireFeature("arkResume"), requireAuth, async (req, res) => {

@@ -21,6 +21,7 @@ import {
   Shield,
   FileText,
   Network,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { OnboardingTour } from "@/components/OnboardingTour";
@@ -71,6 +72,7 @@ const ALL_NAV_GROUPS: FlaggedNavGroup[] = [
       { name: "Upload CV", href: "/upload", icon: Upload, hint: "Run a new assessment", flag: null },
       { name: "Intelligence Hub", href: "/dashboard", icon: BarChart3, hint: "Your scores & insights", flag: null },
       { name: "ARK Resume", href: "/ark-resume", icon: FileText, hint: "ATS-optimized verified resume", flag: "arkResume" },
+      { name: "Living Resume Designer", href: "/living-resume-designer", icon: Sparkles, hint: "Build a shareable, offline resume artifact", flag: "livingResumeDesigner" },
       { name: "Book Companion", href: "/book", icon: BookOpen, hint: "Context Craft reading journey", flag: "bookCompanion" },
     ],
   },

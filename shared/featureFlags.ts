@@ -70,7 +70,10 @@ export type FeatureKey =
   // ── ARK Matchmaking Engine — the Cognitive Talent Exchange. Matches people
   //    to jobs/projects and assembles project teams scored PURELY on VERIFIED
   //    PRIMITIVE CARDS (+ JST + archetype). Launched ON. ──
-  | "matchmaking"; // /matchmaking + /api/matchmaking/* + opportunity posting
+  | "matchmaking" // /matchmaking + /api/matchmaking/* + opportunity posting
+  // ── Living Resume Designer (JNGL-PDD-ARKH-LRD-2026-001) — self-service
+  //    shareable resume builder, additive to ARK RESUME. Launched ON. ──
+  | "livingResumeDesigner"; // /living-resume-designer + /api/living-resume/*
 
 /**
  * MVP defaults. Editing this constant is the canonical way to flip a
@@ -108,6 +111,7 @@ export const MVP_FEATURES: Readonly<Record<FeatureKey, boolean>> = Object.freeze
   trainingProviders: true,
   f1000Promo: true,
   matchmaking: true,
+  livingResumeDesigner: true,
 });
 
 /**

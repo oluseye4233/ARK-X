@@ -16,6 +16,7 @@ import LoginPage from "@/pages/auth/login";
 import AssessmentPage from "@/pages/assessment";
 import ReportPage from "@/pages/report";
 import ArkResumePage from "@/pages/ark-resume";
+import LivingResumeDesignerPage from "@/pages/living-resume-designer";
 import ContextCraftPage from "@/pages/context-craft";
 import SubscriptionPage from "@/pages/subscription";
 import CheckoutPage from "@/pages/checkout";
@@ -69,6 +70,7 @@ function Router() {
         {FEATURES.enterpriseDashboard && <Route path="/enterprise" component={EnterprisePage} />}
         {FEATURES.executiveReport && <Route path="/report" component={ReportPage} />}
         {FEATURES.arkResume && <Route path="/ark-resume" component={ArkResumePage} />}
+        {FEATURES.livingResumeDesigner && <Route path="/living-resume-designer" component={LivingResumeDesignerPage} />}
         {FEATURES.contextCraftPage && <Route path="/context-craft" component={ContextCraftPage} />}
         {FEATURES.cohorts && <Route path="/school" component={SchoolDashboard} />}
         {FEATURES.sphinxAdvanced && <Route path="/marketplace/synergy" component={MarketplacePage} />}

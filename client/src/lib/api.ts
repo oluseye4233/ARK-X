@@ -614,6 +614,25 @@ export const api = {
     apiRequest("/api/ark-resume/headshot", { method: "POST", body: JSON.stringify({ dataUrl }) }),
   deleteArkResumeHeadshot: (): Promise<{ ok: boolean }> =>
     apiRequest("/api/ark-resume/headshot", { method: "DELETE" }),
+  // ── Living Resume Designer (JNGL-PDD-ARKH-LRD-2026-001) ──
+  getLivingResumePrefill: () => apiRequest("/api/living-resume/prefill"),
+  // Fire-and-forget beacon — the server always answers 204 (no body), so this
+  // bypasses apiRequest's res.json() and swallows any failure, matching the
+  // DRM beacon's "clients ignore the response" convention.
+  sendLivingResumeTelemetry: (payload: {
+    fieldsCompleted: number;
+    tagsSelected: number;
+    cardsLinked: number;
+  }) => {
+    fetch("/api/living-resume/telemetry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      keepalive: true,
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+  },
+
   getConfirmations: () => apiRequest("/api/confirmations"),
   issueConfirmation: (data: {
     userId: string;
