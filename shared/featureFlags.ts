@@ -73,7 +73,11 @@ export type FeatureKey =
   | "matchmaking" // /matchmaking + /api/matchmaking/* + opportunity posting
   // ── Living Resume Designer (JNGL-PDD-ARKH-LRD-2026-001) — self-service
   //    shareable resume builder, additive to ARK RESUME. Launched ON. ──
-  | "livingResumeDesigner"; // /living-resume-designer + /api/living-resume/*
+  | "livingResumeDesigner" // /living-resume-designer + /api/living-resume/*
+  // ── Atomic Gauntlet (adapted, JNGL-ACC-PDD-AGL-2026-001) — AI-judged
+  //    quality review of an AI-Native App Showcase entry. No RL-environment
+  //    execution exists in this codebase; see server/gauntlet.ts. ──
+  | "gauntlet"; // /gauntlet + /api/gauntlet/*
 
 /**
  * MVP defaults. Editing this constant is the canonical way to flip a
@@ -112,6 +116,7 @@ export const MVP_FEATURES: Readonly<Record<FeatureKey, boolean>> = Object.freeze
   f1000Promo: true,
   matchmaking: true,
   livingResumeDesigner: true,
+  gauntlet: true,
 });
 
 /**

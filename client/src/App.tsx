@@ -17,6 +17,7 @@ import AssessmentPage from "@/pages/assessment";
 import ReportPage from "@/pages/report";
 import ArkResumePage from "@/pages/ark-resume";
 import LivingResumeDesignerPage from "@/pages/living-resume-designer";
+import GauntletPage from "@/pages/gauntlet";
 import ContextCraftPage from "@/pages/context-craft";
 import SubscriptionPage from "@/pages/subscription";
 import CheckoutPage from "@/pages/checkout";
@@ -71,6 +72,7 @@ function Router() {
         {FEATURES.executiveReport && <Route path="/report" component={ReportPage} />}
         {FEATURES.arkResume && <Route path="/ark-resume" component={ArkResumePage} />}
         {FEATURES.livingResumeDesigner && <Route path="/living-resume-designer" component={LivingResumeDesignerPage} />}
+        {FEATURES.gauntlet && <Route path="/gauntlet" component={GauntletPage} />}
         {FEATURES.contextCraftPage && <Route path="/context-craft" component={ContextCraftPage} />}
         {FEATURES.cohorts && <Route path="/school" component={SchoolDashboard} />}
         {FEATURES.sphinxAdvanced && <Route path="/marketplace/synergy" component={MarketplacePage} />}

@@ -22,6 +22,7 @@ import {
   FileText,
   Network,
   Sparkles,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { OnboardingTour } from "@/components/OnboardingTour";
@@ -85,6 +86,7 @@ const ALL_NAV_GROUPS: FlaggedNavGroup[] = [
       { name: "Roundtable", href: "/marketplace/roundtable", icon: Activity, hint: "Top-12 SPC leaderboard", flag: "sphinxAdvanced" },
       { name: "Synergy Lab", href: "/marketplace/synergy", icon: HelpCircle, hint: "Test card combinations", flag: "sphinxAdvanced" },
       { name: "Forge Lab", href: "/marketplace/forge-lab", icon: Upload, hint: "Upload .docx → HIVE pre-check", flag: "forgeLabDocx" },
+      { name: "Atomic Gauntlet", href: "/gauntlet", icon: ShieldCheck, hint: "AI-judged quality review for your apps", flag: "gauntlet" },
       { name: "Career Mobility", href: "/pathways", icon: Map, hint: "Pivot opportunities", flag: null },
       { name: "Training Providers", href: "/training", icon: GraduationCap, hint: "JST-matched certifications", flag: "trainingProviders" },
     ],

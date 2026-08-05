@@ -52,6 +52,7 @@ import { CODEC_PRIMITIVES, CODEC_BY_ID } from "@shared/codec-primitives";
 import { generateScenario } from "./ai/scenarioGen";
 import { buildArkResume, checkResumeEligibility } from "./arkResume";
 import { buildLivingResumeDesignerPrefill } from "./livingResumeDesigner";
+import { runAndRecordGauntlet, listGauntletRuns, InsufficientCreditsError } from "./gauntlet";
 import {
   scoreUserForOpportunity,
   skillGapForOpportunity,
@@ -2101,6 +2102,53 @@ export async function registerRoutes(
       }
     },
   );
+
+  // ── ATOMIC GAUNTLET (adapted, JNGL-ACC-PDD-AGL-2026-001) ─────────────
+  // AI-judged quality review of an AI-Native App Showcase entry. Pro+
+  // gated (same reportAccess-based gate used elsewhere), flat per-run
+  // credit charge debited from the existing userCredits ledger. See
+  // server/gauntlet.ts for the honesty-gated scope-reduction rationale
+  // (no RL-environment/code-execution infra exists in this codebase).
+  app.post("/api/gauntlet/run", requireFeature("gauntlet"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const user = await storage.getUser(userId);
+      const plan = (user?.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
+      if (!SUBSCRIPTION_PLANS[plan]?.limits?.reportAccess) {
+        return res.status(403).json({ message: "Atomic Gauntlet requires Individual Pro or higher." });
+      }
+
+      const schema = z.object({
+        name: z.string().min(1).max(120),
+        pitch: z.string().max(2000).default(""),
+        stack: z.string().max(500).default(""),
+        url: z.string().max(500).default(""),
+        testDemoSrcdoc: z.string().max(20000).optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid submission." });
+      }
+
+      const { run, guidance, newBalance } = await runAndRecordGauntlet(userId, parsed.data);
+      return res.json({ ...run, guidance, newBalance });
+    } catch (err: any) {
+      if (err instanceof InsufficientCreditsError) {
+        return res.status(402).json({ message: err.message });
+      }
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/gauntlet/runs", requireFeature("gauntlet"), requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const rows = await listGauntletRuns(userId);
+      return res.json(rows);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
 
   // List the current user's own confirmations (the trust layer of their resume).
   app.get("/api/confirmations", requireFeature("arkResume"), requireAuth, async (req, res) => {

@@ -633,6 +633,16 @@ export const api = {
     }).catch(() => {});
   },
 
+  // ── Atomic Gauntlet (adapted, JNGL-ACC-PDD-AGL-2026-001) ──
+  runGauntlet: (input: {
+    name: string;
+    pitch: string;
+    stack: string;
+    url: string;
+    testDemoSrcdoc?: string;
+  }) => apiRequest("/api/gauntlet/run", { method: "POST", body: JSON.stringify(input) }),
+  getGauntletRuns: () => apiRequest("/api/gauntlet/runs"),
+
   getConfirmations: () => apiRequest("/api/confirmations"),
   issueConfirmation: (data: {
     userId: string;

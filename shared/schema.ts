@@ -1130,6 +1130,25 @@ export const userCredits = pgTable("user_credits", {
 
 export type UserCredits = typeof userCredits.$inferSelect;
 
+// ── Atomic Gauntlet (adapted, JNGL-ACC-PDD-AGL-2026-001) ─────────────
+// AI-judged quality/functionality review of a user's AI-Native App
+// Showcase entry. No code-execution/RL-environment infra exists in this
+// codebase — this is a deliberately reduced-scope reinterpretation, see
+// server/gauntlet.ts for the honesty-gated rationale.
+export const gauntletRuns = pgTable("gauntlet_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  appName: text("app_name").notNull(),
+  hiveVector: jsonb("hive_vector").notNull(),
+  hiveScore: real("hive_score").notNull(),
+  verdict: text("verdict").notNull(),
+  reasons: text("reasons").array(),
+  creditsCharged: integer("credits_charged").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type GauntletRun = typeof gauntletRuns.$inferSelect;
+
 export const ARK_EVENT_TYPES = [
   "assessment.completed",
   "game.session.finished",
