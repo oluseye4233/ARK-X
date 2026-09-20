@@ -168,9 +168,10 @@ export default function ContextCraftPage() {
 
       <div className="space-y-4">
         <h3 className="font-display font-bold text-lg text-primary uppercase tracking-widest">
-          Certification Tiers
+          Choose your next certification
         </h3>
-        <div className="grid gap-4">
+        <p className="text-sm text-muted-foreground">Select one tier to link to your profile. Details stay closed until you need them.</p>
+        <div className="grid gap-4" role="listbox" aria-label="Context Craft certification tiers">
           {levels.map(([key, levelData], index) => {
             const details = CERT_DETAILS[key];
             const isCurrent = key === currentLevel;
@@ -184,7 +185,7 @@ export default function ContextCraftPage() {
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: index * 0.08 }}
-                className={`glass-card p-5 rounded-xl transition-all duration-300 cursor-pointer group ${
+                className={`glass-card p-5 rounded-xl transition-all duration-300 cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
                   isCurrent
                     ? "ring-2"
                     : selectedLevel === key
@@ -193,6 +194,17 @@ export default function ContextCraftPage() {
                 }`}
                 style={isCurrent ? { borderColor: `${levelData.color}40`, boxShadow: `0 0 20px ${levelData.color}10` } : {}}
                 onClick={() => !isCurrent && setSelectedLevel(selectedLevel === key ? null : key)}
+                onKeyDown={(e) => {
+                  if ((e.key === "Enter" || e.key === " ") && !isCurrent) {
+                    e.preventDefault();
+                    setSelectedLevel(selectedLevel === key ? null : key);
+                  }
+                }}
+                role="option"
+                tabIndex={0}
+                aria-selected={isCurrent || selectedLevel === key}
+                aria-expanded={selectedLevel === key}
+                aria-controls={`cert-detail-${key.toLowerCase()}`}
                 data-testid={`card-cert-${key.toLowerCase()}`}
               >
                 <div className="flex items-center gap-4">
@@ -249,6 +261,7 @@ export default function ContextCraftPage() {
                       animate={{ height: "auto", opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
                       className="overflow-hidden"
+                      id={`cert-detail-${key.toLowerCase()}`}
                     >
                       <div className="mt-4 pt-4 border-t border-white/10">
                         <p className="text-muted-foreground text-sm mb-3">{details.description}</p>
@@ -299,7 +312,11 @@ export default function ContextCraftPage() {
         </div>
       </div>
 
-      <div className="glass-card p-6 rounded-xl" data-testid="card-scoring-breakdown">
+      <details className="group glass-card rounded-xl" data-testid="card-scoring-breakdown">
+        <summary className="cursor-pointer list-none p-6 font-display font-bold text-lg text-primary uppercase tracking-widest">
+          <span className="group-open:text-primary">View handicap system and multiplier table</span>
+        </summary>
+        <div className="px-6 pb-6">
         <h3 className="font-display font-bold text-lg text-primary uppercase tracking-widest mb-4">
           Context Craft Handicap System
         </h3>
@@ -349,7 +366,8 @@ export default function ContextCraftPage() {
             </div>
           </div>
         </div>
-      </div>
+        </div>
+      </details>
     </div>
   );
 }

@@ -89,7 +89,7 @@ function GuideRow({ label, body, color, accent }: { label: string; body: string;
   );
 }
 
-/* The branded, export-ready Career Adviser Guide artifact. It accompanies the
+/* The branded, export-ready ARK Guide artifact. It accompanies the
    ARK Report and explains every metric in plain English. Pure presentation,
    driven entirely by the same data as the ARK Report so the two stay in sync. */
 export const ArkAdviserSheet = forwardRef<HTMLDivElement, ArkAdviserSheetProps>(function ArkAdviserSheet(
@@ -101,6 +101,8 @@ export const ArkAdviserSheet = forwardRef<HTMLDivElement, ArkAdviserSheetProps>(
   const arkId = identity?.arkIdString || (a.id ? a.id.slice(0, 8).toUpperCase() : "—");
   const displayName = a.candidateName || name || "—";
   const jobRole = a.currentRole || role || "Professional";
+  const scoreProvenance = identity?.provenance ?? a.provenance ?? null;
+  const scoreDataAsOf = identity?.dataAsOf ?? a.dataAsOf ?? null;
 
   const generatedAt = new Date();
   const stampDate = generatedAt.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
@@ -121,10 +123,10 @@ export const ArkAdviserSheet = forwardRef<HTMLDivElement, ArkAdviserSheetProps>(
               <img src={atandaLogo} alt="ATANDA" crossOrigin="anonymous" style={{ width: 54, height: 54, objectFit: "contain" }} data-testid="img-adviser-logo" />
               <div>
                 <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: 1.5, color: ATANDA.ink, lineHeight: 1 }}>
-                  CAREER ADVISER REPORT
+                  ARK GUIDE
                 </div>
                 <div style={{ fontSize: 10, letterSpacing: 2, textTransform: "uppercase", color: ATANDA.sub, marginTop: 4 }}>
-                  Your plain-English guide to the ARK Report · Powered by ATANDA
+                  Every part of your ARK Report, explained · Powered by ATANDA
                 </div>
               </div>
             </div>
@@ -159,6 +161,9 @@ export const ArkAdviserSheet = forwardRef<HTMLDivElement, ArkAdviserSheetProps>(
             }}
           >
             {headline}
+            <div style={{ marginTop: 8, fontSize: 9, fontFamily: "monospace", color: ATANDA.sub }} data-testid="adviser-score-provenance">
+              Score source: {scoreProvenance?.source ?? "not supplied"} · Data as of {scoreDataAsOf ?? "not supplied"} · Not a live labour-market feed
+            </div>
           </div>
 
           {/* Guidance cards — one per metric */}
@@ -173,7 +178,7 @@ export const ArkAdviserSheet = forwardRef<HTMLDivElement, ArkAdviserSheetProps>(
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <img src={atandaLogo} alt="ATANDA" crossOrigin="anonymous" style={{ width: 22, height: 22, objectFit: "contain" }} />
               <span style={{ fontSize: 9, fontFamily: "monospace", color: ATANDA.sub, textTransform: "uppercase", letterSpacing: 1.5 }}>
-                Companion to the ARK Report · Updates automatically with your data
+                Your companion to the ARK Report · Updates automatically with your data
               </span>
             </div>
             <span style={{ fontSize: 9, fontFamily: "monospace", color: ATANDA.sub, textTransform: "uppercase", letterSpacing: 1 }}>

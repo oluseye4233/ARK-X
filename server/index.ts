@@ -5,10 +5,13 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { buildSessionMiddleware } from "./auth";
+import { registerSeoRoutes } from "./seo";
+import { registerStripeWebhookRoute } from "./stripeWebhookRoute";
 
 const app = express();
 app.set("trust proxy", 1);
 const httpServer = createServer(app);
+registerSeoRoutes(app);
 
 declare module "http" {
   interface IncomingMessage {
@@ -17,6 +20,8 @@ declare module "http" {
 }
 
 const isProd = process.env.NODE_ENV === "production";
+
+registerStripeWebhookRoute(app);
 
 app.use(
   helmet({
@@ -102,6 +107,27 @@ app.use((req, res, next) => {
   // offending migration's filename if a migration cannot be applied.
   const { applyMigrations } = await import("./migrate");
   await applyMigrations();
+  const { initializeStripe } = await import("./stripeClient");
+  const { setStripeInitializationFailed } = await import("./billing");
+  try {
+    await initializeStripe();
+    setStripeInitializationFailed(false);
+  } catch (error) {
+    setStripeInitializationFailed(true);
+    console.error("Stripe initialization failed; paid checkout disabled:", error);
+  }
+
+  app.get("/api/health/migrations", async (_req, res) => {
+    const { getLiveMigrationStatus } = await import("./migrate");
+    const status = await getLiveMigrationStatus();
+    return res.status(status.ok ? 200 : 503).json(status);
+  });
+
+  app.get("/api/health/stripe-billing-recovery", async (_req, res) => {
+    const { getStripeBillingRecoveryHealth } = await import("./stripeBilling");
+    const status = await getStripeBillingRecoveryHealth();
+    return res.status(status.ok ? 200 : 503).json(status);
+  });
 
   await registerRoutes(httpServer, app);
 

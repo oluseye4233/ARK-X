@@ -3,12 +3,12 @@
  *
  * During Primitive Card Verification a subscriber can name the job role they are
  * authoring their 7-pillar prompt for (e.g. "Project Manager"). This module asks
- * Claude (Haiku — a cheap factual lookup) to ground that role against the three
- * skill standards the card mappings already use, so the author has a reference:
+ * an available language model to suggest references to the three skill-standard
+ * families the card mappings already use:
  *
  *   • O*NET — the matching U.S. occupational titles/codes (the "job roles").
  *   • SFIA  — the typical level(s) of responsibility / control (autonomy & influence).
- *   • WEF   — the Future-of-Jobs outlook: ASCENDING (growing) vs DECLINING.
+ *   • Role outlook — an illustrative AI synthesis, not a sourced WEF forecast.
  *
  * Job-role facts are user-independent, so results are cached GLOBALLY by the
  * normalized role string (30-day TTL) to keep cost near-zero on repeat lookups.
@@ -28,6 +28,11 @@ export type JobRoleGuide = {
   onet: OnetRole[];
   sfia: SfiaLevel[];
   wef: { outlook: WefOutlook; summary: string; signals: string[] };
+  dataAsOf: string;
+  provenance: {
+    source: string;
+    methodology: string;
+  };
 };
 
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -41,15 +46,25 @@ const SFIA_LEVEL_NAMES: Record<number, string> = {
   7: "Set strategy / inspire",
 };
 
+export function jobRoleGuideMetadata(model: string, generatedAt = new Date()) {
+  return {
+    dataAsOf: generatedAt.toISOString().slice(0, 10),
+    provenance: {
+      source: `ARK AI-generated role guide (${model})`,
+      methodology: "Language-model synthesis; not verified against current O*NET, SFIA, WEF, or labour-market dataset releases.",
+    },
+  };
+}
+
 const SYSTEM_PROMPT = `You are ARK Skill-Standards Cartographer. Given a JOB ROLE, return STRICT JSON mapping that role to three global skill standards. No prose around the JSON.
 
 {
   "onet": [{"code": "O*NET-SOC code like 11-9199.00", "title": "official O*NET occupation title", "note": "≤12-word relevance hint"}],  // 3-5 closest O*NET occupations
   "sfia": [{"level": int 1-7, "name": "SFIA responsibility level name", "control": "≤18-word autonomy/influence descriptor for this role at this level"}],  // 2-3 typical levels for this role
-  "wef": {"outlook": one of ["ASCENDING","DECLINING","STABLE"], "summary": "≤30-word WEF Future-of-Jobs demand outlook for this role", "signals": ["≤8-word driver", "≤8-word driver"]}  // 2-3 signals
+  "wef": {"outlook": one of ["ASCENDING","DECLINING","STABLE"], "summary": "≤30-word illustrative AI role outlook", "signals": ["≤8-word possible driver", "≤8-word possible driver"]}  // 2-3 signals
 }
 
-SFIA levels: 1 Follow, 2 Assist, 3 Apply, 4 Enable, 5 Ensure/advise, 6 Initiate/influence, 7 Set strategy/inspire. Pick the levels a real practitioner in this role typically operates at. Use genuine O*NET-SOC codes and titles. Be accurate, concise.`;
+SFIA levels: 1 Follow, 2 Assist, 3 Apply, 4 Enable, 5 Ensure/advise, 6 Initiate/influence, 7 Set strategy/inspire. Pick plausible levels for this role. Be accurate and concise, but do not imply access to current O*NET, SFIA, WEF, or labour-market datasets.`;
 
 function normalizeRole(role: string): string {
   return role.trim().toLowerCase().replace(/\s+/g, " ").slice(0, 80);
@@ -72,10 +87,7 @@ export async function getJobRoleGuide(opts: {
     throw err;
   }
 
-  const key = cacheKey(["job_role_guide", "v1", normalized]);
-  const cached = await cacheGet<JobRoleGuide>(key);
-  if (cached) return cached;
-
+  // Guardrail order: budget gates BEFORE model resolution.
   await enforceBudget(opts.userId, opts.plan);
   await enforceCostBudget(opts.userId, opts.plan);
   // LLM-resilient: no Anthropic-only precheck; the chain falls back across
@@ -85,6 +97,12 @@ export async function getJobRoleGuide(opts: {
     kind: "job_role_guide",
     defaultModel: MODELS.HAIKU,
   });
+
+  // Cache is keyed on the resolved primary model (chain[0]) so fallback
+  // output from a different provider never masquerades as another model's.
+  const key = cacheKey(["job_role_guide", "v2", chain[0], normalized]);
+  const cached = await cacheGet<JobRoleGuide>(key);
+  if (cached) return cached;
 
   const gen = await generateWithChain({
     chain,
@@ -151,7 +169,13 @@ export async function getJobRoleGuide(opts: {
     throw e;
   }
 
-  const guide: JobRoleGuide = { role: opts.role.trim().slice(0, 80), onet, sfia, wef };
+  const guide: JobRoleGuide = {
+    role: opts.role.trim().slice(0, 80),
+    onet,
+    sfia,
+    wef,
+    ...jobRoleGuideMetadata(gen.model),
+  };
   await cacheSet(key, "job_role_guide", guide as unknown as Record<string, unknown>, CACHE_TTL_MS);
   maybeSweepExpired().catch(() => {});
   return guide;

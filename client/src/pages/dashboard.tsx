@@ -53,6 +53,13 @@ interface AssessmentData {
   sourcesUsed?: string[] | null;
   completeness?: number | null;
   createdAt?: string;
+  provenance?: {
+    source: string;
+    methodology: string;
+    version: string;
+    updateCadence: string;
+  };
+  dataAsOf?: string;
 }
 
 // Human labels for the intake sources that fed the cumulative ARK profile.
@@ -90,10 +97,10 @@ function Glossary({ term }: { term: string }) {
 }
 
 const GLOSSARY: Record<string, string> = {
-  "JST": "Job–Skills–Talent index. Your overall career capital score from 0–300, calibrated against live labour market data.",
+  "JST": "Job–Skills–Talent index. Your overall career capital score from 0–300, calculated with ARK's curated, code-defined scoring model.",
   "CCMI": "Career Capital Maturity Index. A 0–100 measure of how durable and transferable your career capital is.",
   "ARK Score": "Composite score (0–600) blending JST, CCMI and your CODEC archetype profile. The single number to watch.",
-  "CODEC": "Junglenomics CODEC — 22 enterprise primitives mapped to global skill standards (O*NET, SFIA v8, WEF Future of Jobs).",
+  "CODEC": "Junglenomics CODEC — 22 enterprise primitives with ARK-curated references to O*NET, SFIA and WEF taxonomies, reviewed 6 September 2026; not validated against current external releases.",
   "Vulnerability": "5-level classification of how much of your role today's AI tools can already do.",
   "Archetype": "Your dominant work style: Architect (designs systems), Orchestrator (coordinates people), or Conductor (executes plays).",
   "LHCS": "Live Human-Capital Signal. Real-time pulse of your trajectory across the platform.",
@@ -128,6 +135,7 @@ export default function Dashboard() {
           arkScore: idResp.arkScore, jstIndex: idResp.jstIndex, ccmi: idResp.ccmi,
           ccmiTier: idResp.ccmiTier, vmstLevel: idResp.vmstLevel, typology: idResp.typology,
           arkIdString: idResp.arkIdString, resumeReplacementPct: idResp.resumeReplacementPct,
+          provenance: idResp.provenance, dataAsOf: idResp.dataAsOf,
         });
         if (idResp.pillars) setPillars(idResp.pillars);
         if (idResp.lhcs) setLhcs(idResp.lhcs);
@@ -209,7 +217,7 @@ export default function Dashboard() {
         <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
         <p className="font-display text-lg text-white mb-1">Crunching your career data…</p>
         <p className="text-sm text-muted-foreground font-sans max-w-md text-center">
-          We're matching your résumé against 22 CODEC primitives and live labour-market signals. This usually takes a couple of seconds.
+          We're matching your résumé against 22 CODEC primitives and ARK's curated scoring rules. This usually takes a couple of seconds.
         </p>
       </div>
     );
@@ -238,7 +246,7 @@ export default function Dashboard() {
             type="button"
             onClick={() => document.querySelector<HTMLButtonElement>('[data-testid="button-launch-onboarding"]')?.click()}
             data-testid="button-empty-take-tour"
-            className="inline-flex items-center justify-center gap-2 border border-primary/40 text-primary hover:bg-primary/10 font-mono uppercase tracking-wider px-6 py-3 text-sm font-medium rounded-md transition-all"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-mono uppercase tracking-wider text-muted-foreground transition-colors hover:text-primary"
           >
             Take the 60-second tour
           </button>
@@ -283,7 +291,6 @@ export default function Dashboard() {
   const heroLabel = identity?.arkScore !== undefined ? "ARK Score" : "JST Score";
   const previousHero = assessment.previousScore ?? Math.round(heroScore * 0.95);
   const heroDelta = heroScore - previousHero;
-  const percentile = assessment.percentileRank ?? 72;
 
   return (
     <div className="w-full max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -301,38 +308,43 @@ export default function Dashboard() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <Link href="/ark/history" className="inline-flex items-center justify-center border border-secondary/50 text-secondary hover:bg-secondary/10 font-mono text-xs uppercase tracking-widest h-10 px-4 rounded-md" data-testid="link-ark-history">
-            <History className="w-4 h-4 mr-2" /> ARK History
-          </Link>
-          {FEATURES.bookCompanion && (
-            <Link href="/book" className="inline-flex items-center justify-center border border-primary/50 text-primary hover:bg-primary/10 font-mono text-xs uppercase tracking-widest h-10 px-4 rounded-md" data-testid="link-book-companion">
-              <BookOpen className="w-4 h-4 mr-2" /> Book Companion
+        <details className="relative">
+          <summary className="cursor-pointer list-none border border-white/15 px-4 py-2 text-center font-mono text-xs uppercase tracking-widest text-muted-foreground hover:border-primary/50 hover:text-primary">
+            More tools
+          </summary>
+          <div className="absolute right-0 z-20 mt-2 flex min-w-52 flex-col gap-2 rounded-lg border border-white/15 bg-card p-3 shadow-xl">
+            <Link href="/ark/history" className="inline-flex items-center justify-center border border-secondary/50 text-secondary hover:bg-secondary/10 font-mono text-xs uppercase tracking-widest h-10 px-4 rounded-md" data-testid="link-ark-history">
+              <History className="w-4 h-4 mr-2" /> ARK History
             </Link>
-          )}
-          {FEATURES.executiveReport && (
-            <Link href="/report" className="inline-flex items-center justify-center border border-primary/50 text-primary hover:bg-primary/10 font-mono text-xs uppercase tracking-widest h-10 px-4 rounded-md">
-              <FileText className="w-4 h-4 mr-2" /> Export Brief
-            </Link>
-          )}
-          {FEATURES.arkResume && (
-            <Link href="/ark-resume" className="inline-flex items-center justify-center border border-secondary/50 text-secondary hover:bg-secondary/10 font-mono text-xs uppercase tracking-widest h-10 px-4 rounded-md" data-testid="link-ark-resume">
-              <FileText className="w-4 h-4 mr-2" /> ARK Resume
-            </Link>
-          )}
-        </div>
+            {FEATURES.bookCompanion && (
+              <Link href="/book" className="inline-flex items-center justify-center border border-primary/50 text-primary hover:bg-primary/10 font-mono text-xs uppercase tracking-widest h-10 px-4 rounded-md" data-testid="link-book-companion">
+                <BookOpen className="w-4 h-4 mr-2" /> Book Companion
+              </Link>
+            )}
+            {FEATURES.executiveReport && (
+              <Link href="/report" className="inline-flex items-center justify-center border border-primary/50 text-primary hover:bg-primary/10 font-mono text-xs uppercase tracking-widest h-10 px-4 rounded-md">
+                <FileText className="w-4 h-4 mr-2" /> Export Brief
+              </Link>
+            )}
+            {FEATURES.arkResume && (
+              <Link href="/ark-resume" className="inline-flex items-center justify-center border border-secondary/50 text-secondary hover:bg-secondary/10 font-mono text-xs uppercase tracking-widest h-10 px-4 rounded-md" data-testid="link-ark-resume">
+                <FileText className="w-4 h-4 mr-2" /> ARK Resume
+              </Link>
+            )}
+          </div>
+        </details>
       </div>
 
-      {/* Everything below the title is one set of explorable tabs. The tab bar
-          sits at the very top so subscribers can't miss it; unexplored tabs
-          throb in their accent hue until clicked, and each one explains itself
-          on hover. Hero + live strip stay visible across all three tabs. */}
+      {/* Everything below the title is one set of explorable tabs. The current
+          tab stays visually primary while the other readings remain available
+          without competing with the hero action. Hero + live strip stay
+          available across all three tabs. */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-8">
         <TabsList className="w-full grid grid-cols-3 gap-2 bg-transparent border-0 h-auto p-0" data-testid="tabs-dashboard">
           <TabsTrigger
             value="profile"
             data-testid="tab-profile"
-            className={`font-mono text-xs sm:text-sm uppercase tracking-widest py-3 rounded-md border transition-colors data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:border-primary/50 data-[state=inactive]:text-muted-foreground ${activeTab !== "profile" ? "animate-throb-glow !text-primary bg-primary/10 border-primary/50" : ""}`}
+            className="font-mono text-xs sm:text-sm uppercase tracking-widest py-3 rounded-md border transition-colors data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:border-primary/50 data-[state=inactive]:text-muted-foreground hover:border-primary/30 hover:text-primary"
           >
             <Tooltip delayDuration={150}>
               <TooltipTrigger asChild>
@@ -347,7 +359,7 @@ export default function Dashboard() {
           <TabsTrigger
             value="risk"
             data-testid="tab-risk"
-            className={`font-mono text-xs sm:text-sm uppercase tracking-widest py-3 rounded-md border transition-colors data-[state=active]:bg-destructive/15 data-[state=active]:text-destructive data-[state=active]:border-destructive/50 data-[state=inactive]:text-muted-foreground ${activeTab !== "risk" ? "animate-throb-glow-crimson !text-destructive bg-destructive/10 border-destructive/50" : ""}`}
+            className="font-mono text-xs sm:text-sm uppercase tracking-widest py-3 rounded-md border transition-colors data-[state=active]:bg-destructive/15 data-[state=active]:text-destructive data-[state=active]:border-destructive/50 data-[state=inactive]:text-muted-foreground hover:border-destructive/30 hover:text-destructive"
           >
             <Tooltip delayDuration={150}>
               <TooltipTrigger asChild>
@@ -362,7 +374,7 @@ export default function Dashboard() {
           <TabsTrigger
             value="path"
             data-testid="tab-path"
-            className={`font-mono text-xs sm:text-sm uppercase tracking-widest py-3 rounded-md border transition-colors data-[state=active]:bg-secondary/15 data-[state=active]:text-secondary data-[state=active]:border-secondary/50 data-[state=inactive]:text-muted-foreground ${activeTab !== "path" ? "animate-throb-glow-emerald !text-secondary bg-secondary/10 border-secondary/50" : ""}`}
+            className="font-mono text-xs sm:text-sm uppercase tracking-widest py-3 rounded-md border transition-colors data-[state=active]:bg-secondary/15 data-[state=active]:text-secondary data-[state=active]:border-secondary/50 data-[state=inactive]:text-muted-foreground hover:border-secondary/30 hover:text-secondary"
           >
             <Tooltip delayDuration={150}>
               <TooltipTrigger asChild>
@@ -396,7 +408,7 @@ export default function Dashboard() {
               <span className="text-lg font-mono text-muted-foreground">/ {heroMax}</span>
             </div>
             <p className="mt-3 text-base text-white/90 font-sans leading-relaxed">
-              You're a <span className="font-display text-secondary">{assessment.readinessProfile}</span> in the top <span className="text-primary font-bold">{100 - percentile}%</span> for your role.
+              Your current ARK working archetype is <span className="font-display text-secondary">{assessment.readinessProfile}</span>.
               {heroDelta !== 0 && (
                 <span className={heroDelta > 0 ? "text-secondary" : "text-destructive"}>
                   {" "}{heroDelta > 0 ? "↑" : "↓"} {Math.abs(heroDelta)} since last reading.
@@ -458,7 +470,7 @@ export default function Dashboard() {
             <Link
               href="/pathways"
               data-testid="link-hero-pathways"
-              className="inline-flex items-center gap-1.5 text-xs font-mono uppercase tracking-widest text-secondary hover:text-secondary/80 transition-colors"
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-secondary px-5 py-3 text-xs font-mono font-bold uppercase tracking-widest text-secondary-foreground shadow-lg shadow-secondary/10 transition-transform hover:-translate-y-0.5"
             >
               See pivot opportunities <ArrowUpRight className="h-3 w-3" />
             </Link>
@@ -467,7 +479,12 @@ export default function Dashboard() {
       </div>
 
       {/* Live activity strip */}
-      <div className="glass-card p-5 rounded-xl border border-primary/30" data-testid="card-ark-flywheel">
+      <details className="glass-card rounded-xl border border-primary/30" data-testid="card-ark-flywheel">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 text-sm font-mono uppercase tracking-widest text-primary">
+          <span className="flex items-center gap-3"><Activity className="h-5 w-5" /> Live ARK activity</span>
+          <span className="text-[10px] text-muted-foreground">View details</span>
+        </summary>
+        <div className="border-t border-primary/20 p-5">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="flex items-center gap-3">
             <motion.div
@@ -498,6 +515,10 @@ export default function Dashboard() {
                 {lastIdentity?.arkScore ?? identity?.arkScore ?? snapshot?.arkScore ?? 0}
                 <span className="text-xs text-muted-foreground/70 font-mono ml-1">/600</span>
               </motion.p>
+              <p className="mt-1 text-[9px] font-mono text-muted-foreground" data-testid="live-ark-provenance">
+                Source: {lastIdentity?.identity?.provenance?.source ?? identity?.provenance?.source ?? snapshot?.provenance?.source ?? "not supplied"}
+                {" · "}Data as of {lastIdentity?.identity?.dataAsOf ?? identity?.dataAsOf ?? snapshot?.dataAsOf ?? "not supplied"}
+              </p>
             </div>
           </div>
           <div className="flex-1 min-w-0">
@@ -527,7 +548,8 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-      </div>
+        </div>
+      </details>
 
         {/* PROFILE — who you are: identity, scores breakdown, archetype, primitives */}
         <TabsContent value="profile" className="mt-6 space-y-8 focus-visible:outline-none" data-testid="tab-content-profile">
@@ -548,17 +570,21 @@ export default function Dashboard() {
               jobsScore={assessment.jstJobs}
               skillsScore={assessment.jstSkills}
               talentScore={assessment.jstTalent}
-              percentileRank={assessment.percentileRank ?? 72}
-              previousScore={assessment.previousScore ?? Math.round((identity?.jstIndex ?? assessment.jstTotal) * 0.95)}
-              industryAverage={assessment.industryAverage ?? 195}
+              percentileRank={assessment.percentileRank}
+              previousScore={assessment.previousScore}
+              industryAverage={assessment.industryAverage}
               contextCraftLevel={assessment.contextCraftLevel || undefined}
               contextCraftMultiplier={assessment.contextCraftMultiplier || undefined}
               rawTotal={assessment.jstRawTotal || undefined}
+              provenance={assessment.provenance}
+              dataAsOf={assessment.dataAsOf}
             />
             <JSTRadar
               jobsScore={assessment.jstJobs}
               skillsScore={assessment.jstSkills}
               talentScore={assessment.jstTalent}
+              provenance={assessment.provenance}
+              dataAsOf={assessment.dataAsOf}
             />
           </div>
 

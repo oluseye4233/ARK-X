@@ -49,7 +49,7 @@ function parseNarrative(raw: string): Omit<ResumeNarrative, "generatedAt" | "cac
   }
 }
 
-const PRO_TIERS: SubscriptionPlan[] = ["INDIVIDUAL_PRO", "SCHOOL_STUDENT", "ENTERPRISE"];
+const PRO_TIERS: SubscriptionPlan[] = ["INDIVIDUAL_PRO", "ARCHITECT", "SCHOOL_STUDENT", "ENTERPRISE"];
 
 export class ProTierRequiredError extends Error {
   status = 402;

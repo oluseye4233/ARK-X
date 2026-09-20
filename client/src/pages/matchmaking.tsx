@@ -296,8 +296,34 @@ export default function MatchmakingPage() {
   const [typeFilter, setTypeFilter] = useState<"ALL" | "JOB" | "PROJECT">("ALL");
   const [showPost, setShowPost] = useState(false);
 
-  const { data, isLoading } = useQuery<OpportunityRow[]>({
+  const { data, isLoading, isError, error, refetch } = useQuery<OpportunityRow[]>({
     queryKey: ["/api/matchmaking/opportunities"],
+  });
+  const {
+    data: candidateIntroductions,
+    isError: candidateIntroductionsError,
+    error: candidateIntroductionsQueryError,
+    refetch: retryCandidateIntroductions,
+  } = useQuery<any[]>({
+    queryKey: ["/api/matchmaking/introductions/candidate"],
+    enabled: true,
+  });
+  const {
+    data: ownerIntroductions,
+    isError: ownerIntroductionsError,
+    error: ownerIntroductionsQueryError,
+    refetch: retryOwnerIntroductions,
+  } = useQuery<any[]>({
+    queryKey: ["/api/matchmaking/introductions/owner"],
+    enabled: true,
+  });
+  const introductionAction = useMutation({
+    mutationFn: async ({ id, action }: { id: string; action: "accept" | "decline" | "cancel" }) =>
+      (await apiRequest("POST", `/api/matchmaking/introductions/${id}/${action}`, {})).json(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/matchmaking/introductions/candidate"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/matchmaking/introductions/owner"] });
+    },
   });
 
   const rows = useMemo(() => {
@@ -305,6 +331,31 @@ export default function MatchmakingPage() {
     const filtered = typeFilter === "ALL" ? list : list.filter((r) => r.opportunity.type === typeFilter);
     return [...filtered].sort((a, b) => b.match.matchScore - a.match.matchScore);
   }, [data, typeFilter]);
+
+  if (isError || candidateIntroductionsError || ownerIntroductionsError) {
+    const queryError = error ?? candidateIntroductionsQueryError ?? ownerIntroductionsQueryError;
+    return (
+      <div className="mx-auto max-w-3xl space-y-4 p-4 md:p-8" data-testid="text-error">
+        <Card className="glass-card border-destructive/40">
+          <CardContent className="space-y-4 py-12 text-center">
+            <p className="text-sm text-destructive">
+              {queryError instanceof Error ? queryError.message : "The talent exchange could not be loaded."}
+            </p>
+            <Button
+              onClick={() => {
+                refetch();
+                retryCandidateIntroductions();
+                retryOwnerIntroductions();
+              }}
+              data-testid="button-retry"
+            >
+              Retry exchange
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
@@ -318,12 +369,29 @@ export default function MatchmakingPage() {
             JST evidence, and archetype fit. No keywords, no self-claims.
           </p>
         </div>
-        <Button onClick={() => setShowPost(true)} data-testid="button-post-opportunity">
+         <Button variant={rows.length === 0 ? "default" : "outline"} onClick={() => setShowPost(true)} data-testid="button-post-opportunity">
           <PlusCircle className="mr-2 h-4 w-4" /> Post Opportunity
         </Button>
       </div>
 
-      <div className="flex items-center gap-2">
+       {rows[0] && (
+         <div className="glass-card flex flex-col gap-4 rounded-xl border-2 border-cyan-500/40 bg-cyan-500/5 p-5 sm:flex-row sm:items-center sm:justify-between" data-testid="matchmaking-primary-action">
+           <div>
+             <p className="text-[10px] font-mono uppercase tracking-widest text-cyan-300">Best verified match</p>
+             <h2 className="mt-1 text-lg font-semibold">{rows[0].opportunity.title}</h2>
+             <p className="mt-1 text-sm text-muted-foreground">Review the opportunity and decide whether to register your interest.</p>
+           </div>
+           <Link href={`/matchmaking/${rows[0].opportunity.id}`} className="inline-flex items-center justify-center rounded-lg bg-cyan-400 px-5 py-3 text-sm font-mono font-bold uppercase tracking-wider text-slate-950 hover:bg-cyan-300" data-testid="link-primary-match">
+             Review best match <ArrowUpRight className="ml-2 h-4 w-4" />
+           </Link>
+         </div>
+       )}
+
+       <details className="group">
+       <summary className="cursor-pointer list-none text-xs font-mono uppercase tracking-widest text-muted-foreground hover:text-cyan-300">
+         <span className="group-open:text-cyan-300">Filter the exchange</span>
+       </summary>
+       <div className="flex items-center gap-2 mt-3">
         {(["ALL", "JOB", "PROJECT"] as const).map((t) => (
           <Button
             key={t}
@@ -335,7 +403,35 @@ export default function MatchmakingPage() {
             {t === "ALL" ? "All" : t === "JOB" ? "Jobs" : "Projects"}
           </Button>
         ))}
-      </div>
+       </div>
+       </details>
+
+      {((candidateIntroductions?.length ?? 0) > 0 || (ownerIntroductions?.length ?? 0) > 0) && (
+        <Card className="glass-card border-cyan-500/20">
+          <CardHeader><CardTitle className="text-base">Mutual introduction inbox</CardTitle></CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {(candidateIntroductions ?? []).map((item) => (
+              <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded border border-white/10 p-3">
+                <span>
+                  <strong>{item.opportunity?.title ?? "Opportunity"}</strong> · {item.opportunity?.organization ?? "Organization"} · {item.opportunity?.type ?? "Opportunity"}
+                  {item.opportunity && ` · ${item.opportunity.remote ? "Remote" : item.opportunity.location || "On-site"}`}<br />
+                  <span className="text-xs text-muted-foreground">Requested by {item.employerLabel} · CXS {item.cxs} · verified evidence only</span> <Badge variant="outline">{item.status}</Badge>
+                  {item.evidence?.length > 0 && <span className="ml-2 text-xs text-muted-foreground">{item.evidence.map((e: any) => `${e.cardId} ${e.tier}`).join(", ")}</span>}
+                  {item.rationale?.length > 0 && <span className="block text-xs text-muted-foreground">{item.rationale.join(" ")}</span>}
+                </span>
+                {item.status === "PENDING" && <span className="flex gap-2"><Button size="sm" onClick={() => introductionAction.mutate({ id: item.id, action: "accept" })}>Accept</Button><Button size="sm" variant="outline" onClick={() => introductionAction.mutate({ id: item.id, action: "decline" })}>Decline</Button></span>}
+              </div>
+            ))}
+            {(ownerIntroductions ?? []).map((item) => (
+              <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded border border-white/10 p-3">
+                <span>Requested introduction · CXS {item.cxs} · <Badge variant="outline">{item.status}</Badge></span>
+                {item.status === "PENDING" && <Button size="sm" variant="outline" onClick={() => introductionAction.mutate({ id: item.id, action: "cancel" })}>Cancel</Button>}
+              </div>
+            ))}
+            <p className="text-xs text-muted-foreground">Acceptance records mutual consent only; ARK does not disclose contact details.</p>
+          </CardContent>
+        </Card>
+      )}
 
       {isLoading ? (
         <div className="flex items-center justify-center py-24 text-muted-foreground">

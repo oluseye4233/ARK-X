@@ -269,7 +269,12 @@ export async function recalcArkForUser(opts: RecalcOptions): Promise<RecalcResul
   let cappedDelta = rawDelta;
   let intendedCap: number | null = null;
   let capReason: string | null = null;
-  if (!opts.bypassCaps && rawDelta > 0) {
+  // Sync-only triggers (manual.recompute, backfill) must NEVER award positive
+  // ARK — even when the caller passes bypassCaps (admin backfill). bypassCaps
+  // only exempts flywheel throttles (CCGE/SPHINX), not the downward-sync-only
+  // invariant.
+  const isSyncOnlyTrigger = opts.trigger === "manual.recompute" || opts.trigger === "backfill";
+  if ((!opts.bypassCaps || isSyncOnlyTrigger) && rawDelta > 0) {
     const r = await applyCaps(opts.userId, opts.trigger, rawDelta);
     cappedDelta = r.cappedDelta;
     intendedCap = r.intendedCap;

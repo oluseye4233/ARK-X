@@ -1,9 +1,49 @@
 import fs from "fs";
 import path from "path";
 import { pool } from "./db";
+import { compareMigrationInventory, type MigrationStatus } from "./migrationStatus";
 
 const MIGRATIONS_DIR = path.resolve(process.cwd(), "migrations");
 const ADVISORY_LOCK_KEY = 0x41524b4d; // "ARKM" — serializes concurrent migrators
+let startupLog = "[migrate] startup migration check has not completed";
+
+export function getMigrationFiles(): string[] {
+  if (!fs.existsSync(MIGRATIONS_DIR)) return [];
+  return fs
+    .readdirSync(MIGRATIONS_DIR)
+    .filter((f) => f.endsWith(".sql"))
+    .sort();
+}
+
+export type LiveMigrationStatus = MigrationStatus & {
+  startupLog: string;
+};
+
+/**
+ * Read-only health check used after publishing. It compares the migration
+ * files bundled into this exact deployment with its database tracking table.
+ */
+export async function getLiveMigrationStatus(): Promise<LiveMigrationStatus> {
+  const files = getMigrationFiles();
+  try {
+    const { rows } = await pool.query<{ filename: string }>(
+      "SELECT filename FROM schema_migrations",
+    );
+    return {
+      ...compareMigrationInventory(files, rows.map((row) => row.filename)),
+      startupLog,
+    };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      repositoryCount: files.length,
+      appliedCount: 0,
+      firstMissingMigration: files[0] ?? null,
+      startupLog: `${startupLog}; tracking table read failed: ${detail}`,
+    };
+  }
+}
 
 /**
  * Applies every pending `migrations/*.sql` file to the connected database, in
@@ -19,17 +59,16 @@ const ADVISORY_LOCK_KEY = 0x41524b4d; // "ARKM" — serializes concurrent migrat
  */
 export async function applyMigrations(): Promise<void> {
   if (!fs.existsSync(MIGRATIONS_DIR)) {
-    console.log("[migrate] no migrations directory found, skipping");
+    startupLog = "[migrate] no migrations directory found, skipping";
+    console.log(startupLog);
     return;
   }
 
-  const files = fs
-    .readdirSync(MIGRATIONS_DIR)
-    .filter((f) => f.endsWith(".sql"))
-    .sort();
+  const files = getMigrationFiles();
 
   if (files.length === 0) {
-    console.log("[migrate] no migration files found, skipping");
+    startupLog = "[migrate] no migration files found, skipping";
+    console.log(startupLog);
     return;
   }
 
@@ -51,7 +90,8 @@ export async function applyMigrations(): Promise<void> {
     const pending = files.filter((f) => !applied.has(f));
 
     if (pending.length === 0) {
-      console.log(`[migrate] up to date (${files.length} migrations applied)`);
+      startupLog = `[migrate] up to date (${files.length} migrations applied)`;
+      console.log(startupLog);
       return;
     }
 
@@ -76,9 +116,9 @@ export async function applyMigrations(): Promise<void> {
       }
     }
 
-    console.log(
-      `[migrate] applied ${pending.length} pending migration(s); ${files.length} total`,
-    );
+    startupLog =
+      `[migrate] applied ${pending.length} pending migration(s); ${files.length} total`;
+    console.log(startupLog);
   } finally {
     await client.query("SELECT pg_advisory_unlock($1)", [ADVISORY_LOCK_KEY]).catch(() => {});
     client.release();

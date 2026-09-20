@@ -22,9 +22,35 @@ start, or run `npm run db:migrate`. Files execute as ONE multi-statement query
 idempotent (CREATE TABLE IF NOT EXISTS / ADD COLUMN IF NOT EXISTS) so a lost
 tracking table only costs a harmless re-run.
 
+Post-publish verification must compare the migration files bundled into the
+running deployment against its own `schema_migrations` rows using a read-only
+query. Keep the result instance-local and include the startup migration summary.
+
+**Why:** Autoscaled instances may overlap during rollout, so a checker must not
+depend on shared process memory, mutate production, or compare production
+against a workspace checkout that may differ from the live build.
+
+**How to apply:** Call the published app's migration health check after a
+publish and fail on its first missing filename. Treat an unreadable tracking
+table as unhealthy rather than creating or repairing it from the checker.
+
 **Naming:** monotonic, unique 4-digit prefix. `ls migrations/*.sql`, take max
 prefix + 1 — never reuse an ordinal. The runner sorts by full filename, so
 duplicate prefixes get lexicographic order, which may not match intent.
+
+When reconciling branches that already published different migrations under the
+same ordinal, preserve both histories rather than renaming one in place. Add the
+incoming DDL under the next unused ordinal and rehearse upgrades against each
+observed `schema_migrations` ledger plus a clean database.
+
+**Why:** A filename-tracked database may already consider one branch's filename
+applied. Rewriting published history can leave the ledger and actual schema
+describing different realities.
+
+**How to apply:** Inventory migration files and database ledger rows before the
+merge, make incoming DDL idempotent under a new filename, and test every known
+history. An application rollback cannot undo additive DDL safely; use feature
+flags to disable the new surface while repairing migration state.
 
 **Gotcha:** `current_role` is a Postgres reserved word — quote it
 (`"current_role"`) in raw SQL. Drizzle auto-quotes in schema definitions.

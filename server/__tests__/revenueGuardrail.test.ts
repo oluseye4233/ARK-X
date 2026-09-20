@@ -24,7 +24,7 @@ test("Phase O: cost cap == round(price × 10%) for every paid tier", () => {
   // than a 10%-of-list-price derivation.
   assert.equal(AI_TIER_COST_BUDGET_CENTS.INDIVIDUAL_FREE, 30, "FREE absolute $0.30 ceiling");
   assert.equal(AI_TIER_COST_BUDGET_CENTS.ENTERPRISE, 2000, "ENTERPRISE bespoke $20/seat ceiling");
-  for (const planKey of ["INDIVIDUAL_PRO", "SCHOOL_STUDENT"] as const) {
+  for (const planKey of ["INDIVIDUAL_PRO", "ARCHITECT", "SCHOOL_STUDENT"] as const) {
     const plan = SUBSCRIPTION_PLANS[planKey];
     const cap = AI_TIER_COST_BUDGET_CENTS[planKey];
     const expected = Math.round(plan.price * 0.10 * 100);
@@ -79,7 +79,7 @@ test("Phase O: FREE plan is economy-only, useClaude disabled, kcse=1/day", () =>
 });
 
 test("Phase O: every paid tier permits both models (no accidental Sonnet lockout)", () => {
-  for (const planKey of ["INDIVIDUAL_PRO", "SCHOOL_STUDENT", "ENTERPRISE"] as const) {
+  for (const planKey of ["INDIVIDUAL_PRO", "ARCHITECT", "SCHOOL_STUDENT", "ENTERPRISE"] as const) {
     const policy = AI_TIER_MODEL_POLICY[planKey];
     assert.ok(policy.allowedModels.includes(AI_MODELS.HAIKU), `${planKey} missing Haiku`);
     assert.ok(policy.allowedModels.includes(AI_MODELS.SONNET), `${planKey} missing Sonnet`);

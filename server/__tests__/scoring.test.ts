@@ -12,8 +12,12 @@ import {
   computeLhcs,
   buildSnapshot,
   typologyFromArchetypes,
+  MARKET_SCORE_DATA_AS_OF,
+  MARKET_SCORE_PROVENANCE,
+  marketScoreMetadata,
 } from "../scoringEngine";
 import { ARK_TIERS, CCMI_TIER_BANDS, VMST_LEVELS } from "@shared/schema";
+import { readFileSync } from "node:fs";
 
 // ─────────────────────────────────────────────────────────────
 // computeJst — formula + clamp + boundary inputs
@@ -278,6 +282,90 @@ test("buildSnapshot: ARK invariant holds (arkScore === jstIndex + ccmi)", () => 
   assert.equal(snap.arkScore, snap.jstIndex + snap.ccmi);
   assert.equal(snap.typology, "A");
   assert.match(snap.arkIdString!, /^ARK-[A-Z]{3}-T[0-5]-[AOC]-L[0-4]-[A-F0-9]{6}$/);
+  assert.equal(snap.dataAsOf, MARKET_SCORE_DATA_AS_OF);
+  assert.deepEqual(snap.provenance, MARKET_SCORE_PROVENANCE);
+});
+
+test("market-sensitive scoring metadata is dated and does not claim a live feed", () => {
+  const metadata = marketScoreMetadata();
+  assert.match(metadata.dataAsOf, /^\d{4}-\d{2}-\d{2}$/);
+  assert.ok(!Number.isNaN(Date.parse(metadata.dataAsOf)));
+  assert.ok(metadata.provenance.source.length > 0);
+  assert.ok(metadata.provenance.methodology.length > 0);
+  assert.match(metadata.provenance.methodology, /not a live labour-market data feed/i);
+});
+
+test("public score surfaces do not make unsupported live labour-market claims", () => {
+  const files = [
+    "client/src/pages/home.tsx",
+    "client/src/pages/assessment.tsx",
+    "client/src/pages/dashboard.tsx",
+    "client/src/components/dashboard/JSTRadar.tsx",
+    "client/src/components/OnboardingTour.tsx",
+    "client/src/pages/demo-tour.tsx",
+    "client/src/pages/demo.tsx",
+    "client/src/components/tour/PlanWalkthroughs.tsx",
+    "client/src/pages/report.tsx",
+    "client/src/pages/adviser-report.tsx",
+    "client/src/lib/arkAdviserNarrative.ts",
+    "client/src/components/dashboard/JSTGauge.tsx",
+    "client/src/components/dashboard/JnomicsCardList.tsx",
+  ];
+  for (const file of files) {
+    const content = readFileSync(file, "utf8");
+    assert.doesNotMatch(content, /live labou?r.market (data|signals?)/i, file);
+    assert.doesNotMatch(content, /benchmarked vs the live market/i, file);
+    assert.doesNotMatch(content, /JST measures market position/i, file);
+    assert.doesNotMatch(content, /market demand/i, file);
+    assert.doesNotMatch(content, /how the market values you/i, file);
+    assert.doesNotMatch(content, /against the market/i, file);
+  }
+  const dashboard = readFileSync("client/src/pages/dashboard.tsx", "utf8");
+  assert.doesNotMatch(dashboard, /percentileRank=\{assessment\.percentileRank \?\?/);
+  assert.doesNotMatch(dashboard, /industryAverage=\{assessment\.industryAverage \?\?/);
+  assert.match(dashboard, /<JSTGauge[\s\S]*?provenance=\{assessment\.provenance\}[\s\S]*?dataAsOf=\{assessment\.dataAsOf\}/);
+  const walkthrough = readFileSync("client/src/components/tour/PlanWalkthroughs.tsx", "utf8");
+  assert.doesNotMatch(walkthrough, /\b91st percentile\b/i);
+  assert.match(walkthrough, /ARK Onecraft curated scoring model; data as of 6 September 2026/);
+  const report = readFileSync("client/src/pages/report.tsx", "utf8");
+  assert.match(report, /report-score-provenance/);
+  assert.match(report, /Data as of/);
+  const adviser = readFileSync("client/src/pages/adviser-report.tsx", "utf8");
+  assert.match(adviser, /adviser-score-provenance/);
+  assert.match(adviser, /Data as of/);
+  assert.doesNotMatch(
+    readFileSync("client/src/lib/arkAdviserNarrative.ts", "utf8"),
+    /what the job market (values|will pay).*today/i,
+  );
+  assert.match(dashboard, /live-ark-provenance/);
+  for (const demoFile of ["client/src/pages/demo.tsx", "client/src/pages/demo-tour.tsx"]) {
+    const demo = readFileSync(demoFile, "utf8");
+    assert.doesNotMatch(demo, /percentileRank=\{/);
+    assert.doesNotMatch(demo, /industryAverage=\{/);
+    assert.match(demo, /dataAsOf="2026-09-06"/);
+    assert.doesNotMatch(demo, /percentileRank:\s*91/);
+  }
+  const gauge = readFileSync("client/src/components/dashboard/JSTGauge.tsx", "utf8");
+  assert.match(gauge, /jst-gauge-provenance/);
+  assert.match(gauge, /Data as of/);
+  const roleGuideServer = readFileSync("server/ai/jobRoleGuide.ts", "utf8");
+  const roleGuideClient = readFileSync("client/src/components/dashboard/JnomicsCardList.tsx", "utf8");
+  assert.match(roleGuideServer, /jobRoleGuideMetadata\(gen\.model\)/);
+  assert.match(roleGuideServer, /not verified against current O\*NET, SFIA, WEF, or labour-market dataset releases/i);
+  assert.match(roleGuideClient, /job-role-guide-provenance/);
+  assert.match(roleGuideClient, /Data as of \{guide\.dataAsOf\}/);
+  assert.doesNotMatch(roleGuideClient, />WEF outlook</i);
+});
+
+test("REST and live score contracts attach the canonical metadata", () => {
+  const routes = readFileSync("server/routes.ts", "utf8");
+  const orchestrator = readFileSync("server/orchestrator.ts", "utf8");
+  assert.match(routes, /api\/ark\/identity[\s\S]*?\.\.\.marketScoreMetadata\(\)/);
+  assert.match(routes, /api\/ark\/history[\s\S]*?\.\.\.marketScoreMetadata\(\)/);
+  assert.match(routes, /api\/report\/shared\/:token[\s\S]*?\.\.\.marketScoreMetadata\(\)/);
+  assert.match(routes, /event: ark\.snapshot[\s\S]*?\.\.\.marketScoreMetadata\(\)/);
+  assert.match(orchestrator, /provenance: snap\.provenance/);
+  assert.match(orchestrator, /dataAsOf: snap\.dataAsOf/);
 });
 
 test("buildSnapshot: when no archetypes → typology=null, arkIdString=null", () => {

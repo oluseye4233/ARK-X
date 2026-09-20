@@ -130,6 +130,10 @@ class Orchestrator {
     }
   }
 
+  publishPersisted(event: ArkEvent): void {
+    this.broadcast(event.userId, event);
+  }
+
   async broadcastIdentity(userId: string, result: RecalcResult) {
     // Build a *complete* identity payload so subscribed clients can update
     // their dashboard cards in place — no follow-up GET /api/ark/identity or
@@ -191,6 +195,8 @@ class Orchestrator {
       vmstLevel: snap.vmstLevel,
       arkTier: snap.arkTierKey,
       arkIdString: snap.arkIdString,
+      provenance: snap.provenance,
+      dataAsOf: snap.dataAsOf,
       appliedDelta: result.appliedDelta,
       capReason: result.capReason,
       // Full identity block — mirrors GET /api/ark/identity response shape so
@@ -205,6 +211,8 @@ class Orchestrator {
         typology: snap.typology,
         arkIdString: snap.arkIdString,
         resumeReplacementPct: snap.resumeReplacementPct,
+        provenance: snap.provenance,
+        dataAsOf: snap.dataAsOf,
       },
       pillars: pillarsBlock,
       lhcs: lhcsBlock,

@@ -6,12 +6,13 @@ import { z } from "zod";
 export const SUBSCRIPTION_PLANS = {
   INDIVIDUAL_FREE: {
     key: "INDIVIDUAL_FREE",
-    label: "Individual Free",
+    label: "Explorer",
     type: "individual",
     price: 0,
+    annualPrice: 0,
     period: "forever",
     color: "#888888",
-    features: ["1 resume upload", "Basic JST Score", "Vulnerability Level"],
+    features: ["Resume upload & analysis", "Automation-vulnerability read-out", "Basic ARK REPORT one-pager", "Browse training materials"],
     limits: { uploadsPerMonth: 1, dashboardAccess: true, pathwaysAccess: false, enterpriseAccess: false, reportAccess: false, forgeCards: false, trainingProviderAccess: false },
   },
   INDIVIDUAL_EXPLORER: {
@@ -19,6 +20,7 @@ export const SUBSCRIPTION_PLANS = {
     label: "Explorer",
     type: "individual",
     price: 0,
+    annualPrice: 0,
     period: "forever",
     color: "#22C55E",
     features: ["1 resume upload", "Basic JST Score", "Vulnerability Level", "Suggested Training Providers", "JST-matched upskilling path"],
@@ -28,36 +30,51 @@ export const SUBSCRIPTION_PLANS = {
     key: "INDIVIDUAL_PRO",
     label: "Individual Pro",
     type: "individual",
-    price: 29,
+    price: 29.99,
+    annualPrice: 299,
     period: "month",
     color: "#00B4D8",
-    features: ["Unlimited uploads", "Full JST Dashboard", "12-Vector Radar", "Career Pathways", "FORGE Cards", "Executive Report", "Context Craft Integration", "Suggested Training Providers"],
+    features: ["Everything in Explorer", "Live ARK Score", "CCGE card game sessions", "Verification Quests (O*NET/SFIA/WEF)"],
     limits: { uploadsPerMonth: -1, dashboardAccess: true, pathwaysAccess: true, enterpriseAccess: false, reportAccess: true, forgeCards: true, trainingProviderAccess: true },
   },
   SCHOOL_STUDENT: {
     key: "SCHOOL_STUDENT",
-    label: "School / Student",
+    label: "Schools",
     type: "school",
-    price: 9,
+    price: 9.99,
+    annualPrice: 99,
     period: "month",
     color: "#AA44FF",
-    features: ["Unlimited uploads", "Full JST Dashboard", "12-Vector Radar", "Career Pathways", "FORGE Cards", "Executive Report", "Context Craft Integration", "Institution Dashboard", "Suggested Training Providers"],
+    features: ["Everything in Architect (per seat)", "Cohort management", "Curriculum-to-labour-market alignment", "Graduate readiness forecasting"],
+    limits: { uploadsPerMonth: -1, dashboardAccess: true, pathwaysAccess: true, enterpriseAccess: false, reportAccess: true, forgeCards: true, trainingProviderAccess: true },
+  },
+  ARCHITECT: {
+    key: "ARCHITECT",
+    label: "Architect",
+    type: "individual",
+    price: 49.99,
+    annualPrice: 499,
+    period: "month",
+    color: "#F59E0B",
+    features: ["Everything in Pro", "FORGE.BONSAI production Harness", "Creators Studio, Code DJ, Host DJ", "SPARTAN certification"],
     limits: { uploadsPerMonth: -1, dashboardAccess: true, pathwaysAccess: true, enterpriseAccess: false, reportAccess: true, forgeCards: true, trainingProviderAccess: true },
   },
   ENTERPRISE: {
     key: "ENTERPRISE",
-    label: "Enterprise",
+    label: "Institution",
     type: "corporate",
-    price: 0,
-    period: "custom",
+    price: 49.99,
+    annualPrice: 499,
+    period: "month",
     color: "#44AA44",
-    features: ["Everything in Pro", "Workforce Intelligence", "Department Analytics", "Bulk Assessment", "Custom Integrations", "Priority Support"],
+    features: ["Everything in Schools", "Enterprise Workforce Intelligence dashboard", "AND-stacked workforce filters", "Department drill-down (top 25 at-risk)"],
     limits: { uploadsPerMonth: -1, dashboardAccess: true, pathwaysAccess: true, enterpriseAccess: true, reportAccess: true, forgeCards: true, trainingProviderAccess: true },
   },
 } as const;
 
 export type SubscriptionPlan = keyof typeof SUBSCRIPTION_PLANS;
 
+export const BILLING_INTERVALS = ["month", "year"] as const;
 export const CONTEXT_CRAFT_LEVELS = {
   NONE: { key: "NONE", label: "No Certification", multiplier: 0.5, color: "#FF4444" },
   CC_100: { key: "CC_100", label: "CC-100 Foundational", multiplier: 1.0, color: "#FFA500" },
@@ -398,8 +415,12 @@ export const users = pgTable("users", {
   contextCraftCertLevel: text("context_craft_cert_level").default("NONE"),
   subscriptionPlan: text("subscription_plan").default("INDIVIDUAL_FREE"),
   subscriptionStatus: text("subscription_status").default("active"),
+  entitlementSource: text("entitlement_source").notNull().default("unverified"),
+  entitlementVerificationStatus: text("entitlement_verification_status").notNull().default("unverified"),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
+  stripeSubscriptionUpdatedAt: timestamp("stripe_subscription_updated_at"),
+  stripeSubscriptionVersion: integer("stripe_subscription_version").notNull().default(0),
   subscriptionCurrentPeriodEnd: timestamp("subscription_current_period_end"),
   subscriptionCanceledAt: timestamp("subscription_canceled_at"),
   institution: text("institution"),
@@ -437,12 +458,16 @@ export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   subscriptionPlan: true,
   subscriptionStatus: true,
+  entitlementSource: true,
+  entitlementVerificationStatus: true,
   institution: true,
   uploadsThisMonth: true,
   uploadResetDate: true,
   contextCraftCertLevel: true,
   stripeCustomerId: true,
   stripeSubscriptionId: true,
+  stripeSubscriptionUpdatedAt: true,
+  stripeSubscriptionVersion: true,
   arkScore: true,
   jstIndex: true,
   ccmi: true,
@@ -900,6 +925,72 @@ export const TIER_RANK: Record<string, number> = {
   Platinum: 4,
 };
 
+// ── GUIN MAX — consented, ARK-native mentor discovery ───────────────────
+// This intentionally stores only matching controls and card identifiers. It
+// does not collect date of birth, contact information, messages, or codec text.
+export const GUIN_MAX_REQUEST_STATUSES = ["PENDING", "ACCEPTED", "DECLINED", "CANCELLED"] as const;
+export type GuinMaxRequestStatus = typeof GUIN_MAX_REQUEST_STATUSES[number];
+
+export const guinMaxProfiles = pgTable("guin_max_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique(),
+  discoveryOptIn: boolean("discovery_opt_in").notNull().default(false),
+  adultAttested: boolean("adult_attested").notNull().default(false),
+  available: boolean("available").notNull().default(false),
+  selectedTier: text("selected_tier"),
+  region: varchar("region", { length: 80 }),
+  language: varchar("language", { length: 40 }),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+export const insertGuinMaxProfileSchema = createInsertSchema(guinMaxProfiles).omit({
+  id: true, userId: true, updatedAt: true,
+});
+export type InsertGuinMaxProfile = z.infer<typeof insertGuinMaxProfileSchema>;
+export type GuinMaxProfile = typeof guinMaxProfiles.$inferSelect;
+
+// Audit record for a user-initiated request. Acceptance changes only this
+// status; it never creates a contact exchange or an automatic connection.
+export const guinMaxMatchRequests = pgTable("guin_max_match_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  requesterId: varchar("requester_id").notNull(),
+  candidateId: varchar("candidate_id").notNull(),
+  status: text("status").notNull().default("PENDING"),
+  cxs: integer("cxs").notNull(),
+  radar: jsonb("radar").$type<Record<string, number>>().notNull().default({}),
+  evidence: jsonb("evidence").$type<Array<{ cardId: string; tier: string }>>().notNull().default([]),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => [
+  index("guin_max_requests_candidate_idx").on(t.candidateId, t.createdAt),
+  index("guin_max_requests_requester_idx").on(t.requesterId, t.createdAt),
+  uniqueIndex("guin_max_requests_pending_pair_uidx").on(t.requesterId, t.candidateId)
+    .where(sql`${t.status} = 'PENDING'`),
+]);
+export type GuinMaxMatchRequest = typeof guinMaxMatchRequests.$inferSelect;
+
+// Hiring introductions are consent requests, not a contact exchange. The score
+// and evidence snapshot makes the request auditable if either profile changes.
+export const MATCHMAKING_INTRODUCTION_STATUSES = ["PENDING", "ACCEPTED", "DECLINED", "CANCELLED"] as const;
+export type MatchmakingIntroductionStatus = typeof MATCHMAKING_INTRODUCTION_STATUSES[number];
+export const matchmakingIntroductions = pgTable("matchmaking_introductions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  opportunityId: varchar("opportunity_id").notNull(),
+  employerId: varchar("employer_id").notNull(),
+  candidateId: varchar("candidate_id").notNull(),
+  status: text("status").notNull().default("PENDING"),
+  cxs: integer("cxs").notNull(),
+  scoreSnapshot: jsonb("score_snapshot").notNull().default({}),
+  evidence: jsonb("evidence").$type<Array<{ cardId: string; tier: string }>>().notNull().default([]),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => [
+  index("matchmaking_introductions_employer_idx").on(t.employerId, t.createdAt),
+  index("matchmaking_introductions_candidate_idx").on(t.candidateId, t.createdAt),
+  uniqueIndex("matchmaking_introductions_pending_pair_uidx")
+    .on(t.opportunityId, t.candidateId).where(sql`${t.status} = 'PENDING'`),
+]);
+export type MatchmakingIntroduction = typeof matchmakingIntroductions.$inferSelect;
+
 export const opportunities = pgTable("opportunities", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   type: text("type").notNull().default("JOB"), // JOB | PROJECT
@@ -1130,25 +1221,6 @@ export const userCredits = pgTable("user_credits", {
 
 export type UserCredits = typeof userCredits.$inferSelect;
 
-// ── Atomic Gauntlet (adapted, JNGL-ACC-PDD-AGL-2026-001) ─────────────
-// AI-judged quality/functionality review of a user's AI-Native App
-// Showcase entry. No code-execution/RL-environment infra exists in this
-// codebase — this is a deliberately reduced-scope reinterpretation, see
-// server/gauntlet.ts for the honesty-gated rationale.
-export const gauntletRuns = pgTable("gauntlet_runs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
-  appName: text("app_name").notNull(),
-  hiveVector: jsonb("hive_vector").notNull(),
-  hiveScore: real("hive_score").notNull(),
-  verdict: text("verdict").notNull(),
-  reasons: text("reasons").array(),
-  creditsCharged: integer("credits_charged").notNull().default(0),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export type GauntletRun = typeof gauntletRuns.$inferSelect;
-
 export const ARK_EVENT_TYPES = [
   "assessment.completed",
   "game.session.finished",
@@ -1186,6 +1258,7 @@ export const checkoutSessions = pgTable("checkout_sessions", {
   userId: varchar("user_id").notNull(),
   plan: text("plan").notNull(),
   amountCents: integer("amount_cents").notNull(),
+  billingInterval: text("billing_interval").notNull().default("month"),
   status: text("status").notNull().default("pending"),
   institution: text("institution"),
   externalSessionId: text("external_session_id"),
@@ -1211,6 +1284,37 @@ export const billingEvents = pgTable("billing_events", {
   externalId: text("external_id"),
   payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const stripeBillingOperations = pgTable("stripe_billing_operations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  subscriptionId: text("subscription_id").notNull(),
+  kind: text("kind").notNull(),
+  fromPlan: text("from_plan").notNull(),
+  targetPlan: text("target_plan"),
+  targetVersion: integer("target_version").notNull(),
+  institution: text("institution"),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+  status: text("status").notNull().default("pending"),
+  lastError: text("last_error"),
+  lastErrorCategory: text("last_error_category"),
+  recoveryAttempts: integer("recovery_attempts").notNull().default(0),
+  lastRecoveryAttemptAt: timestamp("last_recovery_attempt_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+}, (table) => [
+  uniqueIndex("stripe_billing_operations_user_version_idx")
+    .on(table.userId, table.targetVersion)
+    .where(sql`${table.status} = 'pending'`),
+]);
+
+export type StripeBillingOperation = typeof stripeBillingOperations.$inferSelect;
+
+export const stripeWebhookEvents = pgTable("stripe_webhook_events", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(),
+  processedAt: timestamp("processed_at").defaultNow().notNull(),
 });
 
 export const insertBillingEventSchema = createInsertSchema(billingEvents).omit({
@@ -1304,6 +1408,7 @@ export const AI_PRICING_PER_MTOK = {
 export const AI_TIER_MONTHLY_TOKENS = {
   INDIVIDUAL_FREE: 20000,
   INDIVIDUAL_PRO: 500000,
+  ARCHITECT: 1000000,
   SCHOOL_STUDENT: 200000,
   ENTERPRISE: 2000000,
 } as const;
@@ -1314,6 +1419,7 @@ export const AI_TIER_MONTHLY_TOKENS = {
 export const AI_TIER_DAILY_QUOTA = {
   INDIVIDUAL_FREE: { kcse: 5,  narrative: 0,  scenario_gen: 0   },
   INDIVIDUAL_PRO:  { kcse: 50, narrative: 30, scenario_gen: 10  },
+  ARCHITECT:       { kcse: 100, narrative: 60, scenario_gen: 20 },
   SCHOOL_STUDENT:  { kcse: 20, narrative: 10, scenario_gen: 5   },
   ENTERPRISE:      { kcse: 200, narrative: 100, scenario_gen: 50 },
 } as const;
@@ -1328,8 +1434,9 @@ export const AI_TIER_DAILY_QUOTA = {
 // whichever fires first wins. Guarantees AI COGS ≤ 10% of MRR per user.
 export const AI_TIER_COST_BUDGET_CENTS = {
   INDIVIDUAL_FREE: 30,
-  SCHOOL_STUDENT: 90,
-  INDIVIDUAL_PRO: 290,
+  SCHOOL_STUDENT: 100,
+  INDIVIDUAL_PRO: 300,
+  ARCHITECT: 500,
   ENTERPRISE: 2000,
 } as const;
 
@@ -1339,6 +1446,7 @@ export const AI_TIER_COST_BUDGET_CENTS = {
 export const AI_TIER_MONTHLY_TOKENS_V2 = {
   INDIVIDUAL_FREE: 20000,
   INDIVIDUAL_PRO: 580000,
+  ARCHITECT: 1000000,
   SCHOOL_STUDENT: 180000,
   ENTERPRISE: 2000000,
 } as const;
@@ -1348,6 +1456,7 @@ export const AI_TIER_MONTHLY_TOKENS_V2 = {
 export const AI_TIER_DAILY_QUOTA_V2 = {
   INDIVIDUAL_FREE: { kcse: 1,  narrative: 0,  scenario_gen: 0   },
   INDIVIDUAL_PRO:  { kcse: 60, narrative: 35, scenario_gen: 12  },
+  ARCHITECT:       { kcse: 100, narrative: 60, scenario_gen: 20 },
   SCHOOL_STUDENT:  { kcse: 15, narrative: 8,  scenario_gen: 4   },
   ENTERPRISE:      { kcse: 200, narrative: 100, scenario_gen: 50 },
 } as const;
@@ -1374,6 +1483,11 @@ export const AI_TIER_MODEL_POLICY = {
     sonnetKindsAllowed: ["narrative"] as readonly AiKind[],
   },
   INDIVIDUAL_PRO: {
+    allowedModels: SELECTABLE_AI_MODEL_IDS,
+    allowUseClaude: true,
+    sonnetKindsAllowed: ["narrative", "kcse", "scenario_gen"] as readonly AiKind[],
+  },
+  ARCHITECT: {
     allowedModels: SELECTABLE_AI_MODEL_IDS,
     allowUseClaude: true,
     sonnetKindsAllowed: ["narrative", "kcse", "scenario_gen"] as readonly AiKind[],
@@ -2235,12 +2349,13 @@ export const reportShares = pgTable("report_shares", {
   token: varchar("token").notNull().unique(),
   userId: varchar("user_id").notNull(),
   revoked: boolean("revoked").notNull().default(false),
+  expiresAt: timestamp("expires_at").notNull().default(sql`now() + interval '30 days'`),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (t) => ({
   tokenUnique: uniqueIndex("report_shares_token_uniq").on(t.token),
 }));
 export const insertReportShareSchema = createInsertSchema(reportShares).omit({
-  id: true, revoked: true, createdAt: true,
+  id: true, revoked: true, expiresAt: true, createdAt: true,
 });
 export type InsertReportShare = z.infer<typeof insertReportShareSchema>;
 export type ReportShare = typeof reportShares.$inferSelect;
@@ -2427,3 +2542,5 @@ export const insertTrainingClickSchema = createInsertSchema(trainingClicks).omit
 });
 export type InsertTrainingClick = z.infer<typeof insertTrainingClickSchema>;
 export type TrainingClick = typeof trainingClicks.$inferSelect;
+
+export type BillingInterval = typeof BILLING_INTERVALS[number];

@@ -267,13 +267,6 @@ export default function TrainingPage() {
             Certifications ranked against the JST engine's suggested upskilling path for your latest assessment.
           </p>
         </div>
-        <Link
-          href="/training/register"
-          data-testid="link-register-provider"
-          className="inline-flex items-center gap-2 self-start font-mono text-xs uppercase tracking-wider px-4 py-2.5 rounded-lg bg-secondary/15 text-secondary border border-secondary/30 hover:bg-secondary/25 transition-colors"
-        >
-          <PlusCircle className="h-4 w-4" /> List your organization
-        </Link>
       </div>
 
       {/* Suggested for you */}
@@ -281,6 +274,23 @@ export default function TrainingPage() {
         <h2 className="font-display font-bold text-lg text-primary uppercase tracking-widest flex items-center gap-2">
           <Sparkles className="h-5 w-5" /> Matched to your upskilling path
         </h2>
+        {suggested[0] && (
+          <div className="glass-card rounded-xl border-2 border-primary/40 bg-primary/5 p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4" data-testid="training-primary-action">
+            <div>
+              <p className="text-[10px] font-mono uppercase tracking-widest text-primary">Recommended next action</p>
+              <h3 className="font-display font-bold text-white text-lg mt-1">{suggested[0].course.title}</h3>
+              <p className="text-sm text-muted-foreground mt-1">Begin the highest-ranked course for your current upskilling path.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => openAffiliate(suggested[0].provider.id, suggested[0].course.id)}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-mono font-bold uppercase tracking-wider text-background hover:bg-primary/90"
+              data-testid={`button-primary-course-${suggested[0].course.id}`}
+            >
+              View recommended course <ExternalLink className="h-4 w-4" />
+            </button>
+          </div>
+        )}
         {suggestedMsg ? (
           <div className="glass-card rounded-xl p-6 border border-white/10 text-center" data-testid="text-suggested-empty">
             <p className="text-sm text-muted-foreground font-mono">{suggestedMsg}</p>
@@ -296,6 +306,9 @@ export default function TrainingPage() {
             <p className="text-sm text-muted-foreground font-mono">
               No matched courses yet — check the directory below or revisit after more providers join.
             </p>
+            <Link href="/upload" className="mt-3 inline-flex items-center rounded-lg bg-primary px-4 py-2.5 text-xs font-mono font-bold uppercase tracking-wider text-background hover:bg-primary/90">
+              Refresh your pathway
+            </Link>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -307,12 +320,22 @@ export default function TrainingPage() {
       </section>
 
       {/* Directory */}
-      <section className="space-y-4">
-        <h2 className="font-display font-bold text-lg text-white uppercase tracking-widest flex items-center gap-2">
-          <Building2 className="h-5 w-5 text-secondary" /> Provider directory
-        </h2>
+      <details className="group">
+        <summary className="cursor-pointer list-none rounded-xl border border-white/10 bg-white/[0.03] px-5 py-4 font-mono text-xs uppercase tracking-widest text-muted-foreground hover:text-primary">
+          <span className="group-open:text-primary"><Building2 className="mr-2 inline h-4 w-4" />Browse provider directory and filters</span>
+        </summary>
+        <section className="mt-4 space-y-4">
+          <div className="flex justify-end">
+            <Link
+              href="/training/register"
+              data-testid="link-register-provider"
+              className="inline-flex items-center gap-2 self-start font-mono text-xs uppercase tracking-wider px-4 py-2.5 rounded-lg bg-secondary/15 text-secondary border border-secondary/30 hover:bg-secondary/25 transition-colors"
+            >
+              <PlusCircle className="h-4 w-4" /> List your organization
+            </Link>
+          </div>
 
-        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
@@ -349,9 +372,9 @@ export default function TrainingPage() {
               </option>
             ))}
           </select>
-        </div>
+          </div>
 
-        {loading ? (
+          {loading ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="h-8 w-8 text-primary animate-spin" />
           </div>
@@ -365,8 +388,9 @@ export default function TrainingPage() {
               <ProviderCard key={p.id} provider={p} />
             ))}
           </div>
-        )}
-      </section>
+          )}
+        </section>
+      </details>
     </div>
   );
 }

@@ -6,7 +6,10 @@ async function apiRequest(url: string, options?: RequestInit) {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(error.message || "Request failed");
+    throw Object.assign(new Error(error.message || "Request failed"), {
+      code: error.code,
+      status: res.status,
+    });
   }
   return res.json();
 }
@@ -141,10 +144,22 @@ export const api = {
 
   getBillingMe: () => apiRequest("/api/billing/me"),
 
-  startCheckout: (plan: string, institution?: string) =>
+  startCheckout: (plan: string, institution?: string, billingInterval: "month" | "year" = "month") =>
     apiRequest("/api/billing/checkout", {
       method: "POST",
-      body: JSON.stringify({ plan, institution }),
+      body: JSON.stringify({ plan, institution, billingInterval }),
+    }),
+
+  previewSubscriptionSwitch: (plan: string, institution?: string, billingInterval: "month" | "year" = "month") =>
+    apiRequest("/api/billing/switch/preview", {
+      method: "POST",
+      body: JSON.stringify({ plan, institution, billingInterval }),
+    }),
+
+  switchSubscription: (previewToken: string) =>
+    apiRequest("/api/billing/switch", {
+      method: "POST",
+      body: JSON.stringify({ previewToken }),
     }),
 
   getCheckoutSession: (id: string) => apiRequest(`/api/billing/checkout/${id}`),
@@ -155,7 +170,8 @@ export const api = {
       body: JSON.stringify({ success }),
     }),
 
-  cancelSubscription: () => apiRequest("/api/billing/cancel", { method: "POST" }),
+  cancelSubscription: (): Promise<{ effectiveAt: string; alreadyScheduled?: boolean }> =>
+    apiRequest("/api/billing/cancel", { method: "POST" }),
 
   getCcgeCards: () => apiRequest("/api/ccge/cards"),
 
@@ -336,6 +352,20 @@ export const api = {
   getGuinById: (userId: string) => apiRequest(`/api/guin/by-id/${userId}`),
   getGuinByUsername: (username: string) =>
     apiRequest(`/api/guin/by-username/${encodeURIComponent(username)}`),
+  getGuinMaxProfile: () => apiRequest("/api/guin-max/profile"),
+  updateGuinMaxProfile: (data: any) => apiRequest("/api/guin-max/profile", { method: "PUT", body: JSON.stringify(data) }),
+  discoverGuinMax: (data: any) => apiRequest("/api/guin-max/discover", { method: "POST", body: JSON.stringify(data) }),
+  createGuinMaxRequest: (data: any) => apiRequest("/api/guin-max/requests", { method: "POST", body: JSON.stringify(data) }),
+  getGuinMaxRequests: () => apiRequest("/api/guin-max/requests"),
+  actOnGuinMaxRequest: (id: string, action: "accept" | "decline" | "cancel") =>
+    apiRequest(`/api/guin-max/requests/${id}/${action}`, { method: "POST" }),
+  getOpportunityCandidates: (id: string) => apiRequest(`/api/matchmaking/opportunities/${id}/candidates`),
+  requestMatchmakingIntroduction: (opportunityId: string, candidateId: string) =>
+    apiRequest(`/api/matchmaking/opportunities/${opportunityId}/introductions`, { method: "POST", body: JSON.stringify({ candidateId }) }),
+  getOwnerMatchmakingIntroductions: () => apiRequest("/api/matchmaking/introductions/owner"),
+  getCandidateMatchmakingIntroductions: () => apiRequest("/api/matchmaking/introductions/candidate"),
+  actOnMatchmakingIntroduction: (id: string, action: "accept" | "decline" | "cancel") =>
+    apiRequest(`/api/matchmaking/introductions/${id}/${action}`, { method: "POST" }),
   createEndorsement: (data: {
     recipientId: string;
     sessionId: string;
@@ -614,35 +644,6 @@ export const api = {
     apiRequest("/api/ark-resume/headshot", { method: "POST", body: JSON.stringify({ dataUrl }) }),
   deleteArkResumeHeadshot: (): Promise<{ ok: boolean }> =>
     apiRequest("/api/ark-resume/headshot", { method: "DELETE" }),
-  // ── Living Resume Designer (JNGL-PDD-ARKH-LRD-2026-001) ──
-  getLivingResumePrefill: () => apiRequest("/api/living-resume/prefill"),
-  // Fire-and-forget beacon — the server always answers 204 (no body), so this
-  // bypasses apiRequest's res.json() and swallows any failure, matching the
-  // DRM beacon's "clients ignore the response" convention.
-  sendLivingResumeTelemetry: (payload: {
-    fieldsCompleted: number;
-    tagsSelected: number;
-    cardsLinked: number;
-  }) => {
-    fetch("/api/living-resume/telemetry", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      keepalive: true,
-      body: JSON.stringify(payload),
-    }).catch(() => {});
-  },
-
-  // ── Atomic Gauntlet (adapted, JNGL-ACC-PDD-AGL-2026-001) ──
-  runGauntlet: (input: {
-    name: string;
-    pitch: string;
-    stack: string;
-    url: string;
-    testDemoSrcdoc?: string;
-  }) => apiRequest("/api/gauntlet/run", { method: "POST", body: JSON.stringify(input) }),
-  getGauntletRuns: () => apiRequest("/api/gauntlet/runs"),
-
   getConfirmations: () => apiRequest("/api/confirmations"),
   issueConfirmation: (data: {
     userId: string;

@@ -41,13 +41,15 @@ export function metaImagesPlugin(): Plugin {
       log('[meta-images] updating meta image tags to:', imageUrl);
 
       html = html.replace(
-        /<meta\s+property="og:image"\s+content="[^"]*"\s*\/>/g,
-        `<meta property="og:image" content="${imageUrl}" />`
+        /<meta\s+property="og:image"\s+content="([^"]*)"\s*\/>/g,
+        (tag, currentUrl: string) =>
+          currentUrl.startsWith("https://atanda.ai/") ? tag : `<meta property="og:image" content="${imageUrl}" />`,
       );
 
       html = html.replace(
-        /<meta\s+name="twitter:image"\s+content="[^"]*"\s*\/>/g,
-        `<meta name="twitter:image" content="${imageUrl}" />`
+        /<meta\s+name="twitter:image"\s+content="([^"]*)"\s*\/>/g,
+        (tag, currentUrl: string) =>
+          currentUrl.startsWith("https://atanda.ai/") ? tag : `<meta name="twitter:image" content="${imageUrl}" />`,
       );
 
       return html;

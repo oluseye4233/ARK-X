@@ -85,6 +85,7 @@ interface Opportunity {
   archetypePreference: string | null;
   jstFloor: number;
   status: string;
+  createdBy: string;
 }
 
 interface DetailResponse {
@@ -125,9 +126,10 @@ export default function MatchmakingDetailPage() {
   const id = params.id as string;
   const { toast } = useToast();
 
-  const { data, isLoading } = useQuery<DetailResponse>({
+  const { data, isLoading, isError, error, refetch } = useQuery<DetailResponse>({
     queryKey: [`/api/matchmaking/opportunities/${id}`],
   });
+  const { data: me } = useQuery<{ id: string }>({ queryKey: ["/api/auth/me"] });
 
   const apply = useMutation({
     mutationFn: async () => {
@@ -145,6 +147,25 @@ export default function MatchmakingDetailPage() {
     return (
       <div className="flex items-center justify-center py-24 text-muted-foreground">
         <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading opportunity…
+      </div>
+    );
+  }
+  if (isError) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-4 p-4 md:p-8" data-testid="text-error">
+        <Link href="/matchmaking" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-cyan-400">
+          <ArrowLeft className="h-4 w-4" /> Talent Exchange
+        </Link>
+        <Card className="glass-card border-destructive/40">
+          <CardContent className="space-y-4 py-12 text-center">
+            <p className="text-sm text-destructive">
+              {error instanceof Error ? error.message : "This opportunity could not be loaded."}
+            </p>
+            <Button onClick={() => refetch()} data-testid="button-retry">
+              Retry opportunity
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -195,10 +216,20 @@ export default function MatchmakingDetailPage() {
               {apply.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserCheck className="mr-2 h-4 w-4" />}
               I'm interested
             </Button>
+            {me?.id === o.createdBy && (
+              <Link href={`/matchmaking/${o.id}/candidates`}>
+                <Button className="mt-2" size="sm" variant="outline" data-testid="link-candidate-review">Review consented candidates</Button>
+              </Link>
+            )}
           </div>
         </CardContent>
       </Card>
 
+      <details className="group">
+      <summary className="cursor-pointer list-none rounded-xl border border-white/10 bg-white/[0.03] px-5 py-4 text-xs font-mono uppercase tracking-widest text-muted-foreground hover:text-cyan-300">
+        <span className="group-open:text-cyan-300">Review match evidence and requirements</span>
+      </summary>
+      <div className="mt-4 space-y-6">
       {o.description && (
         <Card className="glass-card">
           <CardContent className="p-6 text-sm leading-relaxed text-muted-foreground" data-testid="text-description">{o.description}</CardContent>
@@ -348,6 +379,8 @@ export default function MatchmakingDetailPage() {
           </CardContent>
         </Card>
       )}
+      </div>
+      </details>
     </div>
   );
 }

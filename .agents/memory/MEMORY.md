@@ -13,3 +13,14 @@
 - [Resume claim matching](resume-claim-matching.md) — confirmations attach via shared/claimMatch.ts; SKILL exact (card id), EMPLOYMENT/CERTIFICATION fuzzy; 3 sites must stay in lockstep.
 - [Matchmaking engine](matchmaking-engine.md) — Talent Exchange scores ONLY on verified cards (never keywords); candidate pool needs user+assessment(archetype)+verifications to place people.
 - [Email transport](email-transport.md) — outbound mail = Gmail connector via @replit/connectors-sdk proxy; invite send keeps a link fallback on failure, never silent success.
+- [Express SPA fallback paths](express-spa-fallback-paths.md) — mounted catch-all middleware may see req.path as `/`; derive route metadata from originalUrl.
+- [GitHub connector archives](github-connector-archives.md) — connector may reject zipball downloads while repository trees and file-content endpoints still work.
+- [ATANDA–ARK-X contract ownership](atanda-arkx-contract-ownership.md) — ATANDA.ai presents capabilities; ARK-X owns operational contracts, controls, persistence, and live-status evidence.
+- [ACC Architect bridge](acc-architect-bridge.md) — ACC owns ARCHITECT subscriptions; verified HIVE Gold unlocks a 50% discount through signed ARK eligibility, never badge URLs or email matching.
+- [ATOMIC UI](atomic-ui.md) — present the L0–L9.5 learning journey as a simple cockpit with origin, current action, next destination, progress, document controls, and one connected feature.
+- [Paid entitlement provenance](paid-entitlement-provenance.md) — paid access must use explicit verified provider/contract provenance; identifier shape is never verification.
+- [Stripe search consistency](stripe-search-consistency.md) — Stripe Search is eventually consistent; fixture setup must wait before read-after-write paths that search.
+- [Stripe operation recovery](stripe-operation-recovery.md) — replay unapplied operations, but supersede them when Stripe has a newer version; durable side effects belong in the completion transaction.
+- [Action error dismissal](action-error-dismissal.md) — clear retryable action errors outside exit-animation boundaries so stale failure copy cannot overlap a fast success.
+- [JSONB operation equality](jsonb-operation-equality.md) — compare persisted operation payloads semantically; PostgreSQL JSONB key normalization makes stringify equality unstable.
+- [TSX browser evaluation](tsx-browser-evaluation.md) — avoid passing nested functions through tsx into page.evaluate; injected helpers do not exist in the browser context.

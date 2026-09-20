@@ -30,6 +30,7 @@ import { requireFeature, getResolvedFeatures, isFeatureEnabled } from "./feature
 import { STAGE } from "@shared/featureFlags";
 import { insertUserSchema, insertAssessmentSchema, CONTEXT_CRAFT_LEVELS, type ContextCraftLevel, SUBSCRIPTION_PLANS, F1000_PROMO, type SubscriptionPlan, CCGE_TIERS, type CcgeTier, jcseToTier, ALL_CARD_PILLARS, SPC_MIN_CERT_TO_PUBLISH, SPC_PRICE_MIN, SPC_PRICE_MAX, SPC_STATUSES, SPC_SCOPES, CERT_LEVEL_RANK, ARK_SCORE_DELTAS, type CardPillar, type SpcStatus, ASSESSMENT_SOURCES, PRIMARY_ASSESSMENT_SOURCES, ASSESSMENT_SOURCE_LABELS, type AssessmentSourceKey } from "@shared/schema";
 import { computeCompleteness, canonicalSourcesUsed, buildCombinedText } from "@shared/assessmentMerge";
+import { marketScoreMetadata } from "./scoringEngine";
 import { companyMatches, certMatches } from "@shared/claimMatch";
 import { dealHand, scoreSession, evaluateCustomCard, blendCraftIntoFinal } from "./ccge";
 import { buildVerificationQuest, scoreVerificationPrompt, aggregateVerification } from "./cardVerification";
@@ -51,8 +52,6 @@ import { generateResumeNarrative, ProTierRequiredError } from "./ai/narrative";
 import { CODEC_PRIMITIVES, CODEC_BY_ID } from "@shared/codec-primitives";
 import { generateScenario } from "./ai/scenarioGen";
 import { buildArkResume, checkResumeEligibility } from "./arkResume";
-import { buildLivingResumeDesignerPrefill } from "./livingResumeDesigner";
-import { runAndRecordGauntlet, listGauntletRuns, InsufficientCreditsError } from "./gauntlet";
 import {
   scoreUserForOpportunity,
   skillGapForOpportunity,
@@ -68,6 +67,7 @@ import {
   type Archetype,
   type InsertOpportunity,
   type InsertOpportunityRequirement,
+  TIER_RANK,
 } from "@shared/schema";
 import { CONFIRMATION_TYPES, CONFIRMATION_STATUSES, CONFIRMATION_INVITE_TTL_DAYS, type ConfirmationType } from "@shared/schema";
 import { getTierStatus } from "./ai/usage";
@@ -75,10 +75,11 @@ import { isClaudeAvailable, resolveUseClaude } from "./ai/client";
 import { isModelAvailable } from "./ai/providers";
 import { AI_TIER_MODEL_POLICY, SELECTABLE_AI_MODELS, SELECTABLE_AI_MODEL_IDS } from "@shared/schema";
 import {
+  getBillingAvailability,
   isPaidPlan,
+  paidCheckoutUnavailableMessage,
   priceCentsForPlan,
   nextPeriodEnd,
-  syntheticStripeCheckoutId,
 } from "./billing";
 import { seedCcge } from "./ccgeSeed";
 import { runHivePrecheck, executePurchase, getOrCreateCredits } from "./sphinx";
@@ -97,6 +98,7 @@ import { seedJnomicsExpansion } from "./jnomicsSeed";
 import { analyzeSpcListing, SpcAnalysisProTierRequiredError } from "./ai/spcAnalysis";
 import { categoryToPillars, MARKETPLACE_CATEGORIES, type MarketplaceCategory, hiveToTierBadge } from "@shared/schema";
 import { buildGuinProfile, validateEndorsement } from "./guin";
+import { discoverGuinMax, isGuinMaxEligible, type GuinMaxCandidate, type GuinMaxSearch } from "./guinMax";
 import { ENDORSEMENT_MAX_LEN } from "@shared/schema";
 import {
   insertTrainingProviderSchema, insertTrainingCourseSchema,
@@ -115,9 +117,22 @@ import {
 import { buildJourney, buildLedger, captureLedgerSnapshot } from "./bookCompanion";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
+import {
+  AccFactoryBridgeConfigurationError,
+  accFactoryJwks,
+  hasEligibleHiveEvidence,
+  mintAccFactoryEligibilityAssertion,
+} from "./accFactoryBridge";
 
 // Book Companion chapter badge art is generic (no PII) and identical for every
 // reader, so a tiny process-memory cache keyed by nodeId fully covers it.
+import {
+  cancelStripePlanForUser,
+  createStripeCheckout,
+  getStripeCheckout,
+  previewStripePlanForUser,
+  switchStripePlanForUser,
+} from "./stripeBilling";
 const bookBadgeCache = new Map<string, Buffer>();
 const bookBadgeLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -280,11 +295,50 @@ async function claimExistsOnResume(
 
 export async function registerRoutes(
   httpServer: Server,
-  app: Express
+  app: Express,
+  deps: {
+    cancelStripePlanForUser?: typeof cancelStripePlanForUser;
+  } = {},
 ): Promise<Server> {
+  const cancelPlan = deps.cancelStripePlanForUser ?? cancelStripePlanForUser;
 
   // ── Public CCGE badge renderer + share page ───────────
   registerBadgeRoutes(app);
+
+  // ── ACC-FACTORY eligibility bridge ──────────────────────────
+  // ACC-FACTORY remains the ARCHITECT subscription authority. This endpoint
+  // only attests to independently verified HIVE Gold/Platinum evidence and
+  // neither grants nor changes any ARK entitlement.
+  app.post("/api/acc-factory/eligibility", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const evidence = await storage.getCardVerifications(userId);
+      if (!hasEligibleHiveEvidence(evidence)) {
+        return res.status(403).json({ message: "Verified HIVE Gold evidence is required." });
+      }
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({ assertion: mintAccFactoryEligibilityAssertion(userId) });
+    } catch (err) {
+      if (err instanceof AccFactoryBridgeConfigurationError) {
+        return res.status(503).json({ message: "ACC-FACTORY eligibility bridge is not configured." });
+      }
+      console.error("ACC-FACTORY eligibility assertion error:", err);
+      return res.status(500).json({ message: "Unable to issue eligibility assertion." });
+    }
+  });
+
+  // This exposes only the derived public verification key. It is intentionally
+  // available without a session so ACC-FACTORY can resolve a token's `kid`.
+  app.get("/api/acc-factory/.well-known/jwks.json", (_req, res) => {
+    try {
+      return res.json(accFactoryJwks());
+    } catch (err) {
+      if (err instanceof AccFactoryBridgeConfigurationError) {
+        return res.status(503).json({ message: "ACC-FACTORY eligibility bridge is not configured." });
+      }
+      return res.status(500).json({ message: "Unable to provide bridge key." });
+    }
+  });
 
   // ── Flywheel SSE stream ───────────────────────────────
   app.get("/api/ark-score/stream", requireAuth, async (req, res) => {
@@ -301,6 +355,7 @@ export async function registerRoutes(
     const latest = await storage.getLatestAssessment(userId);
     const u = await storage.getUser(userId);
     res.write(`event: ark.snapshot\ndata: ${JSON.stringify({
+      ...marketScoreMetadata(),
       jstTotal: latest?.jstTotal ?? 0,
       jstSkills: latest?.jstSkills ?? 0,
       arkScore: u?.arkScore ?? 0,
@@ -791,9 +846,21 @@ export async function registerRoutes(
       }
       const target = await storage.getUser(String(req.params.id));
       if (!target) return res.status(404).json({ message: "User not found" });
+      if (target.stripeSubscriptionId) {
+        return res.status(409).json({
+          message: "Cancel the active Stripe subscription before provisioning an Enterprise contract.",
+        });
+      }
       const fromPlan = (target.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
       const updated = await storage.updateUser(String(req.params.id), {
-        subscriptionPlan: plan, subscriptionStatus: "active",
+        subscriptionPlan: plan,
+        subscriptionStatus: "active",
+        entitlementSource: "contract",
+        entitlementVerificationStatus: "verified",
+        stripeCustomerId: null,
+        stripeSubscriptionId: null,
+        subscriptionCurrentPeriodEnd: null,
+        subscriptionCanceledAt: null,
       } as any);
       await storage.createBillingEvent({
         userId: target.id, type: "subscription.upgraded",
@@ -808,7 +875,7 @@ export async function registerRoutes(
     }
   });
 
-  // ── Billing (Stub Stripe) ─────────────────────────────
+  // ── Billing ───────────────────────────────────────────
   app.get("/api/billing/me", requireAuth, async (req, res) => {
     try {
       const userId = currentUserId(req)!;
@@ -816,6 +883,7 @@ export async function registerRoutes(
       if (!user) return res.status(404).json({ message: "User not found" });
       const events = await storage.getBillingEventsByUser(userId, 10);
       return res.json({
+        ...getBillingAvailability(),
         plan: user.subscriptionPlan,
         status: user.subscriptionStatus,
         currentPeriodEnd: user.subscriptionCurrentPeriodEnd,
@@ -838,6 +906,7 @@ export async function registerRoutes(
       const schema = z.object({
         plan: validSubscriptionPlans,
         institution: z.string().min(1).max(120).optional(),
+        billingInterval: z.enum(["month", "year"]).default("month"),
       });
       const p = schema.safeParse(req.body);
       if (!p.success) return res.status(400).json({ message: "plan required", validPlans: Object.keys(SUBSCRIPTION_PLANS) });
@@ -845,7 +914,10 @@ export async function registerRoutes(
       const fromPlan = (user.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
 
       if (plan === "ENTERPRISE") {
-        return res.status(409).json({ message: "Enterprise requires a sales contact, not self-checkout." });
+        return res.status(409).json({ message: "Institution plans require verified organization provisioning. Contact sales to continue." });
+      }
+      if (user.stripeSubscriptionId) {
+        return res.status(409).json({ message: "Cancel your current paid plan before starting another subscription." });
       }
       if (plan === fromPlan && user.subscriptionStatus === "active" && !user.subscriptionCanceledAt) {
         return res.status(409).json({ message: `Already on ${plan}.` });
@@ -855,31 +927,66 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Institution name required for School plan." });
       }
 
-      const amountCents = priceCentsForPlan(plan, user.f1000Member);
-      const session = await storage.createCheckoutSession({
+      const billingInterval = p.data.billingInterval;
+      const amountCents = priceCentsForPlan(plan, user.f1000Member, billingInterval);
+      if (amountCents > 0 && !getBillingAvailability().paidCheckoutAvailable) {
+        return res.status(503).json({
+          message: paidCheckoutUnavailableMessage(),
+          code: "PAID_CHECKOUT_UNAVAILABLE",
+          ...getBillingAvailability(),
+        });
+      }
+      const pending = await storage.getPendingCheckoutSession(userId, plan);
+      if (pending?.externalSessionId) {
+        const stripeSession = await getStripeCheckout(pending.externalSessionId);
+        if (pending.billingInterval === billingInterval && stripeSession.status === "open" && stripeSession.url) {
+          return res.status(200).json({
+            sessionId: pending.id, externalSessionId: stripeSession.id, plan,
+            amountCents: pending.amountCents, requiresPayment: true, redirectUrl: stripeSession.url,
+          });
+        }
+      }
+      const pendingResult = await storage.createOrGetPendingCheckoutSession({
         userId,
         plan,
         amountCents,
+            billingInterval,
         status: "pending",
         institution: planData.type === "school" ? (p.data.institution || user.institution || null) : null,
         externalSessionId: null,
       });
-      const externalSessionId = syntheticStripeCheckoutId(session.id);
-      await storage.updateCheckoutSession(session.id, { externalSessionId });
-      await storage.createBillingEvent({
+      const session = pendingResult.session;
+        if (!pendingResult.created && (session.plan !== plan || session.billingInterval !== billingInterval)) {
+        return res.status(409).json({
+          message: `A ${session.billingInterval} checkout for ${session.plan} is already pending. Complete or expire it before choosing another plan or billing interval.`,
+        });
+      }
+      if (pendingResult.created) await storage.createBillingEvent({
         userId,
         type: "checkout.created",
         fromPlan,
         toPlan: plan,
         amountCents,
-        externalId: externalSessionId,
-        payload: { sessionId: session.id, simulated: true },
+        externalId: null,
+        payload: { sessionId: session.id, provider: amountCents > 0 ? "stripe" : "local", billingInterval },
       });
+
+      if (amountCents > 0) {
+        const stripeSession = await createStripeCheckout({
+          localSessionId: session.id, user, plan: session.plan as SubscriptionPlan, amountCents: session.amountCents,
+          institution: session.institution,
+          billingInterval: session.billingInterval as "month" | "year",
+        });
+        return res.status(201).json({
+          sessionId: session.id, externalSessionId: stripeSession.id, plan, amountCents, billingInterval,
+          requiresPayment: true, redirectUrl: stripeSession.url,
+        });
+      }
 
       // Free plan auto-completes (no card needed) — caller will hit /complete next.
       return res.status(201).json({
         sessionId: session.id,
-        externalSessionId,
+        externalSessionId: null,
         plan,
         amountCents,
         requiresPayment: amountCents > 0,
@@ -888,6 +995,50 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Billing checkout error:", err);
       return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/billing/switch/preview", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const parsed = z.object({
+        plan: validSubscriptionPlans,
+        institution: z.string().min(1).max(120).optional(),
+        billingInterval: z.enum(["month", "year"]).default("month"),
+      }).safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "A valid target plan is required." });
+      return res.json(await previewStripePlanForUser({
+        userId,
+        plan: parsed.data.plan as SubscriptionPlan,
+        institution: parsed.data.institution,
+        billingInterval: parsed.data.billingInterval,
+      }));
+    } catch (err: any) {
+      const status = err.status || 500;
+      if (status >= 500) console.error("Billing plan preview error:", err);
+      return res.status(status).json({ message: err.message, code: err.code });
+    }
+  });
+
+  app.post("/api/billing/switch", requireAuth, async (req, res) => {
+    try {
+      const userId = currentUserId(req)!;
+      const parsed = z.object({
+        previewToken: z.string().min(1),
+      }).safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "A valid plan-change preview is required." });
+      const result = await switchStripePlanForUser({
+        userId,
+        previewToken: parsed.data.previewToken,
+      });
+      return res.json({
+        ok: true,
+        ...result,
+      });
+    } catch (err: any) {
+      const status = err.status || 500;
+      if (status >= 500) console.error("Billing plan switch error:", err);
+      return res.status(status).json({ message: err.message, code: err.code });
     }
   });
 
@@ -906,6 +1057,21 @@ export async function registerRoutes(
   app.post("/api/billing/checkout/:id/complete", requireAuth, async (req, res) => {
     try {
       const userId = currentUserId(req)!;
+      const session = await storage.getCheckoutSession(String(req.params.id));
+      if (!session) return res.status(404).json({ message: "Checkout session not found" });
+      if (session.userId !== userId) return res.status(403).json({ message: "Not your checkout session." });
+      if (session.amountCents > 0 && !getBillingAvailability().paidCheckoutAvailable) {
+        return res.status(503).json({
+          message: paidCheckoutUnavailableMessage(),
+          code: "PAID_CHECKOUT_UNAVAILABLE",
+        });
+      }
+      if (session.amountCents > 0) {
+        return res.status(409).json({
+          message: "Paid checkout completes only after Stripe confirms payment.",
+          code: "AWAITING_PROVIDER_CONFIRMATION",
+        });
+      }
 
       const result = await storage.completeCheckoutSession({
         sessionId: String(req.params.id),
@@ -937,32 +1103,14 @@ export async function registerRoutes(
       const userId = currentUserId(req)!;
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
-      const plan = (user.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
-      if (!isPaidPlan(plan)) return res.status(409).json({ message: "Nothing to cancel on a free plan." });
-      if (user.subscriptionCanceledAt) return res.status(409).json({ message: "Already scheduled for cancellation." });
-
-      const now = new Date();
-      const periodEnd = user.subscriptionCurrentPeriodEnd || nextPeriodEnd(now);
-      await storage.updateUser(userId, {
-        subscriptionStatus: "canceling",
-        subscriptionCanceledAt: now,
-        subscriptionCurrentPeriodEnd: periodEnd,
-      } as any);
-      await storage.createBillingEvent({
-        userId,
-        type: "subscription.canceled",
-        fromPlan: plan,
-        toPlan: "INDIVIDUAL_FREE",
-        amountCents: 0,
-        externalId: user.stripeSubscriptionId,
-        payload: { effectiveAt: periodEnd.toISOString(), simulated: true },
+      const result = await cancelPlan(userId, user.stripeSubscriptionVersion);
+      return res.json({
+        ok: true,
+        effectiveAt: result.effectiveAt,
+        alreadyScheduled: result.alreadyScheduled,
       });
-      await orchestrator.emit(userId, "billing.subscription.canceled", {
-        plan, effectiveAt: periodEnd.toISOString(),
-      }, 0);
-      return res.json({ ok: true, effectiveAt: periodEnd });
     } catch (err: any) {
-      return res.status(500).json({ message: err.message });
+      return res.status(err.status || 500).json({ message: err.message, code: err.code });
     }
   });
 
@@ -996,6 +1144,7 @@ export async function registerRoutes(
         await storage.updateUser(target.id, {
           subscriptionPlan: "INDIVIDUAL_FREE", subscriptionStatus: "active",
           subscriptionCanceledAt: null, subscriptionCurrentPeriodEnd: null, stripeSubscriptionId: null,
+          entitlementSource: "unverified", entitlementVerificationStatus: "unverified",
         } as any);
         await storage.createBillingEvent({
           userId: target.id, type: "subscription.canceled", fromPlan, toPlan: "INDIVIDUAL_FREE",
@@ -1060,6 +1209,7 @@ export async function registerRoutes(
 
       return res.status(201).json({
         ...created,
+        ...marketScoreMetadata(),
         upskillingPlans: plans,
         pivotOpportunities: pivots,
         transferabilityVectors: vectors,
@@ -1072,7 +1222,7 @@ export async function registerRoutes(
   app.get("/api/assessments/user/:userId", requireSelf("userId"), async (req, res) => {
     try {
       const results = await storage.getAssessmentsByUser(String(req.params.userId));
-      return res.json(results);
+      return res.json(results.map((assessment) => ({ ...assessment, ...marketScoreMetadata() })));
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
@@ -1091,6 +1241,7 @@ export async function registerRoutes(
 
       return res.json({
         ...assessment,
+        ...marketScoreMetadata(),
         upskillingPlans: plans,
         pivotOpportunities: pivots,
         transferabilityVectors: vectors,
@@ -1241,58 +1392,6 @@ export async function registerRoutes(
       return res.status(500).json({ message: err.message });
     }
   });
-
-  // ── Living Resume Designer telemetry (LRD-304) ───────────────────────
-  // Lightweight fire-and-forget session beacon (fields completed, tags
-  // selected, cards linked). No dedicated table — same rationale as the DRM
-  // beacon above: high volume, low per-event value, logs are enough. No
-  // consent/governance table exists anywhere else in this codebase to gate
-  // against, so none is introduced here. Resume content itself is never
-  // sent — only counts.
-  const LRD_RATE_WINDOW_MS = 10_000;
-  const LRD_RATE_MAX = 20;
-  const lrdRateBuckets = new Map<string, { count: number; windowStart: number }>();
-
-  app.post(
-    "/api/living-resume/telemetry",
-    requireFeature("livingResumeDesigner"),
-    async (req, res) => {
-      try {
-        const { fieldsCompleted, tagsSelected, cardsLinked } = req.body ?? {};
-        if (
-          typeof fieldsCompleted !== "number" ||
-          typeof tagsSelected !== "number" ||
-          typeof cardsLinked !== "number"
-        ) {
-          return res.status(400).json({ message: "Invalid telemetry payload." });
-        }
-        const userId = currentUserId(req) ?? "anon";
-        const rateKey = userId !== "anon" ? `u:${userId}` : `ip:${req.ip ?? "?"}`;
-        const now = Date.now();
-        const bucket = lrdRateBuckets.get(rateKey);
-        if (!bucket || now - bucket.windowStart > LRD_RATE_WINDOW_MS) {
-          lrdRateBuckets.set(rateKey, { count: 1, windowStart: now });
-        } else {
-          bucket.count += 1;
-          if (bucket.count > LRD_RATE_MAX) {
-            return res.status(204).end();
-          }
-        }
-        if (lrdRateBuckets.size > 5_000) {
-          Array.from(lrdRateBuckets.entries()).forEach(([k, v]) => {
-            if (now - v.windowStart > LRD_RATE_WINDOW_MS * 2) lrdRateBuckets.delete(k);
-          });
-        }
-        console.log(
-          `[living-resume-designer] user=${sanitizeDrmField(userId, 64)} fields=${Math.max(0, Math.min(999, fieldsCompleted))} tags=${Math.max(0, Math.min(999, tagsSelected))} cards=${Math.max(0, Math.min(999, cardsLinked))}`,
-        );
-        return res.status(204).end();
-      } catch (err: any) {
-        console.error("[/api/living-resume/telemetry] error:", err);
-        return res.status(500).json({ message: err.message });
-      }
-    },
-  );
 
   // Admin-only aggregation over the ring buffer. Returns the top N
   // (userId, contentType) pairs by violation count in the last 24h, plus
@@ -1516,6 +1615,7 @@ export async function registerRoutes(
 
         return {
           ...created,
+          ...marketScoreMetadata(),
           upskillingPlans: [],
           pivotOpportunities: [],
           transferabilityVectors: [],
@@ -1650,6 +1750,7 @@ export async function registerRoutes(
 
       return {
         ...created,
+        ...marketScoreMetadata(),
         upskillingPlans: plans,
         pivotOpportunities: pivots,
         transferabilityVectors: vectors,
@@ -1778,6 +1879,7 @@ export async function registerRoutes(
 
       return res.status(201).json({
         method,
+        ...marketScoreMetadata(),
         jstTotal: a.jstTotal,
         jstJobs: a.jstJobs,
         jstSkills: a.jstSkills,
@@ -1818,6 +1920,7 @@ export async function registerRoutes(
         );
       }
       return res.json({
+        ...marketScoreMetadata(),
         userId,
         arkScore: user.arkScore,
         jstIndex: user.jstIndex,
@@ -2005,7 +2108,7 @@ export async function registerRoutes(
       const userId = currentUserId(req)!;
       const days = Math.max(1, Math.min(365, Number(req.query.days) || 90));
       const rows = await storage.getArkScoreHistory(userId, days);
-      return res.json(rows);
+      return res.json(rows.map((row) => ({ ...row, ...marketScoreMetadata() })));
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
@@ -2070,81 +2173,6 @@ export async function registerRoutes(
       const userId = currentUserId(req)!;
       await storage.setUserHeadshot(userId, null);
       return res.json({ ok: true });
-    } catch (err: any) {
-      return res.status(500).json({ message: err.message });
-    }
-  });
-
-  // ── LIVING RESUME DESIGNER (JNGL-PDD-ARKH-LRD-2026-001) ─────────────
-  // Self-service wizard that exports a shareable, self-contained resume
-  // artifact. Additive to ARK RESUME, not a replacement: reads the same
-  // identity/work-history source plus ARK Score and the user's own SPHINX
-  // listings. The wizard draft itself is client-side/localStorage state —
-  // this is a read-only prefill endpoint. Headshot upload reuses the
-  // existing /api/ark-resume/headshot endpoints above rather than
-  // duplicating storage. Pro+ gating for SPC panel / AI-app showcase /
-  // video intro / ARK Score badge / FORGE-Verified badge / export
-  // certificate is enforced client-side via `isProPlus` on this payload
-  // (same reportAccess-based gate used elsewhere) since none of it writes
-  // anything server-side.
-  app.get(
-    "/api/living-resume/prefill",
-    requireFeature("livingResumeDesigner"),
-    requireAuth,
-    async (req, res) => {
-      try {
-        const userId = currentUserId(req)!;
-        const payload = await buildLivingResumeDesignerPrefill(userId);
-        if (!payload) return res.status(404).json({ message: "User not found." });
-        return res.json(payload);
-      } catch (err: any) {
-        return res.status(500).json({ message: err.message });
-      }
-    },
-  );
-
-  // ── ATOMIC GAUNTLET (adapted, JNGL-ACC-PDD-AGL-2026-001) ─────────────
-  // AI-judged quality review of an AI-Native App Showcase entry. Pro+
-  // gated (same reportAccess-based gate used elsewhere), flat per-run
-  // credit charge debited from the existing userCredits ledger. See
-  // server/gauntlet.ts for the honesty-gated scope-reduction rationale
-  // (no RL-environment/code-execution infra exists in this codebase).
-  app.post("/api/gauntlet/run", requireFeature("gauntlet"), requireAuth, async (req, res) => {
-    try {
-      const userId = currentUserId(req)!;
-      const user = await storage.getUser(userId);
-      const plan = (user?.subscriptionPlan as SubscriptionPlan) || "INDIVIDUAL_FREE";
-      if (!SUBSCRIPTION_PLANS[plan]?.limits?.reportAccess) {
-        return res.status(403).json({ message: "Atomic Gauntlet requires Individual Pro or higher." });
-      }
-
-      const schema = z.object({
-        name: z.string().min(1).max(120),
-        pitch: z.string().max(2000).default(""),
-        stack: z.string().max(500).default(""),
-        url: z.string().max(500).default(""),
-        testDemoSrcdoc: z.string().max(20000).optional(),
-      });
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid submission." });
-      }
-
-      const { run, guidance, newBalance } = await runAndRecordGauntlet(userId, parsed.data);
-      return res.json({ ...run, guidance, newBalance });
-    } catch (err: any) {
-      if (err instanceof InsufficientCreditsError) {
-        return res.status(402).json({ message: err.message });
-      }
-      return res.status(500).json({ message: err.message });
-    }
-  });
-
-  app.get("/api/gauntlet/runs", requireFeature("gauntlet"), requireAuth, async (req, res) => {
-    try {
-      const userId = currentUserId(req)!;
-      const rows = await listGauntletRuns(userId);
-      return res.json(rows);
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
@@ -2508,7 +2536,7 @@ export async function registerRoutes(
   app.get("/api/report/shared/:token", requireFeature("executiveReport"), async (req, res) => {
     try {
       const share = await storage.getReportShareByToken(String(req.params.token));
-      if (!share || share.revoked) {
+      if (!share || share.revoked || share.expiresAt.getTime() <= Date.now()) {
         return res.status(404).json({ message: "This report link is no longer available." });
       }
       const userId = share.userId;
@@ -2523,7 +2551,7 @@ export async function registerRoutes(
         return res.status(404).json({ message: "This report link is no longer available." });
       }
       const identity = {
-        userId,
+        ...marketScoreMetadata(),
         arkScore: user.arkScore,
         jstIndex: user.jstIndex,
         ccmi: user.ccmi,
@@ -2551,12 +2579,41 @@ export async function registerRoutes(
             }
           : null,
       };
+      const publicAssessment = assessment
+        ? {
+            ...marketScoreMetadata(),
+            jstTotal: assessment.jstTotal,
+            jstJobs: assessment.jstJobs,
+            jstSkills: assessment.jstSkills,
+            jstTalent: assessment.jstTalent,
+            vulnerabilityLevel: assessment.vulnerabilityLevel,
+            readinessProfile: assessment.readinessProfile,
+            riskModifiers: assessment.riskModifiers,
+            matchedCardIds: assessment.matchedCardIds,
+            archetypeArchitect: assessment.archetypeArchitect,
+            archetypeOrchestrator: assessment.archetypeOrchestrator,
+            archetypeConductor: assessment.archetypeConductor,
+            automationMilestones: assessment.automationMilestones,
+            contextCraftLevel: assessment.contextCraftLevel,
+            contextCraftMultiplier: assessment.contextCraftMultiplier,
+            jstRawTotal: assessment.jstRawTotal,
+            jstRawJobs: assessment.jstRawJobs,
+            jstRawSkills: assessment.jstRawSkills,
+            jstRawTalent: assessment.jstRawTalent,
+            completeness: assessment.completeness,
+            candidateName: assessment.candidateName,
+            currentEmployer: assessment.currentEmployer,
+            currentRole: assessment.currentRole,
+            professionalQuals: assessment.professionalQuals,
+            academicQuals: assessment.academicQuals,
+          }
+        : null;
       return res.json({
         name: user.name,
         role: user.role,
         identity,
         lhcs: lhcsLive || identity.lhcs,
-        assessment: assessment ?? null,
+        assessment: publicAssessment,
       });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
@@ -4017,18 +4074,20 @@ export async function registerRoutes(
 
       let team = null;
       if (opportunity.type === "PROJECT") {
-        const poolRows = await storage.getCandidatePool();
-        const pool: CandidateProfile[] = poolRows.map((p) => ({
-          userId: p.userId,
-          name: p.userId === userId ? `${p.name} (you)` : p.name,
-          jstIndex: p.jstIndex,
-          archetype: dominantArchetype(
-            p.archetypeArchitect,
-            p.archetypeOrchestrator,
-            p.archetypeConductor,
-          ),
-          verifications: p.verifications,
-        }));
+        // Team identities are also a discovery surface: do not leak pool
+        // names/JST/archetype unless the member has opted into GUIN MAX.
+        const discovery = await storage.getGuinMaxDiscoveryRows();
+        const consentSearch: GuinMaxSearch = {
+          needs: requirements.map(r => ({ cardId: r.cardId, minTier: r.minTier })),
+          region: !opportunity.remote && opportunity.location?.trim() ? opportunity.location : null,
+        };
+        const pool: CandidateProfile[] = discovery.map(asGuinCandidate)
+          .filter(c => isGuinMaxEligible(c, consentSearch))
+          .map(c => ({
+            userId: c.userId, name: c.userId === userId ? `${c.name} (you)` : c.name,
+            jstIndex: c.jstIndex, archetype: c.archetype,
+            verifications: c.verifications.filter(v => v.status === "verified").map(v => ({ cardId: v.cardId, tier: v.tier })),
+          }));
         team = assembleTeam(input, pool);
       }
 
@@ -4108,6 +4167,8 @@ export async function registerRoutes(
       const userId = currentUserId(req)!;
       const found = await storage.getOpportunity(String(req.params.id));
       if (!found) return res.status(404).json({ message: "Opportunity not found." });
+      if (found.opportunity.status !== "OPEN") return res.status(409).json({ message: "This opportunity is closed." });
+      if (found.opportunity.createdBy === userId) return res.status(403).json({ message: "You cannot apply to your own opportunity." });
       const me = await buildSelfCandidate(userId);
       const match = scoreUserForOpportunity(me, toOpportunityInput(found.opportunity, found.requirements));
       const application = await storage.upsertApplication({
@@ -4120,6 +4181,249 @@ export async function registerRoutes(
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
+  });
+
+  // Employer review is deliberately based on the GUIN MAX consent profile. It
+  // returns a narrow discovery DTO, never a résumé, contact detail, or raw
+  // verification submission.
+  async function employerCandidateCards(opportunityId: string, employerId: string) {
+    const found = await storage.getOpportunity(opportunityId);
+    if (!found || found.opportunity.createdBy !== employerId || found.opportunity.status !== "OPEN") return null;
+    const search: GuinMaxSearch = {
+      needs: found.requirements.map(r => ({ cardId: r.cardId, minTier: r.minTier })),
+      // Remote opportunities do not imply a region. On-site opportunities with
+      // a stated location require an explicit matching candidate region.
+      region: !found.opportunity.remote && found.opportunity.location?.trim() ? found.opportunity.location : null,
+    };
+    const rows = await storage.getGuinMaxDiscoveryRows();
+    const input = toOpportunityInput(found.opportunity, found.requirements);
+    const cards = rows
+      .map(asGuinCandidate)
+      .filter(c => c.userId !== employerId && isGuinMaxEligible(c, search))
+      .map(c => {
+        const match = scoreUserForOpportunity({
+          userId: c.userId, name: c.name, jstIndex: c.jstIndex, archetype: c.archetype,
+          verifications: c.verifications.filter(v => v.status === "verified").map(v => ({ cardId: v.cardId, tier: v.tier })),
+        }, input);
+        const evidenceByCard = new Map<string, string>();
+        for (const r of match.requirements) {
+          if (r.userTier && (!evidenceByCard.has(r.cardId) || (TIER_RANK[r.userTier] ?? 0) > (TIER_RANK[evidenceByCard.get(r.cardId)!] ?? 0))) {
+            evidenceByCard.set(r.cardId, r.userTier);
+          }
+        }
+        const evidence = [...evidenceByCard].sort(([a], [b]) => a.localeCompare(b)).map(([cardId, tier]) => ({ cardId, tier }));
+        return {
+          candidateId: c.userId, name: c.name, cxs: match.matchScore,
+          cxsName: "ARK verified-evidence CXS", algorithmVersion: "ark-cxs-verified-evidence-v1",
+          currentFit: match.matchScore, projectedFit: match.projectedMatchScore,
+          radar: { verifiedCoverage: match.coveragePct, jstEvidence: match.jstFactorPct, archetypeFit: match.archetypeFitPct },
+          evidence, requirements: match.requirements,
+          gaps: match.requirements.filter(r => r.status !== "met").map(r => ({
+            cardId: r.cardId, cardName: r.cardName, requiredTier: r.minTier, currentTier: r.userTier,
+            gap: r.userTier ? "under-tier" : "missing",
+          })),
+          rationale: [
+            `${match.evidenceCount} of ${match.totalRequirements} requirements are verified at the required tier.`,
+            `Current fit is ${match.matchScore}; projected fit is ${match.projectedMatchScore} if listed gaps are verified at their required tiers.`,
+          ],
+        };
+      })
+      .sort((a, b) => b.cxs - a.cxs || b.currentFit - a.currentFit || a.candidateId.localeCompare(b.candidateId));
+    return { found, cards };
+  }
+
+  app.get("/api/matchmaking/opportunities/:id/candidates", requireFeature("matchmaking"), requireFeature("guinMax"), requireAuth, async (req, res) => {
+    try {
+      const result = await employerCandidateCards(String(req.params.id), currentUserId(req)!);
+      if (!result) return res.status(403).json({ message: "Only the owner of an open opportunity may review candidates." });
+      return res.json({ opportunity: result.found.opportunity, algorithmVersion: "ark-cxs-verified-evidence-v1", candidates: result.cards });
+    } catch (err: any) { return res.status(500).json({ message: err.message }); }
+  });
+
+  app.post("/api/matchmaking/opportunities/:id/introductions", requireFeature("matchmaking"), requireFeature("guinMax"), requireAuth, async (req, res) => {
+    try {
+      const candidateId = z.object({ candidateId: z.string().uuid() }).safeParse(req.body);
+      if (!candidateId.success) return res.status(400).json({ message: "candidateId is required." });
+      const employerId = currentUserId(req)!;
+      const result = await employerCandidateCards(String(req.params.id), employerId);
+      if (!result) return res.status(403).json({ message: "Only the owner of an open opportunity may request an introduction." });
+      const card = result.cards.find(c => c.candidateId === candidateId.data.candidateId);
+      if (!card) return res.status(400).json({ message: "Candidate is not currently eligible for this opportunity." });
+      const introduction = await storage.createMatchmakingIntroduction({
+        opportunityId: result.found.opportunity.id, employerId, candidateId: card.candidateId, cxs: card.cxs,
+        scoreSnapshot: { algorithmVersion: card.algorithmVersion, currentFit: card.currentFit, projectedFit: card.projectedFit, radar: card.radar, requirements: card.requirements, gaps: card.gaps, rationale: card.rationale },
+        evidence: card.evidence,
+      });
+      return res.status(201).json({ introduction });
+    } catch (err: any) {
+      if (err?.code === "23505") return res.status(409).json({ message: "A pending introduction already exists for this opportunity and candidate." });
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/matchmaking/introductions/owner", requireFeature("matchmaking"), requireFeature("guinMax"), requireAuth, async (req, res) => {
+    const rows = await storage.getMatchmakingIntroductionsForEmployer(currentUserId(req)!);
+    return res.json(rows);
+  });
+  app.get("/api/matchmaking/introductions/candidate", requireFeature("matchmaking"), requireFeature("guinMax"), requireAuth, async (req, res) => {
+    const rows = await storage.getMatchmakingIntroductionsForCandidate(currentUserId(req)!);
+    // Candidate gets enough context to make an informed decision, but never
+    // employer contact data or private account fields.
+    const inbox = await Promise.all(rows.map(async row => {
+      const [found, employer] = await Promise.all([
+        storage.getOpportunity(row.opportunityId), storage.getUser(row.employerId),
+      ]);
+      return {
+        id: row.id, status: row.status, cxs: row.cxs, createdAt: row.createdAt,
+        opportunity: found ? {
+          title: found.opportunity.title, type: found.opportunity.type, organization: found.opportunity.organization,
+          location: found.opportunity.location, remote: found.opportunity.remote,
+        } : null,
+        employerLabel: employer?.name ?? "Opportunity owner",
+        rationale: ((row.scoreSnapshot as any)?.rationale ?? []) as string[],
+        evidence: row.evidence,
+      };
+    }));
+    return res.json(inbox);
+  });
+  app.post("/api/matchmaking/introductions/:id/:action", requireFeature("matchmaking"), requireFeature("guinMax"), requireAuth, async (req, res) => {
+    try {
+      const action = String(req.params.action);
+      if (!["accept", "decline", "cancel"].includes(action)) return res.status(400).json({ message: "Unknown introduction action." });
+      const userId = currentUserId(req)!;
+      const intro = await storage.getMatchmakingIntroduction(String(req.params.id));
+      if (!intro || intro.status !== "PENDING") return res.status(404).json({ message: "Pending introduction not found." });
+      const allowed = (action === "cancel" && intro.employerId === userId) ||
+        ((action === "accept" || action === "decline") && intro.candidateId === userId);
+      if (!allowed) return res.status(403).json({ message: "You are not authorized for this introduction action." });
+      let status = action === "accept" ? "ACCEPTED" : action === "decline" ? "DECLINED" : "CANCELLED";
+      let snapshot: { cxs: number; scoreSnapshot: Record<string, unknown>; evidence: Array<{ cardId: string; tier: string }> } | undefined;
+      if (action === "accept") {
+        // An acceptance is a fresh decision, not a blind approval of an old
+        // card: re-run owner/open/consent/evidence/score eligibility first.
+        const refreshed = await employerCandidateCards(intro.opportunityId, intro.employerId);
+        const card = refreshed?.cards.find(c => c.candidateId === intro.candidateId);
+        if (!refreshed || !card) {
+          const cancelled = await storage.transitionMatchmakingIntroduction(intro.id, "CANCELLED");
+          if (!cancelled) return res.status(409).json({ message: "This introduction changed before it could be cancelled." });
+          return res.status(409).json({ message: "This introduction is no longer eligible and was cancelled." });
+        }
+        snapshot = {
+          cxs: card.cxs, evidence: card.evidence,
+          scoreSnapshot: { algorithmVersion: card.algorithmVersion, currentFit: card.currentFit, projectedFit: card.projectedFit, radar: card.radar, requirements: card.requirements, gaps: card.gaps, rationale: card.rationale },
+        };
+      }
+      const updated = await storage.transitionMatchmakingIntroduction(intro.id, status, snapshot);
+      if (!updated) return res.status(409).json({ message: "This introduction was already updated." });
+      return res.json({ introduction: updated, message: status === "ACCEPTED" ? "Mutual introduction accepted. Contact details remain private." : undefined });
+    } catch (err: any) { return res.status(500).json({ message: err.message }); }
+  });
+
+  // ── GUIN MAX — consented, evidence-only mentor discovery ──────────────
+  const guinMaxProfileSchema = z.object({
+    discoveryOptIn: z.boolean(), adultAttested: z.boolean(), available: z.boolean(),
+    selectedTier: z.enum(CCGE_TIERS).nullable(),
+    region: z.string().trim().max(80).nullable(),
+    language: z.string().trim().max(40).nullable(),
+  });
+  const guinMaxSearchSchema = z.object({
+    needs: z.array(z.object({ cardId: z.string().trim().min(1).max(120), minTier: z.enum(CCGE_TIERS) })).max(12),
+    tierFloor: z.enum(CCGE_TIERS).nullable().optional(),
+    region: z.string().trim().max(80).nullable().optional(),
+    language: z.string().trim().max(40).nullable().optional(),
+  });
+  const asGuinCandidate = (r: Awaited<ReturnType<typeof storage.getGuinMaxDiscoveryRows>>[number]): GuinMaxCandidate => ({
+    userId: r.userId, name: r.name, optIn: r.profile.discoveryOptIn, adultAttested: r.profile.adultAttested,
+    available: r.profile.available, selectedTier: r.profile.selectedTier, region: r.profile.region,
+    language: r.profile.language, jstIndex: r.jstIndex, archetype: (["A", "O", "C"].includes(r.typology || "")
+      ? ({ A: "ARCHITECT", O: "ORCHESTRATOR", C: "CONDUCTOR" } as any)[r.typology!] : null),
+    ccmiPillars: r.ccmi, verifications: r.verifications,
+  });
+  app.get("/api/guin-max/profile", requireFeature("guinMax"), requireAuth, async (req, res) => {
+    const profile = await storage.getGuinMaxProfile(currentUserId(req)!);
+    return res.json(profile ?? { discoveryOptIn: false, adultAttested: false, available: false, selectedTier: null, region: null, language: null });
+  });
+  app.put("/api/guin-max/profile", requireFeature("guinMax"), requireAuth, async (req, res) => {
+    const parsed = guinMaxProfileSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid discovery profile." });
+    const clean = { ...parsed.data, region: parsed.data.region || null, language: parsed.data.language || null };
+    return res.json(await storage.upsertGuinMaxProfile(currentUserId(req)!, clean));
+  });
+  app.post("/api/guin-max/discover", requireFeature("guinMax"), requireAuth, async (req, res) => {
+    const parsed = guinMaxSearchSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid discovery filters." });
+    const userId = currentUserId(req)!;
+    const rows = await storage.getGuinMaxDiscoveryRows();
+    const me = rows.find(r => r.userId === userId);
+    if (!me || !isGuinMaxEligible(asGuinCandidate(me), parsed.data)) {
+      return res.status(403).json({ message: "Discovery requires your explicit opt-in, adult attestation, availability, selected verified tier, and evidence." });
+    }
+    const search: GuinMaxSearch = { ...parsed.data, requesterArchetype: asGuinCandidate(me).archetype };
+    const matches = discoverGuinMax(rows.filter(r => r.userId !== userId).map(asGuinCandidate), search, me.ccmi);
+    return res.json({ matches, reason: matches.length ? null : "No eligible mentors match these evidence and filter constraints." });
+  });
+  app.post("/api/guin-max/requests", requireFeature("guinMax"), requireAuth, async (req, res) => {
+    const body = z.object({ candidateId: z.string().uuid(), search: guinMaxSearchSchema }).safeParse(req.body);
+    if (!body.success) return res.status(400).json({ message: "candidateId and valid search are required." });
+    const userId = currentUserId(req)!;
+    if (body.data.candidateId === userId) return res.status(400).json({ message: "You cannot request yourself." });
+    const rows = await storage.getGuinMaxDiscoveryRows();
+    const me = rows.find(r => r.userId === userId), candidate = rows.find(r => r.userId === body.data.candidateId);
+    if (!me || !candidate || !isGuinMaxEligible(asGuinCandidate(me), body.data.search)) return res.status(403).json({ message: "Both parties must currently meet discovery eligibility." });
+    const match = discoverGuinMax([asGuinCandidate(candidate)], { ...body.data.search, requesterArchetype: asGuinCandidate(me).archetype }, me.ccmi)[0];
+    if (!match) return res.status(403).json({ message: "Candidate is not eligible for this request." });
+    try {
+      return res.status(201).json(await storage.createGuinMaxRequest({ requesterId: userId, candidateId: candidate.userId, cxs: match.cxs, radar: match.radar, evidence: match.evidence }));
+    } catch (err: any) {
+      return res.status(409).json({ message: "A request for this mentor already exists." });
+    }
+  });
+  app.get("/api/guin-max/requests", requireFeature("guinMax"), requireAuth, async (req, res) => {
+    const userId = currentUserId(req)!;
+    const requests = await storage.getGuinMaxRequests(userId);
+    return res.json(requests.map(request => ({
+      id: request.id,
+      role: request.requesterId === userId ? "requester" : "candidate",
+      status: request.status,
+      cxs: request.cxs,
+      radar: request.radar,
+      evidence: request.evidence,
+      createdAt: request.createdAt,
+      updatedAt: request.updatedAt,
+    })));
+  });
+  app.post("/api/guin-max/requests/:id/:action", requireFeature("guinMax"), requireAuth, async (req, res) => {
+    const action = String(req.params.action), userId = currentUserId(req)!;
+    if (!["accept", "decline", "cancel"].includes(action)) return res.status(400).json({ message: "Unknown request action." });
+    const request = await storage.getGuinMaxRequest(String(req.params.id));
+    if (!request || request.status !== "PENDING") return res.status(404).json({ message: "Pending request not found." });
+    const allowed = (action === "cancel" && request.requesterId === userId) ||
+      ((action === "accept" || action === "decline") && request.candidateId === userId);
+    if (!allowed) return res.status(403).json({ message: "This request action is not authorized." });
+    const status = action === "accept" ? "ACCEPTED" : action === "decline" ? "DECLINED" : action === "cancel" ? "CANCELLED" : null;
+    if (action === "accept") {
+      const rows = await storage.getGuinMaxDiscoveryRows();
+      const requester = rows.find(row => row.userId === request.requesterId);
+      const candidate = rows.find(row => row.userId === request.candidateId);
+      const needs = request.evidence.map(item => ({ cardId: item.cardId, minTier: item.tier as typeof CCGE_TIERS[number] }));
+      const currentlyEligible = requester && candidate &&
+        isGuinMaxEligible(asGuinCandidate(requester), { needs }) &&
+        isGuinMaxEligible(asGuinCandidate(candidate), { needs });
+      if (!currentlyEligible) {
+        const cancelled = await storage.transitionGuinMaxRequest(request.id, "CANCELLED");
+        if (!cancelled) return res.status(409).json({ message: "This request changed before it could be cancelled." });
+        return res.status(409).json({ message: "This request is no longer eligible and was cancelled." });
+      }
+    }
+    const updated = await storage.transitionGuinMaxRequest(request.id, status!);
+    if (!updated) return res.status(409).json({ message: "This request was already updated." });
+    return res.json({
+      request: {
+        id: updated.id, status: updated.status, cxs: updated.cxs, radar: updated.radar,
+        evidence: updated.evidence, createdAt: updated.createdAt, updatedAt: updated.updatedAt,
+      },
+      message: status === "ACCEPTED" ? "Mentor request accepted. Contact details remain private." : undefined,
+    });
   });
 
   // ── SPHINX Marketplace ────────────────────────────────
@@ -5259,9 +5563,12 @@ export async function registerRoutes(
     return res.json(row);
   });
 
-  app.post("/api/seed", async (_req, res) => {
+  app.post("/api/seed", requireAuth, async (req, res) => {
     if (process.env.NODE_ENV === "production") {
       return res.status(403).json({ message: "Forbidden" });
+    }
+    if (!(await isAdminReq(req))) {
+      return res.status(403).json({ message: "Admin only." });
     }
     try {
       // Seed Jnomics Cards from the canonical CODEC primitive catalog.
@@ -5551,6 +5858,8 @@ export async function registerRoutes(
       if (demoForWorkforce) {
         await storage.updateUser(demoForWorkforce.id, {
           subscriptionPlan: "ENTERPRISE",
+          entitlementSource: "contract",
+          entitlementVerificationStatus: "verified",
           institution: WORKFORCE_INSTITUTION,
         });
         const existingStaff = await storage.getStaffRecords(WORKFORCE_INSTITUTION);
@@ -5746,7 +6055,12 @@ export async function registerRoutes(
           seniority: "Senior",
           location: "Global",
         });
-        await storage.updateUser(instructor.id, { subscriptionPlan: "SCHOOL_STUDENT", institution: "Atlas Online Academy" });
+        await storage.updateUser(instructor.id, {
+          subscriptionPlan: "SCHOOL_STUDENT",
+          entitlementSource: "contract",
+          entitlementVerificationStatus: "verified",
+          institution: "Atlas Online Academy",
+        });
       }
       cohortInfo.instructor = instructor.username;
 
@@ -5792,6 +6106,8 @@ export async function registerRoutes(
           });
           await storage.updateUser(su.id, {
             subscriptionPlan: "SCHOOL_STUDENT",
+            entitlementSource: "contract",
+            entitlementVerificationStatus: "verified",
             institution: "Atlas Online Academy",
             jstIndex: s.jst,
             ccmi: s.ccmi,

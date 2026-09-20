@@ -7,6 +7,7 @@ import NotFound from "@/pages/not-found";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { FEATURES } from "@shared/featureFlags";
+import { availableClientRoutes, type ClientRouteId } from "./routes";
 import Home from "@/pages/home";
 import UploadPage from "@/pages/upload";
 import Dashboard from "@/pages/dashboard";
@@ -16,8 +17,6 @@ import LoginPage from "@/pages/auth/login";
 import AssessmentPage from "@/pages/assessment";
 import ReportPage from "@/pages/report";
 import ArkResumePage from "@/pages/ark-resume";
-import LivingResumeDesignerPage from "@/pages/living-resume-designer";
-import GauntletPage from "@/pages/gauntlet";
 import ContextCraftPage from "@/pages/context-craft";
 import SubscriptionPage from "@/pages/subscription";
 import CheckoutPage from "@/pages/checkout";
@@ -42,56 +41,40 @@ import TrainingRegisterPage from "@/pages/training-register";
 import F1000Page from "@/pages/f1000";
 import MatchmakingPage from "@/pages/matchmaking";
 import MatchmakingDetailPage from "@/pages/matchmaking-detail";
+import MatchmakingCandidatesPage from "@/pages/matchmaking-candidates";
+import MerlinPage from "@/pages/merlin";
+import GuinMatchPage from "@/pages/guin-match";
+import { SeoMetadata } from "@/components/SeoMetadata";
+
+const routeComponents: Record<ClientRouteId, React.ComponentType<any>> = {
+  home: Home, login: LoginPage, signup: LoginPage, upload: UploadPage,
+  assessment: AssessmentPage, dashboard: Dashboard, pathways: PathwaysPage,
+  subscription: SubscriptionPage, checkout: CheckoutPage, profile: ProfilePage,
+  play: PlayPage, marketplacePublish: MarketplacePage, marketplaceBonsai: MarketplacePage,
+  marketplaceDetail: MarketplacePage, marketplace: MarketplacePage, arkHistory: ArkHistoryPage,
+  privacy: PrivacyPage, terms: TermsPage, merlin: MerlinPage, enterprise: EnterprisePage,
+  report: ReportPage, arkResume: ArkResumePage, contextCraft: ContextCraftPage,
+  school: SchoolDashboard, marketplaceSynergy: MarketplacePage,
+  marketplaceRoundtable: MarketplacePage, marketplaceSynthesis: MarketplacePage,
+  marketplaceCorporate: MarketplacePage, marketplaceForgeLab: MarketplacePage,
+  guinPublic: GuinPublicPage, demo: DemoPage, demoTour: DemoTourPage,
+  adminCcgeImport: AdminCcgeImportPage, book: BookCompanionPage, workforce: WorkforcePage,
+  trainingRegister: TrainingRegisterPage, trainingProvider: TrainingProviderDetailPage,
+  training: TrainingPage, f1000: F1000Page, matchmakingCandidates: MatchmakingCandidatesPage,
+  matchmakingDetail: MatchmakingDetailPage, matchmaking: MatchmakingPage,
+  guinMatch: GuinMatchPage, sharedReport: SharedReportPage, confirmInvite: ConfirmInvitePage,
+};
+
+const appRoutes = availableClientRoutes(FEATURES).filter((route) => !route.public);
+const publicRoutes = availableClientRoutes(FEATURES).filter((route) => route.public);
 
 function Router() {
   return (
     <AppLayout>
       <Switch>
-        {/* ── MVP CLASS A surfaces (always on) ───────────────────────── */}
-        <Route path="/" component={Home} />
-        <Route path="/login" component={LoginPage} />
-        <Route path="/signup" component={LoginPage} />
-        <Route path="/upload" component={UploadPage} />
-        <Route path="/assessment" component={AssessmentPage} />
-        <Route path="/dashboard" component={Dashboard} />
-        <Route path="/pathways" component={PathwaysPage} />
-        <Route path="/subscription" component={SubscriptionPage} />
-        <Route path="/checkout/:id" component={CheckoutPage} />
-        <Route path="/profile" component={ProfilePage} />
-        <Route path="/play" component={PlayPage} />
-        <Route path="/marketplace/publish" component={MarketplacePage} />
-        <Route path="/marketplace/bonsai" component={MarketplacePage} />
-        <Route path="/marketplace/:id" component={MarketplacePage} />
-        <Route path="/marketplace" component={MarketplacePage} />
-        <Route path="/ark/history" component={ArkHistoryPage} />
-        <Route path="/privacy" component={PrivacyPage} />
-        <Route path="/terms" component={TermsPage} />
-
-        {/* ── CLASS C surfaces — gated by `shared/featureFlags.ts` ──── */}
-        {FEATURES.enterpriseDashboard && <Route path="/enterprise" component={EnterprisePage} />}
-        {FEATURES.executiveReport && <Route path="/report" component={ReportPage} />}
-        {FEATURES.arkResume && <Route path="/ark-resume" component={ArkResumePage} />}
-        {FEATURES.livingResumeDesigner && <Route path="/living-resume-designer" component={LivingResumeDesignerPage} />}
-        {FEATURES.gauntlet && <Route path="/gauntlet" component={GauntletPage} />}
-        {FEATURES.contextCraftPage && <Route path="/context-craft" component={ContextCraftPage} />}
-        {FEATURES.cohorts && <Route path="/school" component={SchoolDashboard} />}
-        {FEATURES.sphinxAdvanced && <Route path="/marketplace/synergy" component={MarketplacePage} />}
-        {FEATURES.sphinxAdvanced && <Route path="/marketplace/roundtable" component={MarketplacePage} />}
-        {FEATURES.sphinxAdvanced && <Route path="/marketplace/synthesis" component={MarketplacePage} />}
-        {FEATURES.corporateMarketplace && <Route path="/marketplace/corporate" component={MarketplacePage} />}
-        {FEATURES.forgeLabDocx && <Route path="/marketplace/forge-lab" component={MarketplacePage} />}
-        {FEATURES.guinPublic && <Route path="/u/:username" component={GuinPublicPage} />}
-        {FEATURES.investorDemo && <Route path="/demo" component={DemoPage} />}
-        {FEATURES.investorDemo && <Route path="/demo-tour" component={DemoTourPage} />}
-        {FEATURES.adminCcgeImport && <Route path="/admin/ccge-import" component={AdminCcgeImportPage} />}
-        {FEATURES.bookCompanion && <Route path="/book" component={BookCompanionPage} />}
-        {FEATURES.institutionWorkforce && <Route path="/workforce" component={WorkforcePage} />}
-        {FEATURES.trainingProviders && <Route path="/training/register" component={TrainingRegisterPage} />}
-        {FEATURES.trainingProviders && <Route path="/training/p/:slug" component={TrainingProviderDetailPage} />}
-        {FEATURES.trainingProviders && <Route path="/training" component={TrainingPage} />}
-        {FEATURES.f1000Promo && <Route path="/f1000" component={F1000Page} />}
-        {FEATURES.matchmaking && <Route path="/matchmaking/:id" component={MatchmakingDetailPage} />}
-        {FEATURES.matchmaking && <Route path="/matchmaking" component={MatchmakingPage} />}
+        {appRoutes.map((route) => (
+          <Route key={route.id} path={route.path} component={routeComponents[route.id]} />
+        ))}
 
         {/* Fallback to 404 */}
         <Route component={NotFound} />
@@ -105,11 +88,13 @@ function App() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
+          <SeoMetadata />
           <Toaster />
           <Switch>
             {/* Public, no-login shared ARK Report — rendered OUTSIDE app chrome. */}
-            <Route path="/r/:token" component={SharedReportPage} />
-            <Route path="/confirm/:token" component={ConfirmInvitePage} />
+            {publicRoutes.map((route) => (
+              <Route key={route.id} path={route.path} component={routeComponents[route.id]} />
+            ))}
             <Route component={Router} />
           </Switch>
         </TooltipProvider>

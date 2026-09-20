@@ -6,99 +6,214 @@ id = "aOXmgQhkJKydupZtXtQB7"
 uri = "file://exports/ATLAS_PDD_ARK_Platform_Investor.pdf"
 type = "pdf"
 title = "ATLAS PDD — ARK Platform (Investor Edition)"
+logical_id = "530e1745-ed66-41cd-b188-3dd52c281f81"
 
 [[outputs]]
 id = "EJ6Gd3J5t2r8hJ9K8C32S"
 uri = "file://dist/docs/ARK_Promptware_Design_Document.pdf"
 type = "pdf"
 title = "ARK Onecraft — Promptware Design Document (Investor Edition v1.0)"
+logical_id = "a1d61540-13fc-4c6b-8e00-90d6338db3d9"
 
 [[outputs]]
 id = "YK6yuVGHRhQ9wxOFIAWdM"
 uri = "file://dist/docs/ARK_Subscriber_Plans_For_Dummies.pdf"
 type = "pdf"
 title = "ARK Onecraft — Subscriber Plans Guide (for dummies)"
+logical_id = "f02aca3d-c329-4d6d-9ef1-b1a3758aa35c"
 
 [[outputs]]
 id = "aa0MVKyOmOWkgyGZd8zzf"
 uri = "file://exports/ARK_PDD_v3_Comprehensive.pdf"
 type = "pdf"
 title = "ARK Platform — PDD v3 (Comprehensive, 36 pp)"
+logical_id = "cfd97eb9-b5e7-461e-b531-bf0f8339d7cb"
 
 [[outputs]]
 id = "rOWs9tECPRy4KZRKcs_zN"
 uri = "file://exports/ARK_PDD_v3_Comprehensive.md"
 type = "text"
 title = "ARK Platform — PDD v3 (Markdown source)"
+logical_id = "18429fe0-db5d-4cd2-9fd0-a0bbb5f96c90"
 
 [[outputs]]
 id = "PgUrdkyW2hGgmCV9gU0_6"
 uri = "file://exports/ARK_PDD_MVP_Spartan.pdf"
 type = "pdf"
 title = "ARK MVP PDD (SPARTAN) — now with Phase O: Revenue / Token-Cost 10% Invariant"
+logical_id = "939e9ff7-0bc9-48ea-ae00-e4640467b7a1"
 
 [[outputs]]
 id = "4DiraD_IXd8CMkKhz0uTO"
 uri = "file://exports/ARK_PDD_MVP_Spartan.md"
 type = "text"
 title = "ARK Platform — MVP PDD (Markdown source)"
+logical_id = "097c067e-225c-461c-b1e4-896b8bdb7257"
 
 [[outputs]]
 id = "UH7MRcpi_uA218Qoqzkpw"
 uri = "file://screenshots/badge_silver.png"
 type = "image"
 title = "Silver tier CCGE badge (Satori-rendered PNG)"
+logical_id = "254283dd-152d-4a1a-9392-144a5101d3fd"
 
 [[outputs]]
 id = "yiEhh_-CyaJljhULfmm0l"
 uri = "file://screenshots/badge_live.png"
 type = "image"
 title = "Live CCGE badge — Silver tier, scenario \"Customer Support Auto-Response\""
+logical_id = "9162376b-561d-455b-bd9e-3f9c90c00b59"
 
 [[outputs]]
 id = "yxGU6LDoJEnsgBJYq5_S4"
 uri = "file://exports/ARK_PDD_LLM_Usage_Guardrail.md"
 type = "text"
 title = "ARK Platform — LLM Usage Guardrail PDD"
+logical_id = "fd21c49b-8b1c-4501-b67e-c0eabb6dc74f"
 
 [[outputs]]
 id = "omQcNBG31AIirGRPg2-Ku"
 uri = "file://exports/ARK_Onecraft_Capability_vs_TREE_Reality_Check.md"
 type = "text"
 title = "ARK / Onecraft — Capability vs. TREE Reality Check"
+logical_id = "8e862f0b-f09d-431d-916c-8b0c2ead949a"
 
 [[outputs]]
 id = "ywpkYNwFKsiBT_-Rmf_xN"
 uri = "file://exports/Context_Craft_Checkpoint_Design_Guide.pdf"
 type = "pdf"
 title = "Context Craft — Checkpoint Page Design Guide"
+logical_id = "cadcb74d-58ce-4f1f-8410-e50e6c79ac7e"
 
 [[outputs]]
 id = "hmU_gtNaLuKTkH98-yQIR"
 uri = "file://exports/Context_Craft_Checkpoints_Chapter_by_Chapter.pdf"
 type = "pdf"
 title = "Context Craft — Chapter-by-Chapter Checkpoint Set"
+logical_id = "4d39ac04-bbcc-4a25-81c2-6c0a2296e7ed"
 
 [[outputs]]
 id = "NFUJI1aw2PpUNovBeqGuC"
 uri = "file://exports/ARK_PDD_Current_ATLAS.md"
 type = "text"
 title = "ARK Living PDD v11 — Markdown source"
+logical_id = "d328cbeb-7d43-4565-b138-1de985c59464"
 
 [[outputs]]
 id = "_rzaPmVvZ27ukQaMuBG7w"
 uri = "file://exports/ARK_PDD_Current_ATLAS.pdf"
 type = "pdf"
 title = "ARK PDD — ATLAS (Comprehensive Investor PDD)"
+logical_id = "318ecf28-3b80-4e1b-a222-28d28f1c8510"
 
 [[outputs]]
 id = "Cp6nF5UV8mHkkwiBHx0iZ"
 uri = "file://exports/ARK_PDD_Current_MVP_Spartan.pdf"
 type = "pdf"
 title = "ARK SPARTAN MVP PDD — updated 02 JUL 2026"
+logical_id = "38e40784-8877-43ba-9cf6-11514999eb4c"
 
 [[outputs]]
 id = "jt5lyS6qEltRJz2TLEBhP"
 uri = "file://exports/ARK_PDD_Current_MVP_Spartan.md"
 type = "text"
 title = "SPARTAN MVP PDD — source markdown"
+logical_id = "8b4f5774-7621-463b-a06f-9d54bdeecdd4"
+
+[[outputs]]
+id = "ZXb0toL_GkC2oKN4etdcg"
+uri = "file://exports/ARK_PDD_Current_ATLAS_360.pdf"
+type = "pdf"
+title = "ARK Platform — High-Contrast ATLAS 360 Living PDD"
+description = "Updated PDF with stronger foreground/background contrast across headings, body text, links, tables, and dark sections."
+logical_id = "725b7ded-4e73-4767-b768-0e787dbd61a4"
+content_hash = "sha256:4187b33ace29834cd6471a0a843fcbb49dc2daa15c4d8c3edd086b256421409e"
+size = 709857
+mtime_ms = 1788627336421
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:d282319e-4ac3-4448-8ef6-a7e8a1739bbe/725b7ded-4e73-4767-b768-0e787dbd61a4/60f79a83-7e84-4579-8119-abcea79436f7"
+storage_version_token = "1788627352353690"
+content_type = "application/pdf"
+
+[[outputs]]
+id = "SEvbV8ZzSzcIhODjJ3pI_"
+uri = "file://exports/ARK_PDD_Current_ATLAS_360.md"
+type = "text"
+title = "ARK ATLAS 360 Living PDD — Editable Source"
+description = "Maintainable Markdown source for future living-document updates."
+logical_id = "129319b4-f28a-4396-acce-6f4d2d1d5013"
+content_hash = "sha256:db912ca736a3174e36bb4a800b059df83ec619f3bacdabc58562d3ee11173a13"
+size = 39393
+mtime_ms = 1788459001867
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:d282319e-4ac3-4448-8ef6-a7e8a1739bbe/129319b4-f28a-4396-acce-6f4d2d1d5013/cc6f3a8a-4dfd-4d5d-9a9d-d807f8b18a72"
+storage_version_token = "1788459047255463"
+content_type = "text/markdown"
+
+[[outputs]]
+id = "FRvrq5yL1vjgwSNsWMRzO"
+uri = "file://exports/ATANDA_AI_SITE_MAP.md"
+type = "text"
+title = "ATANDA.AI Site Map and Analysis"
+description = "Current public and application route hierarchy, access levels, user journeys, crawlability findings, and recommended XML sitemap scope."
+logical_id = "c3ef264b-efb2-4a0c-aa39-58f875d8f4af"
+content_hash = "sha256:ca33dffb02f30dec2e1bb01aa70aeb9dbec9c2c00b6c2ab619dd0fbd1e2c19a9"
+size = 10946
+mtime_ms = 1788633867387
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:d282319e-4ac3-4448-8ef6-a7e8a1739bbe/c3ef264b-efb2-4a0c-aa39-58f875d8f4af/dbbddb0c-431e-472f-8350-ae8060894960"
+storage_version_token = "1788633872751363"
+content_type = "text/markdown"
+
+[[outputs]]
+id = "07agAcLhnCwAN9d8sEGfA"
+uri = "file://exports/ARK_X_GitHub_Update_Deployment_Option.pdf"
+type = "pdf"
+title = "ARK-X GitHub Update Deployment Option"
+description = "Downloadable 8-page deployment guide covering GitHub-to-Hostinger updates, prerequisites, database and integration risks, testing, domain cutover, and rollback."
+logical_id = "f00d0079-7950-4200-b6fb-d64ceb494539"
+content_hash = "sha256:6a3bdeb168a481059892de1851ff3d519e8bc6cdbb121019afad3b04e030c4ea"
+size = 169682
+mtime_ms = 1788634585259
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:d282319e-4ac3-4448-8ef6-a7e8a1739bbe/f00d0079-7950-4200-b6fb-d64ceb494539/0f95880d-a5b6-42cb-a052-395bb74c74b4"
+storage_version_token = "1788634594371517"
+content_type = "application/pdf"
+
+[[outputs]]
+id = "IGmIqNzyANb3v9IDYR4ua"
+uri = "file://exports/ARK-X_PDD_ATLAS_360_CURRENT.pdf"
+type = "pdf"
+title = "ARK-X ATLAS 360 Product Definition Document"
+description = "20-page current-codebase PDD generated from the ARK-X GitHub repository using the ATLAS 360 PLAN structure. Dated 06 September 2026; includes GUIN MAX, Talent Exchange, consent controls, current inventory, risks, atomic requirements, and 313-test validation evidence."
+logical_id = "196611ad-a96f-4942-9dba-4c74be81f3f6"
+content_hash = "sha256:ad9f566d5d5fd135547a7263e17ee9ef40515ed6a3b105e9ebd3950667d8bf1a"
+size = 462920
+mtime_ms = 1788714103519
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:d282319e-4ac3-4448-8ef6-a7e8a1739bbe/196611ad-a96f-4942-9dba-4c74be81f3f6/c06bfd9d-df69-426f-a9e3-65531ccd3eb2"
+storage_version_token = "1788714124982230"
+content_type = "application/pdf"
+
+[[outputs]]
+id = "U9QB_VDCa6jB-mrQhIOGQ"
+uri = "file://exports/ARK-X_CODEBASE_PARITY_AND_UPGRADE_REPORT.pdf"
+type = "pdf"
+title = "ARK-X Codebase Parity & Upgrade Report"
+description = "22-page comparative report between GitHub ARK-X main and the present project, including capability gaps, migration conflicts, security risks, bidirectional updates, phased reconciliation roadmap, validation matrix, effort guidance, and final acceptance criteria."
+logical_id = "95ec5d3b-fcc5-4ab6-a2f3-3d9a73d19e5b"
+content_hash = "sha256:214095120a02718eed0f424317b66a363d3ba12e8df8ba93971b2ff78cc17551"
+size = 414259
+mtime_ms = 1788714829339
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:d282319e-4ac3-4448-8ef6-a7e8a1739bbe/95ec5d3b-fcc5-4ab6-a2f3-3d9a73d19e5b/60306e4a-b63f-4d93-b211-b1b080cb06c3"
+storage_version_token = "1788714848172141"
+content_type = "application/pdf"
+
+[[outputs]]
+id = "ovoZNJD2OtdnM-dbshhVe"
+uri = "file://exports/ATANDA_FE_VS_ARK_X_REPOSITORY_REVIEW.pdf"
+type = "pdf"
+title = "ATANDA FE vs ARK-X Repository Review"
+description = "23-page architecture and integration review comparing atanda-fe and ARK-X at their current GitHub commits, with file-level metrics, capability analysis, API/security compatibility, deployment options, selective reuse guidance, phased roadmap, risks, effort estimate, and acceptance criteria."
+logical_id = "794cc85c-ffd9-4592-86a7-02cf837687d2"
+content_hash = "sha256:10c5486f7fbd5184953832879eb9d26ab006373b7f0d138811ec895172f84a6f"
+size = 534979
+mtime_ms = 1788716381283
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:d282319e-4ac3-4448-8ef6-a7e8a1739bbe/794cc85c-ffd9-4592-86a7-02cf837687d2/e051da9e-e872-4969-b2fc-86cbfd6d96ba"
+storage_version_token = "1788716392173503"
+content_type = "application/pdf"

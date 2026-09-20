@@ -192,9 +192,10 @@ export default function AssessmentPage() {
       <div className="mb-12">
         <div className="flex items-center gap-3 mb-4">
           <BrainCircuit className="w-6 h-6 text-secondary" />
-          <h2 className="text-xl font-mono text-secondary uppercase tracking-widest">
-            Context Craft Assessment
-          </h2>
+          <div>
+            <h2 className="text-xl font-mono text-secondary uppercase tracking-widest">Context Craft Assessment</h2>
+            <p className="mt-1 text-xs font-mono uppercase tracking-widest text-muted-foreground">Choose the response that fits you best</p>
+          </div>
         </div>
         <div className="flex gap-2 mb-8">
           {QUESTIONS.map((q, idx) => (
@@ -242,23 +243,29 @@ export default function AssessmentPage() {
           </AnimatePresence>
         </div>
 
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.3 }}
-          className="hidden md:flex flex-col items-center glass-card p-5 rounded-xl border border-white/10 min-w-[190px] sticky top-8"
-        >
-          <LiveJSTScore
-            jobsScore={liveScores.jobs}
-            skillsScore={liveScores.skills}
-            talentScore={liveScores.talent}
-            compact
-            label="Projected JST"
-          />
-          <p className="text-[9px] font-mono text-muted-foreground/60 text-center mt-3 leading-relaxed">
-            Score updates with<br />each response
-          </p>
-        </motion.div>
+        <details className="w-full rounded-xl border border-white/10 bg-white/[0.02] md:sticky md:top-8 md:w-[190px] md:shrink-0">
+          <summary className="cursor-pointer px-4 py-3 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-secondary">
+            View projected JST
+          </summary>
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.3 }}
+            className="flex flex-col items-center border-t border-white/10 p-5"
+          >
+            <LiveJSTScore
+              jobsScore={liveScores.jobs}
+              skillsScore={liveScores.skills}
+              talentScore={liveScores.talent}
+              compact
+              label="Projected JST"
+            />
+            <p className="mt-3 text-center text-[9px] font-mono leading-relaxed text-muted-foreground/60">
+              Score updates with each response.<br />
+              Curated ARK model · as of 6 Sep 2026
+            </p>
+          </motion.div>
+        </details>
       </div>
     </div>
   );

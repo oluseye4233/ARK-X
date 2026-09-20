@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto";
 import { db } from "./db";
-import { eq, sql, desc, and, inArray, isNull, isNotNull } from "drizzle-orm";
+import { eq, gt, sql, desc, and, inArray, isNull, isNotNull } from "drizzle-orm";
 import { guestAssessments, type InsertGuestAssessment, type GuestAssessment } from "@shared/schema";
 import { reportShares, type ReportShare } from "@shared/schema";
 import { f1000Invites, type F1000Invite, F1000_PROMO } from "@shared/schema";
@@ -52,12 +52,17 @@ import {
   opportunities, type Opportunity, type InsertOpportunity,
   opportunityRequirements, type OpportunityRequirement, type InsertOpportunityRequirement,
   opportunityApplications, type OpportunityApplication, type InsertOpportunityApplication,
-  confirmationInvites, type ConfirmationInvite, type ConfirmationType,
+  matchmakingIntroductions, type MatchmakingIntroduction,
+  guinMaxProfiles, type GuinMaxProfile, type InsertGuinMaxProfile,
+  guinMaxMatchRequests, type GuinMaxMatchRequest,
+  confirmationInvites, type ConfirmationInvite, type ConfirmationType, TIER_RANK,
   CONFIRMATION_INVITE_TTL_DAYS,
   UPSKILL_NUDGE_COOLDOWN_DAYS,
+  complementaryPairs,
+  roundtableState, synthesisSessions, synthesisCreatorsSplit, platformCreditLedger,
+  testResults, notifications, bonsaiProgress,
 } from "@shared/schema";
 import { or } from "drizzle-orm";
-
 /** One row of a workforce breakdown (per department / tenure band / etc). */
 export type WorkforceBreakdownRow = {
   key: string;
@@ -364,6 +369,8 @@ export interface IStorage {
   // Billing
   createCheckoutSession(data: InsertCheckoutSession): Promise<CheckoutSession>;
   getCheckoutSession(id: string): Promise<CheckoutSession | undefined>;
+  getPendingCheckoutSession(userId: string, plan: string): Promise<CheckoutSession | undefined>;
+  createOrGetPendingCheckoutSession(data: InsertCheckoutSession): Promise<{ session: CheckoutSession; created: boolean }>;
   updateCheckoutSession(id: string, data: Partial<CheckoutSession>): Promise<CheckoutSession | undefined>;
   createBillingEvent(e: InsertBillingEvent): Promise<BillingEvent>;
   getBillingEventsByUser(userId: string, limit?: number): Promise<BillingEvent[]>;
@@ -552,6 +559,31 @@ export interface IStorage {
   getApplicationsForUser(userId: string): Promise<OpportunityApplication[]>;
   getVerifiedCards(userId: string): Promise<{ cardId: string; tier: string }[]>;
   getCandidatePool(): Promise<MatchCandidateRow[]>;
+  createMatchmakingIntroduction(input: {
+    opportunityId: string; employerId: string; candidateId: string; cxs: number;
+    scoreSnapshot: Record<string, unknown>; evidence: Array<{ cardId: string; tier: string }>;
+  }): Promise<MatchmakingIntroduction>;
+  getMatchmakingIntroductionsForEmployer(userId: string): Promise<MatchmakingIntroduction[]>;
+  getMatchmakingIntroductionsForCandidate(userId: string): Promise<MatchmakingIntroduction[]>;
+  getMatchmakingIntroduction(id: string): Promise<MatchmakingIntroduction | undefined>;
+  transitionMatchmakingIntroduction(id: string, status: string, snapshot?: {
+    cxs: number; scoreSnapshot: Record<string, unknown>; evidence: Array<{ cardId: string; tier: string }>;
+  }): Promise<MatchmakingIntroduction | undefined>;
+  // GUIN MAX: consented discovery controls and an auditable request lifecycle.
+  getGuinMaxProfile(userId: string): Promise<GuinMaxProfile | undefined>;
+  upsertGuinMaxProfile(userId: string, input: InsertGuinMaxProfile): Promise<GuinMaxProfile>;
+  getGuinMaxDiscoveryRows(): Promise<Array<{
+    profile: GuinMaxProfile; userId: string; name: string; jstIndex: number;
+    typology: string | null; verifications: { cardId: string; tier: string; status: string }[];
+    ccmi: number[] | null;
+  }>>;
+  createGuinMaxRequest(input: {
+    requesterId: string; candidateId: string; cxs: number; radar: Record<string, number>;
+    evidence: Array<{ cardId: string; tier: string }>;
+  }): Promise<GuinMaxMatchRequest>;
+  getGuinMaxRequests(userId: string): Promise<GuinMaxMatchRequest[]>;
+  getGuinMaxRequest(id: string): Promise<GuinMaxMatchRequest | undefined>;
+  transitionGuinMaxRequest(id: string, status: string): Promise<GuinMaxMatchRequest | undefined>;
 }
 
 /** A candidate row for team formation — user identity + dominant archetype
@@ -569,12 +601,16 @@ export type MatchCandidateRow = {
 export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    if (!user) return undefined;
+    const { resolveCanonicalEntitlement } = await import("./billing");
+    return resolveCanonicalEntitlement(user);
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user;
+    if (!user) return undefined;
+    const { resolveCanonicalEntitlement } = await import("./billing");
+    return resolveCanonicalEntitlement(user);
   }
 
   async createUser(user: InsertUser): Promise<User> {
@@ -753,7 +789,11 @@ export class DatabaseStorage implements IStorage {
     const rows = await db
       .select()
       .from(reportShares)
-      .where(and(eq(reportShares.userId, userId), eq(reportShares.revoked, false)))
+      .where(and(
+        eq(reportShares.userId, userId),
+        eq(reportShares.revoked, false),
+        gt(reportShares.expiresAt, new Date()),
+      ))
       .orderBy(sql`${reportShares.createdAt} DESC`)
       .limit(1);
     return rows[0];
@@ -764,7 +804,8 @@ export class DatabaseStorage implements IStorage {
     const existing = await this.getActiveReportShareByUser(userId);
     if (existing) return existing;
     const token = randomBytes(24).toString("base64url");
-    const [row] = await db.insert(reportShares).values({ token, userId }).returning();
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const [row] = await db.insert(reportShares).values({ token, userId, expiresAt }).returning();
     return row;
   }
 
@@ -1697,6 +1738,27 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
+  async getPendingCheckoutSession(userId: string, plan: string): Promise<CheckoutSession | undefined> {
+    const [row] = await db.select().from(checkoutSessions)
+      .where(and(eq(checkoutSessions.userId, userId), eq(checkoutSessions.plan, plan), eq(checkoutSessions.status, "pending")))
+      .orderBy(desc(checkoutSessions.createdAt)).limit(1);
+    return row;
+  }
+
+  async createOrGetPendingCheckoutSession(data: InsertCheckoutSession): Promise<{ session: CheckoutSession; created: boolean }> {
+    return db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${data.userId}))`);
+      if (data.amountCents > 0) {
+        const [existing] = await tx.select().from(checkoutSessions)
+          .where(and(eq(checkoutSessions.userId, data.userId), eq(checkoutSessions.status, "pending"), sql`${checkoutSessions.amountCents} > 0`))
+          .orderBy(desc(checkoutSessions.createdAt)).limit(1);
+        if (existing) return { session: existing, created: false };
+      }
+      const [session] = await tx.insert(checkoutSessions).values(data).returning();
+      return { session, created: true };
+    });
+  }
+
   async updateCheckoutSession(id: string, data: Partial<CheckoutSession>): Promise<CheckoutSession | undefined> {
     const [row] = await db.update(checkoutSessions).set(data).where(eq(checkoutSessions.id, id)).returning();
     return row;
@@ -1727,6 +1789,17 @@ export class DatabaseStorage implements IStorage {
     const [
       userAssessments, userGameSessions, userListings, userPurchasesBuyer, userPurchasesCreator,
       userEndorsementsGiven, userEndorsementsReceived, credits, userCheckouts, userBilling, userArk, userAi,
+      userAssessmentSources, userF1000Invites, userCustomScenarios,
+      userCardVerifications, userVerificationDocuments, userGuinMaxProfiles, userGuinMaxRequests,
+      userIntroductions, userOpportunities, userApplications,
+      userFeedback, userCcmi, userArkHistory, userLhcs,
+      userCohorts, userCohortMemberships, userCohortAssignments,
+      linkedStaffRecords, userHrImports, userHrConnectorTests, userHrConnectorConfigs,
+      userTestResults, userNotifications, userRoundtableRows,
+      userSynthesisSessions, creatorSynthesisSplits,
+      userBonsaiProgress, userBookBadges, userBookSnapshots,
+      userReportShares, userSkillConfirmations, userConfirmationInvites,
+      userTrainingProviders, userTrainingClicks,
     ] = await Promise.all([
       db.select().from(assessments).where(eq(assessments.userId, userId)),
       db.select().from(gameSessions).where(eq(gameSessions.userId, userId)),
@@ -1740,27 +1813,122 @@ export class DatabaseStorage implements IStorage {
       db.select().from(billingEvents).where(eq(billingEvents.userId, userId)),
       db.select().from(arkEvents).where(eq(arkEvents.userId, userId)),
       db.select().from(aiUsage).where(eq(aiUsage.userId, userId)),
+      db.select().from(assessmentSources).where(eq(assessmentSources.userId, userId)),
+      db.select().from(f1000Invites).where(eq(f1000Invites.userId, userId)),
+      db.select().from(ccgeScenarios).where(eq(ccgeScenarios.creatorUserId, userId)),
+      db.select().from(cardVerifications).where(eq(cardVerifications.userId, userId)),
+      db.select().from(verificationDocuments).where(eq(verificationDocuments.userId, userId)),
+      db.select().from(guinMaxProfiles).where(eq(guinMaxProfiles.userId, userId)),
+      db.select().from(guinMaxMatchRequests).where(or(
+        eq(guinMaxMatchRequests.requesterId, userId), eq(guinMaxMatchRequests.candidateId, userId),
+      )),
+      db.select().from(matchmakingIntroductions).where(or(
+        eq(matchmakingIntroductions.employerId, userId), eq(matchmakingIntroductions.candidateId, userId),
+      )),
+      db.select().from(opportunities).where(eq(opportunities.createdBy, userId)),
+      db.select().from(opportunityApplications).where(eq(opportunityApplications.userId, userId)),
+      db.select().from(spcFeedback).where(or(eq(spcFeedback.buyerId, userId), eq(spcFeedback.creatorId, userId))),
+      db.select().from(ccmiPillarScores).where(eq(ccmiPillarScores.userId, userId)),
+      db.select().from(arkScoreHistory).where(eq(arkScoreHistory.userId, userId)),
+      db.select().from(lhcsSignals).where(eq(lhcsSignals.userId, userId)),
+      db.select().from(cohorts).where(eq(cohorts.instructorId, userId)),
+      db.select().from(cohortMemberships).where(eq(cohortMemberships.userId, userId)),
+      db.select().from(cohortAssignments).where(eq(cohortAssignments.assignedBy, userId)),
+      db.select().from(staffRecords).where(eq(staffRecords.arkUserId, userId)),
+      db.select().from(hrImportBatches).where(eq(hrImportBatches.importedBy, userId)),
+      db.select().from(hrConnectorTests).where(eq(hrConnectorTests.testedBy, userId)),
+      db.select().from(hrConnectorConfigs).where(eq(hrConnectorConfigs.createdBy, userId)),
+      db.select().from(testResults).where(eq(testResults.userId, userId)),
+      db.select().from(notifications).where(eq(notifications.userId, userId)),
+      db.select().from(roundtableState).where(eq(roundtableState.creatorId, userId)),
+      db.select().from(synthesisSessions).where(eq(synthesisSessions.buyerId, userId)),
+      db.select().from(synthesisCreatorsSplit).where(eq(synthesisCreatorsSplit.creatorId, userId)),
+      db.select().from(bonsaiProgress).where(eq(bonsaiProgress.userId, userId)),
+      db.select().from(bookJourneyBadges).where(eq(bookJourneyBadges.userId, userId)),
+      db.select().from(bookLedgerSnapshots).where(eq(bookLedgerSnapshots.userId, userId)),
+      db.select().from(reportShares).where(eq(reportShares.userId, userId)),
+      db.select().from(skillConfirmations).where(or(
+        eq(skillConfirmations.userId, userId), eq(skillConfirmations.confirmerUserId, userId),
+      )),
+      db.select().from(confirmationInvites).where(eq(confirmationInvites.userId, userId)),
+      db.select().from(trainingProviders).where(eq(trainingProviders.ownerUserId, userId)),
+      db.select().from(trainingClicks).where(eq(trainingClicks.userId, userId)),
     ]);
     const assessmentIds = userAssessments.map((a) => a.id);
-    const [plans, pivots, vectors] = assessmentIds.length
-      ? await Promise.all([
-          db.select().from(upskillingPlans).where(inArray(upskillingPlans.assessmentId, assessmentIds)),
-          db.select().from(pivotOpportunities).where(inArray(pivotOpportunities.assessmentId, assessmentIds)),
-          db.select().from(transferabilityVectors).where(inArray(transferabilityVectors.assessmentId, assessmentIds)),
-        ])
-      : [[], [], []];
-    return {
+    const ownedOpportunityIds = userOpportunities.map((o) => o.id);
+    const ownedCohortIds = userCohorts.map((c) => c.id);
+    const synthesisSessionIds = userSynthesisSessions.map((s) => s.id);
+    const ownedProviderIds = userTrainingProviders.map((p) => p.id);
+    const [plans, pivots, vectors, opportunityRequirementsForOwned, applicationsToOwned,
+      assignmentsForOwnedCohorts, splitsForBoughtSyntheses, coursesForOwnedProviders] = await Promise.all([
+      assessmentIds.length ? db.select().from(upskillingPlans).where(inArray(upskillingPlans.assessmentId, assessmentIds)) : [],
+      assessmentIds.length ? db.select().from(pivotOpportunities).where(inArray(pivotOpportunities.assessmentId, assessmentIds)) : [],
+      assessmentIds.length ? db.select().from(transferabilityVectors).where(inArray(transferabilityVectors.assessmentId, assessmentIds)) : [],
+      ownedOpportunityIds.length ? db.select().from(opportunityRequirements).where(inArray(opportunityRequirements.opportunityId, ownedOpportunityIds)) : [],
+      ownedOpportunityIds.length ? db.select().from(opportunityApplications).where(inArray(opportunityApplications.opportunityId, ownedOpportunityIds)) : [],
+      ownedCohortIds.length ? db.select().from(cohortAssignments).where(inArray(cohortAssignments.cohortId, ownedCohortIds)) : [],
+      synthesisSessionIds.length ? db.select().from(synthesisCreatorsSplit).where(inArray(synthesisCreatorsSplit.sessionId, synthesisSessionIds)) : [],
+      ownedProviderIds.length ? db.select().from(trainingCourses).where(inArray(trainingCourses.providerId, ownedProviderIds)) : [],
+    ]);
+    const withoutToken = <T extends { token: string }>({ token: _token, ...row }: T) => row;
+    const dedupeById = <T extends { id: string }>(rows: T[]) =>
+      Array.from(new Map(rows.map((row) => [row.id, row])).values());
+    const userIdFields = new Set([
+      "userId", "creatorId", "buyerId", "endorserId", "recipientId",
+      "requesterId", "candidateId", "employerId", "confirmerUserId",
+      "instructorId", "assignedBy", "importedBy", "testedBy", "createdBy",
+      "ownerUserId", "arkUserId",
+    ]);
+    const redactOtherUserIds = (value: unknown): unknown => {
+      if (Array.isArray(value)) return value.map(redactOtherUserIds);
+      if (!value || typeof value !== "object" || value instanceof Date) return value;
+      return Object.fromEntries(Object.entries(value).map(([key, nested]) => [
+        key,
+        (userIdFields.has(key) || /(?:UserId|AdminId)$/.test(key))
+          && typeof nested === "string" && nested !== userId
+          ? "[redacted-other-user]"
+          : redactOtherUserIds(nested),
+      ]));
+    };
+    const archive = {
       exportedAt: new Date().toISOString(),
-      schemaVersion: "1.0",
+      schemaVersion: "2.0",
+      redactedFields: [
+        "user.password",
+        "f1000Invites.code",
+        "reportShares.token",
+        "confirmationInvites.token",
+        "relationshipRecords.*.otherUserId",
+      ],
+      intentionalExclusions: {
+        sharedReferenceData: [
+          "jnomicsCards", "departments", "ccgeCards", "canonicalCcgeScenarios",
+          "cardSynergies", "complementaryPairs", "aiCache", "trainingCatalogNotOwnedByUser",
+        ],
+        systemData: ["platformCreditLedger", "guestAssessments"],
+        reason: "Shared catalog, anonymous, cache, and platform-only records are not owned by or linked to this account. Relationship records are included, but another participant's internal user ID is pseudonymized.",
+      },
       user: safeUser,
+      f1000Invites: userF1000Invites.map(({ code: _code, ...invite }) => invite),
       assessments: userAssessments,
+      assessmentSources: userAssessmentSources,
       upskillingPlans: plans,
       pivotOpportunities: pivots,
       transferabilityVectors: vectors,
+      customCcgeScenarios: userCustomScenarios,
       gameSessions: userGameSessions,
+      cardVerifications: userCardVerifications,
+      verificationDocuments: userVerificationDocuments,
+      guinMaxProfiles: userGuinMaxProfiles,
+      guinMaxMatchRequests: userGuinMaxRequests,
+      matchmakingIntroductions: userIntroductions,
+      opportunitiesCreated: userOpportunities,
+      opportunityRequirements: opportunityRequirementsForOwned,
+      opportunityApplications: dedupeById([...userApplications, ...applicationsToOwned]),
       spcListings: userListings,
       spcPurchasesAsBuyer: userPurchasesBuyer,
       spcPurchasesAsCreator: userPurchasesCreator,
+      spcFeedback: userFeedback,
       endorsementsGiven: userEndorsementsGiven,
       endorsementsReceived: userEndorsementsReceived,
       credits: credits[0] || null,
@@ -1768,7 +1936,32 @@ export class DatabaseStorage implements IStorage {
       billingEvents: userBilling,
       arkEvents: userArk,
       aiUsage: userAi,
+      ccmiPillarScores: userCcmi[0] || null,
+      arkScoreHistory: userArkHistory,
+      lhcsSignals: userLhcs[0] || null,
+      cohortsOwned: userCohorts,
+      cohortMemberships: userCohortMemberships,
+      cohortAssignments: dedupeById([...userCohortAssignments, ...assignmentsForOwnedCohorts]),
+      linkedStaffRecords,
+      hrImportBatches: userHrImports,
+      hrConnectorTests: userHrConnectorTests,
+      hrConnectorConfigs: userHrConnectorConfigs,
+      forgeTestResults: userTestResults,
+      notifications: userNotifications,
+      roundtableRows: userRoundtableRows,
+      synthesisSessions: userSynthesisSessions,
+      synthesisCreatorSplits: dedupeById([...creatorSynthesisSplits, ...splitsForBoughtSyntheses]),
+      bonsaiProgress: userBonsaiProgress[0] || null,
+      bookJourneyBadges: userBookBadges,
+      bookLedgerSnapshots: userBookSnapshots,
+      reportShares: userReportShares.map(withoutToken),
+      skillConfirmations: userSkillConfirmations,
+      confirmationInvites: userConfirmationInvites.map(withoutToken),
+      trainingProvidersOwned: userTrainingProviders,
+      trainingCoursesOwned: coursesForOwnedProviders,
+      trainingClicks: userTrainingClicks,
     };
+    return redactOtherUserIds(archive) as Record<string, any>;
   }
 
   async deleteUserCascade(userId: string): Promise<{ deletedTables: Record<string, number> }> {
@@ -1781,6 +1974,20 @@ export class DatabaseStorage implements IStorage {
       }
       const userAssessments = await tx.select({ id: assessments.id }).from(assessments).where(eq(assessments.userId, userId));
       const aIds = userAssessments.map((a) => a.id);
+      const userListings = await tx.select({ id: spcListings.id }).from(spcListings).where(eq(spcListings.creatorId, userId));
+      const listingIds = userListings.map((row) => row.id);
+      const userOpportunities = await tx.select({ id: opportunities.id }).from(opportunities).where(eq(opportunities.createdBy, userId));
+      const opportunityIds = userOpportunities.map((row) => row.id);
+      const userCohorts = await tx.select({ id: cohorts.id }).from(cohorts).where(eq(cohorts.instructorId, userId));
+      const cohortIds = userCohorts.map((row) => row.id);
+      const affectedSynthesisSessions = await tx.execute(sql`
+        SELECT id FROM synthesis_sessions
+        WHERE buyer_id = ${userId}
+          OR ${listingIds.length
+            ? sql`source_listing_ids && ARRAY[${sql.join(listingIds.map((id) => sql`${id}`), sql`, `)}]::text[]`
+            : sql`FALSE`}
+      `);
+      const synthesisSessionIds = affectedSynthesisSessions.rows.map((row: any) => String(row.id));
       const counts: Record<string, number> = {};
       const del = async (label: string, q: any) => {
         const r = await q.returning();
@@ -1793,6 +2000,81 @@ export class DatabaseStorage implements IStorage {
       } else {
         counts.upskillingPlans = 0; counts.pivotOpportunities = 0; counts.transferabilityVectors = 0;
       }
+      // Retained shared/institutional records must no longer identify the deleted account.
+      await del("staffRecordsUnlinked", tx.update(staffRecords).set({ arkUserId: null }).where(eq(staffRecords.arkUserId, userId)));
+      await del("skillConfirmationsAnonymized", tx.update(skillConfirmations).set({
+        confirmerUserId: null,
+        confirmerOrg: "Former confirmer",
+        confirmerName: null,
+        confirmerLogoUrl: null,
+      }).where(and(
+        eq(skillConfirmations.confirmerUserId, userId),
+        sql`${skillConfirmations.userId} <> ${userId}`,
+      )));
+      await del("trainingProvidersAnonymized", tx.update(trainingProviders).set({ ownerUserId: null }).where(eq(trainingProviders.ownerUserId, userId)));
+      await del("trainingClicksAnonymized", tx.update(trainingClicks).set({ userId: null }).where(eq(trainingClicks.userId, userId)));
+      // Institution-owned records survive an admin departure; only the actor
+      // identifier is replaced so scheduler state and import/test history remain.
+      await del("hrImportBatchesAnonymized", tx.update(hrImportBatches).set({ importedBy: "deleted-account" }).where(eq(hrImportBatches.importedBy, userId)));
+      await del("hrConnectorTestsAnonymized", tx.update(hrConnectorTests).set({ testedBy: "deleted-account" }).where(eq(hrConnectorTests.testedBy, userId)));
+      await del("hrConnectorConfigsAnonymized", tx.update(hrConnectorConfigs).set({ createdBy: "deleted-account" }).where(eq(hrConnectorConfigs.createdBy, userId)));
+
+      if (synthesisSessionIds.length) {
+        await del("platformCreditLedger", tx.delete(platformCreditLedger).where(and(
+          eq(platformCreditLedger.source, "synthesis"),
+          inArray(platformCreditLedger.sourceRefId, synthesisSessionIds),
+        )));
+        await del("synthesisCreatorsSplit", tx.delete(synthesisCreatorsSplit).where(inArray(synthesisCreatorsSplit.sessionId, synthesisSessionIds)));
+        await del("synthesisSessions", tx.delete(synthesisSessions).where(inArray(synthesisSessions.id, synthesisSessionIds)));
+      } else {
+        counts.platformCreditLedger = 0; counts.synthesisCreatorsSplit = 0; counts.synthesisSessions = 0;
+      }
+      await del("synthesisCreatorSplits", tx.delete(synthesisCreatorsSplit).where(eq(synthesisCreatorsSplit.creatorId, userId)));
+      if (listingIds.length) {
+        await del("complementaryPairs", tx.delete(complementaryPairs).where(or(
+          inArray(complementaryPairs.listingId, listingIds),
+          inArray(complementaryPairs.partnerListingId, listingIds),
+        )));
+        await del("roundtableState", tx.delete(roundtableState).where(inArray(roundtableState.listingId, listingIds)));
+        await del("spcFeedbackByListing", tx.delete(spcFeedback).where(inArray(spcFeedback.listingId, listingIds)));
+      } else {
+        counts.complementaryPairs = 0; counts.roundtableState = 0; counts.spcFeedbackByListing = 0;
+      }
+      await del("spcFeedback", tx.delete(spcFeedback).where(or(eq(spcFeedback.buyerId, userId), eq(spcFeedback.creatorId, userId))));
+      if (opportunityIds.length) {
+        await del("matchmakingIntroductionsByOpportunity", tx.delete(matchmakingIntroductions).where(inArray(matchmakingIntroductions.opportunityId, opportunityIds)));
+        await del("opportunityApplicationsByOpportunity", tx.delete(opportunityApplications).where(inArray(opportunityApplications.opportunityId, opportunityIds)));
+        await del("opportunityRequirements", tx.delete(opportunityRequirements).where(inArray(opportunityRequirements.opportunityId, opportunityIds)));
+      } else {
+        counts.matchmakingIntroductionsByOpportunity = 0; counts.opportunityApplicationsByOpportunity = 0; counts.opportunityRequirements = 0;
+      }
+      await del("opportunityApplications", tx.delete(opportunityApplications).where(eq(opportunityApplications.userId, userId)));
+      await del("opportunities", tx.delete(opportunities).where(eq(opportunities.createdBy, userId)));
+      if (cohortIds.length) {
+        await del("cohortAssignmentsByCohort", tx.delete(cohortAssignments).where(inArray(cohortAssignments.cohortId, cohortIds)));
+        await del("cohortMembershipsByCohort", tx.delete(cohortMemberships).where(inArray(cohortMemberships.cohortId, cohortIds)));
+      } else {
+        counts.cohortAssignmentsByCohort = 0; counts.cohortMembershipsByCohort = 0;
+      }
+      await del("cohortAssignments", tx.delete(cohortAssignments).where(eq(cohortAssignments.assignedBy, userId)));
+      await del("cohortMemberships", tx.delete(cohortMemberships).where(eq(cohortMemberships.userId, userId)));
+      await del("cohorts", tx.delete(cohorts).where(eq(cohorts.instructorId, userId)));
+      await del("guinMaxMatchRequests", tx.delete(guinMaxMatchRequests).where(or(
+        eq(guinMaxMatchRequests.requesterId, userId), eq(guinMaxMatchRequests.candidateId, userId),
+      )));
+      await del("guinMaxProfiles", tx.delete(guinMaxProfiles).where(eq(guinMaxProfiles.userId, userId)));
+      await del("confirmationInvites", tx.delete(confirmationInvites).where(eq(confirmationInvites.userId, userId)));
+      await del("skillConfirmations", tx.delete(skillConfirmations).where(eq(skillConfirmations.userId, userId)));
+      await del("verificationDocuments", tx.delete(verificationDocuments).where(eq(verificationDocuments.userId, userId)));
+      await del("cardVerifications", tx.delete(cardVerifications).where(eq(cardVerifications.userId, userId)));
+      await del("assessmentSources", tx.delete(assessmentSources).where(eq(assessmentSources.userId, userId)));
+      await del("ccgeScenarios", tx.delete(ccgeScenarios).where(eq(ccgeScenarios.creatorUserId, userId)));
+      await del("testResults", tx.delete(testResults).where(eq(testResults.userId, userId)));
+      await del("notifications", tx.delete(notifications).where(eq(notifications.userId, userId)));
+      await del("bonsaiProgress", tx.delete(bonsaiProgress).where(eq(bonsaiProgress.userId, userId)));
+      await del("bookJourneyBadges", tx.delete(bookJourneyBadges).where(eq(bookJourneyBadges.userId, userId)));
+      await del("bookLedgerSnapshots", tx.delete(bookLedgerSnapshots).where(eq(bookLedgerSnapshots.userId, userId)));
+      await del("f1000Invites", tx.delete(f1000Invites).where(eq(f1000Invites.userId, userId)));
       await del("aiUsage", tx.delete(aiUsage).where(eq(aiUsage.userId, userId)));
       await del("arkEvents", tx.delete(arkEvents).where(eq(arkEvents.userId, userId)));
       await del("billingEvents", tx.delete(billingEvents).where(eq(billingEvents.userId, userId)));
@@ -1802,6 +2084,10 @@ export class DatabaseStorage implements IStorage {
       await del("spcPurchases", tx.delete(spcPurchases).where(or(eq(spcPurchases.buyerId, userId), eq(spcPurchases.creatorId, userId))));
       await del("spcListings", tx.delete(spcListings).where(eq(spcListings.creatorId, userId)));
       await del("gameSessions", tx.delete(gameSessions).where(eq(gameSessions.userId, userId)));
+      await del("reportShares", tx.delete(reportShares).where(eq(reportShares.userId, userId)));
+      await del("matchmakingIntroductions", tx.delete(matchmakingIntroductions).where(or(
+        eq(matchmakingIntroductions.employerId, userId), eq(matchmakingIntroductions.candidateId, userId),
+      )));
       // Phase J identity tables — must be cleared before users to honor
       // GDPR-style account deletion (no FK cascade defined in migration).
       await del("ccmiPillarScores", tx.delete(ccmiPillarScores).where(eq(ccmiPillarScores.userId, userId)));
@@ -1913,6 +2199,8 @@ export class DatabaseStorage implements IStorage {
       const updateData: any = {
         subscriptionPlan: toPlan,
         subscriptionStatus: "active",
+        entitlementSource: "unverified",
+        entitlementVerificationStatus: "unverified",
         stripeCustomerId,
         stripeSubscriptionId,
         subscriptionCurrentPeriodEnd: periodEnd,
@@ -3210,9 +3498,9 @@ export class DatabaseStorage implements IStorage {
     const rows = await db
       .select({ cardId: cardVerifications.cardId, tier: cardVerifications.tier })
       .from(cardVerifications)
-      .where(and(eq(cardVerifications.userId, userId), isNotNull(cardVerifications.tier)));
+      .where(and(eq(cardVerifications.userId, userId), eq(cardVerifications.status, "verified"), isNotNull(cardVerifications.tier)));
     return rows
-      .filter((r): r is { cardId: string; tier: string } => !!r.tier)
+      .filter((r): r is { cardId: string; tier: string } => !!r.tier && (TIER_RANK[r.tier] ?? 0) > 0)
       .map((r) => ({ cardId: r.cardId, tier: r.tier }));
   }
 
@@ -3223,12 +3511,12 @@ export class DatabaseStorage implements IStorage {
     const verRows = await db
       .select({ userId: cardVerifications.userId, cardId: cardVerifications.cardId, tier: cardVerifications.tier })
       .from(cardVerifications)
-      .where(isNotNull(cardVerifications.tier));
+      .where(and(eq(cardVerifications.status, "verified"), isNotNull(cardVerifications.tier)));
     if (verRows.length === 0) return [];
 
     const byUser = new Map<string, { cardId: string; tier: string }[]>();
     for (const r of verRows) {
-      if (!r.tier) continue;
+      if (!r.tier || (TIER_RANK[r.tier] ?? 0) <= 0) continue;
       if (!byUser.has(r.userId)) byUser.set(r.userId, []);
       byUser.get(r.userId)!.push({ cardId: r.cardId, tier: r.tier });
     }
@@ -3279,6 +3567,101 @@ export class DatabaseStorage implements IStorage {
       });
     }
     return pool;
+  }
+
+  async getGuinMaxProfile(userId: string): Promise<GuinMaxProfile | undefined> {
+    const [row] = await db.select().from(guinMaxProfiles).where(eq(guinMaxProfiles.userId, userId));
+    return row;
+  }
+
+  async upsertGuinMaxProfile(userId: string, input: InsertGuinMaxProfile): Promise<GuinMaxProfile> {
+    const [row] = await db.insert(guinMaxProfiles).values({ userId, ...input, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: guinMaxProfiles.userId,
+        set: { ...input, updatedAt: new Date() },
+      }).returning();
+    return row;
+  }
+
+  async getGuinMaxDiscoveryRows() {
+    const rows = await db.select({
+      profile: guinMaxProfiles, userId: users.id, name: users.name, jstIndex: users.jstIndex, typology: users.typology,
+    }).from(guinMaxProfiles).innerJoin(users, eq(users.id, guinMaxProfiles.userId));
+    if (!rows.length) return [];
+    const ids = rows.map(r => r.userId);
+    const [verificationRows, ccmiRows] = await Promise.all([
+      db.select({ userId: cardVerifications.userId, cardId: cardVerifications.cardId, tier: cardVerifications.tier, status: cardVerifications.status })
+        .from(cardVerifications).where(and(inArray(cardVerifications.userId, ids), eq(cardVerifications.status, "verified"), isNotNull(cardVerifications.tier))),
+      db.select().from(ccmiPillarScores).where(inArray(ccmiPillarScores.userId, ids)),
+    ]);
+    const verificationByUser = new Map<string, { cardId: string; tier: string; status: string }[]>();
+    for (const v of verificationRows) {
+      if (!v.tier || (TIER_RANK[v.tier] ?? 0) <= 0) continue;
+      const list = verificationByUser.get(v.userId) ?? [];
+      list.push({ cardId: v.cardId, tier: v.tier, status: v.status });
+      verificationByUser.set(v.userId, list);
+    }
+    const ccmiByUser = new Map(ccmiRows.map(r => [r.userId, [r.p1, r.p2, r.p3, r.p4, r.p5, r.p6, r.p7]]));
+    return rows.map(r => ({ ...r, verifications: verificationByUser.get(r.userId) ?? [], ccmi: ccmiByUser.get(r.userId) ?? null }));
+  }
+
+  async createMatchmakingIntroduction(input: {
+    opportunityId: string; employerId: string; candidateId: string; cxs: number;
+    scoreSnapshot: Record<string, unknown>; evidence: Array<{ cardId: string; tier: string }>;
+  }): Promise<MatchmakingIntroduction> {
+    const [row] = await db.insert(matchmakingIntroductions).values(input).returning();
+    return row;
+  }
+
+  async getMatchmakingIntroductionsForEmployer(userId: string): Promise<MatchmakingIntroduction[]> {
+    return db.select().from(matchmakingIntroductions)
+      .where(eq(matchmakingIntroductions.employerId, userId))
+      .orderBy(desc(matchmakingIntroductions.createdAt));
+  }
+
+  async getMatchmakingIntroductionsForCandidate(userId: string): Promise<MatchmakingIntroduction[]> {
+    return db.select().from(matchmakingIntroductions)
+      .where(eq(matchmakingIntroductions.candidateId, userId))
+      .orderBy(desc(matchmakingIntroductions.createdAt));
+  }
+
+  async getMatchmakingIntroduction(id: string): Promise<MatchmakingIntroduction | undefined> {
+    const [row] = await db.select().from(matchmakingIntroductions).where(eq(matchmakingIntroductions.id, id));
+    return row;
+  }
+
+  async transitionMatchmakingIntroduction(id: string, status: string, snapshot?: {
+    cxs: number; scoreSnapshot: Record<string, unknown>; evidence: Array<{ cardId: string; tier: string }>;
+  }): Promise<MatchmakingIntroduction | undefined> {
+    const [row] = await db.update(matchmakingIntroductions)
+      .set({ status, updatedAt: new Date(), ...(snapshot ?? {}) })
+      .where(and(eq(matchmakingIntroductions.id, id), eq(matchmakingIntroductions.status, "PENDING"))).returning();
+    return row;
+  }
+
+  async createGuinMaxRequest(input: {
+    requesterId: string; candidateId: string; cxs: number; radar: Record<string, number>;
+    evidence: Array<{ cardId: string; tier: string }>;
+  }): Promise<GuinMaxMatchRequest> {
+    const [row] = await db.insert(guinMaxMatchRequests).values(input).returning();
+    return row;
+  }
+
+  async getGuinMaxRequests(userId: string): Promise<GuinMaxMatchRequest[]> {
+    return db.select().from(guinMaxMatchRequests)
+      .where(or(eq(guinMaxMatchRequests.requesterId, userId), eq(guinMaxMatchRequests.candidateId, userId)))
+      .orderBy(desc(guinMaxMatchRequests.createdAt));
+  }
+
+  async getGuinMaxRequest(id: string): Promise<GuinMaxMatchRequest | undefined> {
+    const [row] = await db.select().from(guinMaxMatchRequests).where(eq(guinMaxMatchRequests.id, id));
+    return row;
+  }
+
+  async transitionGuinMaxRequest(id: string, status: string): Promise<GuinMaxMatchRequest | undefined> {
+    const [row] = await db.update(guinMaxMatchRequests).set({ status, updatedAt: new Date() })
+      .where(and(eq(guinMaxMatchRequests.id, id), eq(guinMaxMatchRequests.status, "PENDING"))).returning();
+    return row;
   }
 }
 

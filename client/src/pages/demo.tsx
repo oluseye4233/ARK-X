@@ -31,7 +31,6 @@ const DEMO_JST = {
   rawTotal: 235,
   contextCraftLevel: "CC_400",
   contextCraftMultiplier: 1.05,
-  percentileRank: 91,
   previousScore: 218,
   industryAverage: 168,
 };
@@ -171,7 +170,7 @@ export default function DemoPage() {
           <SectionHeading
             number="01"
             title="ARK Identity — JST + CCMI = 487 / 600"
-            blurb="The canonical ARK score is the sum of two engines: how the market values you (JST) and how skilfully you wield AI (CCMI). The flywheel feeds itself — every Skill Game session and every Marketplace transaction nudges both numbers."
+            blurb="The ARK score combines a dated, curated Jobs–Skills–Talent estimate (JST) with Context Craft mastery (CCMI). This demo is illustrative; account results identify their source and data date."
           />
           <div className="grid lg:grid-cols-3 gap-6">
             {/* JST + CCMI breakdown */}
@@ -222,7 +221,7 @@ export default function DemoPage() {
                 <Activity className="w-4 h-4 text-secondary" />
                 <h3 className="font-display text-sm uppercase tracking-widest text-white">LHCS Readiness</h3>
               </div>
-              <p className="text-xs text-muted-foreground mb-4">Three live signals from the Living Human–Computer Synthesis model — Career Pivot Readiness, Market Position Strength, Learning Capacity & Income Stability.</p>
+              <p className="text-xs text-muted-foreground mb-4">Three illustrative activity signals in this demo — Career Pivot Readiness, Market Position Strength, Learning Capacity & Income Stability.</p>
               <div className="space-y-3">
                 <LhcsRow label="CPR" value={DEMO_LHCS.cpr} />
                 <LhcsRow label="MPS" value={DEMO_LHCS.mps} />
@@ -243,7 +242,7 @@ export default function DemoPage() {
           <SectionHeading
             number="02"
             title="JST Index — Jobs · Skills · Talent"
-            blurb={`The market-valuation half of ARK. ${DEMO_PERSONA.name.split(" ")[0]} scores 247/300 (91st percentile), up +29 in the last 90 days, with a CC-400 multiplier already baked in.`}
+            blurb={`An illustrative ARK walkthrough, not a live market comparison. ${DEMO_PERSONA.name.split(" ")[0]}'s sample score is 247/300 with a CC-400 multiplier; account results use ARK's dated, curated scoring model.`}
           />
           <div className="grid md:grid-cols-2 gap-6">
             <JSTGauge
@@ -251,17 +250,19 @@ export default function DemoPage() {
               jobsScore={DEMO_JST.jobs}
               skillsScore={DEMO_JST.skills}
               talentScore={DEMO_JST.talent}
-              percentileRank={DEMO_JST.percentileRank}
               previousScore={DEMO_JST.previousScore}
-              industryAverage={DEMO_JST.industryAverage}
               contextCraftLevel={DEMO_JST.contextCraftLevel}
               contextCraftMultiplier={DEMO_JST.contextCraftMultiplier}
               rawTotal={DEMO_JST.rawTotal}
+              provenance={{ source: "ARK Onecraft curated scoring model" }}
+              dataAsOf="2026-09-06"
             />
             <JSTRadar
               jobsScore={DEMO_JST.jobs}
               skillsScore={DEMO_JST.skills}
               talentScore={DEMO_JST.talent}
+              provenance={{ source: "ARK Onecraft curated scoring model" }}
+              dataAsOf="2026-09-06"
             />
           </div>
         </section>

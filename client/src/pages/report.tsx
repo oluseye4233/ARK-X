@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/useAuth";
 import { api } from "@/lib/api";
 import { useSubscription } from "@/lib/useSubscription";
 import UpgradeGate from "@/components/UpgradeGate";
-import { reportFileStamp, adviserFileStamp, exportReportImage } from "@/lib/arkReportExport";
+import { reportFileStamp, guideFileStamp, exportReportImage } from "@/lib/arkReportExport";
 import { isEmptyProfile } from "@shared/assessmentMerge";
 import { Link } from "wouter";
 import { ATANDA, BRAND_BAR, Bar } from "@/lib/arkReportTheme";
@@ -154,6 +154,8 @@ export const ArkReportSheet = forwardRef<HTMLDivElement, ArkReportSheetProps>(fu
   const typology = identity?.typology ? TYPOLOGY[identity.typology] : a.readinessProfile || "—";
   const vmst = identity?.vmstLevel ?? null;
   const arkId = identity?.arkIdString || (a.id ? a.id.slice(0, 8).toUpperCase() : "—");
+  const scoreProvenance = identity?.provenance ?? a.provenance ?? null;
+  const scoreDataAsOf = identity?.dataAsOf ?? a.dataAsOf ?? null;
   const readiness = lhcs?.readinessPct ?? null;
   const vuln = typeof a.vulnerabilityLevel === "number" ? a.vulnerabilityLevel : 2;
   const vInfo = VULN_LEVELS[vuln] || VULN_LEVELS[2];
@@ -322,7 +324,10 @@ export const ArkReportSheet = forwardRef<HTMLDivElement, ArkReportSheetProps>(fu
           <div style={{ flex: 1 }}>
             <Bar value={arkScore ?? jst} max={arkScore !== null ? 600 : 300} color={ATANDA.blue} />
             <div style={{ fontSize: 11, color: ATANDA.sub, marginTop: 8, lineHeight: 1.4 }}>
-              Your total career-capital score — what the market values plus how well you direct AI. Higher means more future-proof.
+              Your total career-capital score from ARK's curated scoring model plus your Context Craft signals.
+            </div>
+            <div style={{ fontSize: 9, color: ATANDA.sub, marginTop: 5, fontFamily: "monospace", lineHeight: 1.4 }} data-testid="report-score-provenance">
+              Source: {scoreProvenance?.source ?? "not supplied"} · Data as of {scoreDataAsOf ?? "not supplied"} · Not a live labour-market feed
             </div>
           </div>
         </div>
@@ -330,7 +335,7 @@ export const ArkReportSheet = forwardRef<HTMLDivElement, ArkReportSheetProps>(fu
         {/* Metric grid */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
           {/* JST */}
-          <MetricCard title="JST Index" sub="Jobs · Skills · Talent" meaning="What the market will pay for your jobs, skills and talent today." testId="card-report-jst">
+          <MetricCard title="JST Index" sub="Jobs · Skills · Talent" meaning="A dated estimate from ARK's curated jobs, skills and talent scoring rules." testId="card-report-jst">
             <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
               <span style={{ fontSize: 30, fontWeight: 800, color: ATANDA.ink }}>{jst}</span>
               <span style={{ fontSize: 12, color: ATANDA.sub }}>/ 300</span>
@@ -578,7 +583,7 @@ export default function ReportPage() {
   // that is currently on screen with its own filename stamp.
   const activeEl = () => (view === "adviser" ? adviserRef.current : reportRef.current);
   const activeBase = () =>
-    view === "adviser" ? adviserFileStamp(user?.name) : reportFileStamp(user?.name);
+    view === "adviser" ? guideFileStamp(user?.name) : reportFileStamp(user?.name);
 
   const handleExportImage = async (type: "png" | "jpeg") => {
     const el = activeEl();
@@ -594,7 +599,7 @@ export default function ReportPage() {
   };
 
   // Native print → true vector PDF (selectable text), ALWAYS containing both
-  // the ARK Report and the Career Adviser sheet (see the .ark-print-surface
+  // the ARK Report and the ARK Guide (see the .ark-print-surface
   // below + the @media print rules in index.css).
   const handlePrint = () => window.print();
 
@@ -717,31 +722,38 @@ export default function ReportPage() {
       <div className="flex flex-wrap gap-3 justify-between items-center pb-6 border-b border-white/10 print:hidden">
         <div>
           <h2 className="text-2xl font-display font-bold text-white uppercase tracking-wider">
-            {view === "adviser" ? "Career Adviser Report" : "ARK Report"}
+            {view === "adviser" ? "ARK Guide" : "ARK Report"}
           </h2>
           <p className="text-muted-foreground font-mono text-sm mt-1">
             {view === "adviser"
-              ? "Plain-English guide to every metric · stays in sync with your ARK Report."
-              : "Share a live link or download a print-ready PDF — both include the Career Adviser sheet."}
+              ? "Every score, signal, and chart explained in plain English — using your live results."
+              : "Share a live link or download a print-ready PDF — both include your ARK Guide."}
           </p>
         </div>
-        <div className="flex gap-2 flex-wrap">
+         <div className="flex gap-2 flex-wrap items-start">
           <Button
             onClick={handleShare}
             disabled={sharing}
             data-testid="button-share-report"
-            className="bg-primary text-primary-foreground border border-primary hover:bg-primary/90 font-mono uppercase tracking-widest text-xs"
+             className="bg-primary text-primary-foreground border border-primary hover:bg-primary/90 font-mono uppercase tracking-widest text-xs shadow-lg shadow-primary/20"
           >
             {sharing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Share2 className="w-4 h-4 mr-2" />}
             Share link
           </Button>
-          <Btn onClick={handlePrint} icon={FileText} label="Download PDF" busy={false} testId="button-export-pdf" />
-          <Btn onClick={() => handleExportImage("png")} icon={FileImage} label="PNG" busy={exporting === "png"} testId="button-export-png" />
-          <Btn onClick={() => handleExportImage("jpeg")} icon={FileType2} label="JPEG" busy={exporting === "jpeg"} testId="button-export-jpeg" />
+           <details className="relative" data-testid="report-secondary-tools">
+             <summary className="list-none cursor-pointer px-4 py-2 rounded-md font-mono uppercase tracking-widest text-xs text-muted-foreground border border-white/15 hover:border-primary/50 hover:text-white transition-colors">
+               Download / export
+             </summary>
+             <div className="absolute right-0 z-10 mt-2 flex min-w-max flex-col gap-2 rounded-lg border border-white/10 bg-background/95 p-2 shadow-xl backdrop-blur sm:flex-row">
+               <Btn onClick={handlePrint} icon={FileText} label="Download PDF" busy={false} testId="button-export-pdf" />
+               <Btn onClick={() => handleExportImage("png")} icon={FileImage} label="PNG" busy={exporting === "png"} testId="button-export-png" />
+               <Btn onClick={() => handleExportImage("jpeg")} icon={FileType2} label="JPEG" busy={exporting === "jpeg"} testId="button-export-jpeg" />
+             </div>
+           </details>
         </div>
       </div>
 
-      {/* Shareable public link — anyone with the URL can view the report + adviser, no login. */}
+      {/* Shareable public link — anyone with the URL can view the report + guide, no login. */}
       {shareUrl && (
         <div
           className="print:hidden flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3"
@@ -774,7 +786,7 @@ export default function ReportPage() {
         </div>
       )}
 
-      {/* Document switcher — the Career Adviser Report accompanies the ARK Report */}
+      {/* Document switcher — the ARK Guide accompanies and explains the ARK Report. */}
       <div className="flex gap-2 print:hidden" data-testid="report-view-toggle">
         <button
           type="button"
@@ -800,7 +812,7 @@ export default function ReportPage() {
               : "bg-transparent text-muted-foreground border-white/15 hover:border-primary/50 hover:text-white"
           }`}
         >
-          Career Adviser
+          ARK Guide
         </button>
       </div>
 

@@ -183,7 +183,17 @@ export function GuinProfileView({ profile, viewerCanEndorse, onEndorse }: {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <EndorsementsBlock
+        profile={profile}
+        viewerCanEndorse={viewerCanEndorse}
+        onEndorse={onEndorse}
+      />
+
+      <details className="rounded-xl border border-white/10">
+        <summary className="cursor-pointer list-none px-4 py-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          Explore verified evidence
+        </summary>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-3 pt-0">
         <div className="glass-card p-6 rounded-xl" data-testid="card-kcse-radar">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-display font-bold text-base text-white uppercase tracking-wider flex items-center gap-2">
@@ -244,7 +254,7 @@ export function GuinProfileView({ profile, viewerCanEndorse, onEndorse }: {
             </div>
           )}
         </div>
-      </div>
+        </div>
 
       <div className="glass-card p-6 rounded-xl" data-testid="card-published-spcs">
         <h2 className="font-display font-bold text-base text-white uppercase tracking-wider flex items-center gap-2 mb-3">
@@ -286,12 +296,8 @@ export function GuinProfileView({ profile, viewerCanEndorse, onEndorse }: {
           </div>
         )}
       </div>
+      </details>
 
-      <EndorsementsBlock
-        profile={profile}
-        viewerCanEndorse={viewerCanEndorse}
-        onEndorse={onEndorse}
-      />
     </div>
   );
 }

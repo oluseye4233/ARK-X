@@ -262,7 +262,7 @@ function ListingsList() {
           <Link href="/marketplace/publish">
             <button
               data-testid="button-publish-spc"
-              className="flex items-center gap-2 px-4 py-3 rounded-lg font-mono text-xs uppercase tracking-wider transition-all hover:scale-[1.02] bg-primary/10 text-primary border border-primary/30"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg font-mono text-[10px] uppercase tracking-wider transition-all hover:bg-primary/10 text-primary/80 border border-primary/25"
             >
               {canPublish ? <Plus className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
               Publish SPC
@@ -272,62 +272,83 @@ function ListingsList() {
       </div>
 
       {/* Free-text search */}
-      <div className="relative">
+      <section className="glass-card rounded-xl border border-primary/30 bg-primary/5 p-5 md:p-6 space-y-3" aria-labelledby="marketplace-current-action">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-[.25em] text-primary">01 · Current action</p>
+          <h2 id="marketplace-current-action" className="mt-2 text-xl md:text-2xl font-display font-bold text-foreground">
+            Find a verified capability
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">Search the exchange first. Category and advanced filters stay available below when you need them.</p>
+        </div>
+        <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <input
           data-testid="input-search-listings"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by title or description…"
-          className="w-full bg-black/40 border border-white/10 rounded-lg pl-10 pr-3 py-3 text-white font-mono text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50"
+          aria-label="Search verified capabilities"
+          className="w-full bg-black/50 border border-primary/35 rounded-lg pl-10 pr-3 py-3.5 text-white font-mono text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/40"
         />
-      </div>
+        </div>
+      </section>
 
-      {/* Category chips (M19) */}
-      <div className="flex flex-wrap gap-2" data-testid="filter-category-row">
-        {CATEGORY_FILTER.map((c) => {
-          const active = category === c;
-          return (
-            <button
-              key={c}
-              onClick={() => setCategory(c)}
-              data-testid={`filter-category-${c.toLowerCase()}`}
-              className={`px-3 py-1.5 rounded-md font-mono text-xs uppercase tracking-wider transition-all border ${
-                active
-                  ? "bg-primary/15 text-primary border-primary/40"
-                  : "bg-white/5 text-muted-foreground border-white/10 hover:text-foreground"
-              }`}
-            >
-              {c}
-            </button>
-          );
-        })}
+      {/* Category chips remain close at hand; deeper taxonomy is opt-in. */}
+      <div className="space-y-3">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">Browse by category</p>
+        <div className="flex flex-wrap gap-2" data-testid="filter-category-row">
+          {CATEGORY_FILTER.map((c) => {
+            const active = category === c;
+            return (
+              <button
+                key={c}
+                onClick={() => setCategory(c)}
+                data-testid={`filter-category-${c.toLowerCase()}`}
+                className={`px-3 py-1.5 rounded-md font-mono text-xs uppercase tracking-wider transition-all border ${
+                  active
+                    ? "bg-primary/15 text-primary border-primary/40"
+                    : "bg-white/5 text-muted-foreground border-white/10 hover:text-foreground"
+                }`}
+              >
+                {c}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* M3 — full 6-dim taxonomy filter rail (tier · disc · rarity · pillar · version). Category sits in its own chip row above. */}
-      <div className="space-y-2" data-testid="filter-six-dim-row">
-        <FilterChipRow label="Tier"       testGroup="tier"    options={TIER_FILTER as readonly string[]}    value={tier}    onChange={setTier} />
-        <FilterChipRow label="Discipline" testGroup="disc"    options={DISC_FILTER as readonly string[]}    value={disc}    onChange={setDisc} />
-        <FilterChipRow label="Rarity"     testGroup="rarity"  options={RARITY_FILTER as readonly string[]}  value={rarity}  onChange={setRarity} />
-        <FilterChipRow label="Pillar"     testGroup="pillar"  options={PILLAR_FILTER as readonly string[]}  value={pillar}  onChange={setPillar} />
-        <FilterChipRow label="Version"    testGroup="version" options={VERSION_FILTER as readonly string[]} value={version} onChange={setVersion} />
-      </div>
+      <details className="rounded-xl border border-white/10 bg-black/20" data-testid="disclosure-marketplace-filters">
+        <summary className="cursor-pointer list-none px-4 py-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary">
+          <span className="inline-flex items-center gap-2">Advanced filters <span className="text-muted-foreground/60">· tier, discipline, rarity, pillar, version</span></span>
+        </summary>
+        <div className="space-y-2 border-t border-white/10 px-4 py-4" data-testid="filter-six-dim-row">
+          <FilterChipRow label="Tier"       testGroup="tier"    options={TIER_FILTER as readonly string[]}    value={tier}    onChange={setTier} />
+          <FilterChipRow label="Discipline" testGroup="disc"    options={DISC_FILTER as readonly string[]}    value={disc}    onChange={setDisc} />
+          <FilterChipRow label="Rarity"     testGroup="rarity"  options={RARITY_FILTER as readonly string[]}  value={rarity}  onChange={setRarity} />
+          <FilterChipRow label="Pillar"     testGroup="pillar"  options={PILLAR_FILTER as readonly string[]}  value={pillar}  onChange={setPillar} />
+          <FilterChipRow label="Version"    testGroup="version" options={VERSION_FILTER as readonly string[]} value={version} onChange={setVersion} />
+        </div>
+      </details>
 
       {error && (
-        <div className="glass-card p-4 rounded-xl border border-destructive/30 bg-destructive/5 font-mono text-sm text-destructive">
-          {error}
+        <div className="glass-card p-4 rounded-xl border border-destructive/30 bg-destructive/5 font-mono text-sm text-destructive" role="alert">
+          <p className="text-[10px] uppercase tracking-widest">Search signal unavailable</p>
+          <p className="mt-1">{error}</p>
         </div>
       )}
 
       {listings === null && !error && (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-6 w-6 text-primary animate-spin" />
+        <div className="glass-card rounded-xl border border-primary/20 p-8 text-center" data-testid="marketplace-loading">
+          <Loader2 className="h-6 w-6 text-primary animate-spin mx-auto" />
+          <p className="mt-3 font-mono text-xs uppercase tracking-widest text-muted-foreground">Finding verified capabilities…</p>
         </div>
       )}
 
       {listings && listings.length === 0 && (
-        <div className="glass-card p-8 rounded-xl text-center" data-testid="text-empty-listings">
-          <p className="font-mono text-sm text-muted-foreground uppercase">No listings match this filter yet.</p>
+        <div className="glass-card p-8 rounded-xl text-center border border-primary/20" data-testid="text-empty-listings">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-primary">Current action · refine your search</p>
+          <p className="mt-2 font-mono text-sm text-muted-foreground uppercase">No listings match this filter yet.</p>
         </div>
       )}
 
@@ -586,7 +607,7 @@ function ListingDetail({ id }: { id: string }) {
 
   const isOwnListing = user?.id === data?.listing.creatorId;
   const userPlan = (user as any)?.subscriptionPlan as string | undefined;
-  const isPro = userPlan === "INDIVIDUAL_PRO" || userPlan === "SCHOOL_STUDENT" || userPlan === "ENTERPRISE";
+  const isPro = userPlan === "INDIVIDUAL_PRO" || userPlan === "ARCHITECT" || userPlan === "SCHOOL_STUDENT" || userPlan === "ENTERPRISE";
 
   const handlePurchase = async () => {
     if (!user || !data) return;
@@ -611,15 +632,19 @@ function ListingDetail({ id }: { id: string }) {
         <Link href="/marketplace" className="font-mono text-sm text-muted-foreground hover:text-primary inline-flex items-center gap-2">
           <ArrowLeft className="h-4 w-4" /> Back to marketplace
         </Link>
-        <div className="glass-card p-6 rounded-xl border border-destructive/30 mt-6 font-mono text-destructive">{error}</div>
+        <div className="glass-card p-6 rounded-xl border border-destructive/30 mt-6 font-mono text-destructive" role="alert">
+          <p className="text-[10px] uppercase tracking-widest">Card signal unavailable</p>
+          <p className="mt-2">{error}</p>
+        </div>
       </div>
     );
   }
 
   if (!data) {
     return (
-      <div className="flex items-center justify-center py-24">
+      <div className="glass-card flex flex-col items-center justify-center py-24 border border-primary/20 rounded-xl">
         <Loader2 className="h-6 w-6 text-primary animate-spin" />
+        <p className="mt-3 font-mono text-xs uppercase tracking-widest text-muted-foreground">Loading card details…</p>
       </div>
     );
   }
@@ -636,6 +661,7 @@ function ListingDetail({ id }: { id: string }) {
 
       {/* Header card */}
       <div className="glass-card p-6 md:p-8 rounded-xl space-y-5">
+        <p className="font-mono text-[10px] uppercase tracking-[.25em] text-primary">01 · Current action · review and decide</p>
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-5">
           <div className="flex-1 space-y-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -681,20 +707,34 @@ function ListingDetail({ id }: { id: string }) {
       {/* 5-tab layout */}
       <Tabs value={tab} onValueChange={setTabAndHash} className="space-y-5">
         <TabsList
-          className="w-full grid grid-cols-2 md:grid-cols-5 h-auto bg-black/40 border border-white/10 rounded-lg p-1 gap-1"
+          className="w-full grid grid-cols-1 h-auto bg-black/40 border border-primary/25 rounded-lg p-1 gap-1"
           data-testid="tabs-detail"
         >
-          {DETAIL_TABS.map((t) => (
-            <TabsTrigger
-              key={t}
-              value={t}
-              data-testid={`tab-${t}`}
-              className="font-mono text-[11px] uppercase tracking-wider py-2 data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:shadow-none"
-            >
-              {t}
-            </TabsTrigger>
-          ))}
+          <TabsTrigger
+            value="overview"
+            data-testid="tab-overview"
+            className="font-mono text-[11px] uppercase tracking-wider py-2 data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:shadow-none"
+          >
+            {outcome ? "Overview · use your unlocked prompt" : "Overview · decide whether to purchase"}
+          </TabsTrigger>
         </TabsList>
+        <details open={tab !== "overview"} className="rounded-lg border border-white/10 bg-black/20" data-testid="disclosure-listing-detail-tools">
+          <summary className="cursor-pointer list-none px-4 py-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary">
+            Explore supporting card detail
+          </summary>
+          <TabsList className="grid grid-cols-2 md:grid-cols-4 h-auto border-t border-white/10 rounded-none bg-transparent p-2 gap-1">
+            {DETAIL_TABS.filter((t) => t !== "overview").map((t) => (
+              <TabsTrigger
+                key={t}
+                value={t}
+                data-testid={`tab-${t}`}
+                className="font-mono text-[11px] uppercase tracking-wider py-2 data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:shadow-none"
+              >
+                {t}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </details>
 
         {/* Overview */}
         <TabsContent value="overview" className="space-y-5">
@@ -765,6 +805,13 @@ function ListingDetail({ id }: { id: string }) {
                   </span>
                 )}
               </div>
+              <Link
+                href="/marketplace"
+                data-testid="link-continue-after-purchase"
+                className="w-full inline-flex items-center justify-center px-5 py-3 rounded-lg font-mono text-xs uppercase tracking-wider bg-primary text-primary-foreground border border-primary hover:bg-primary/90"
+              >
+                Continue exploring cards
+              </Link>
             </motion.div>
           )}
 
@@ -844,9 +891,14 @@ function ListingDetail({ id }: { id: string }) {
         <TabsContent value="synthesis"><SynthesisTab listingId={listing.id} /></TabsContent>
       </Tabs>
       {FEATURES.corporateMarketplace && (
-        <div data-testid="panel-feedback-section">
-          <SpcFeedbackPanel listing={listing} viewer={user} />
-        </div>
+        <details className="rounded-xl border border-white/10 bg-black/20" data-testid="panel-feedback-section">
+          <summary className="cursor-pointer list-none px-4 py-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary">
+            Buyer feedback and reviews
+          </summary>
+          <div className="border-t border-white/10 p-3 md:p-4">
+            <SpcFeedbackPanel listing={listing} viewer={user} />
+          </div>
+        </details>
       )}
     </div>
   );
@@ -985,12 +1037,19 @@ function CorporateMarketplacePage() {
   const [, navigate] = useLocation();
   const [data, setData] = useState<{ institution: string; listings: any[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [pillar, setPillar] = useState<string>("All");
-  useEffect(() => {
-    setData(null); setError(null);
+  const loadListings = () => {
+    setLoading(true);
+    setData(null);
+    setError(null);
     api.getCorporateListings(pillar)
       .then((d) => setData(d))
-      .catch((e) => setError(e?.message || "Failed to load corporate marketplace."));
+      .catch((e) => setError(e?.message || "Failed to load corporate marketplace."))
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => {
+    loadListings();
   }, [pillar]);
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -1016,29 +1075,92 @@ function CorporateMarketplacePage() {
           </p>
         </div>
       )}
-      {error && (
-        <div className="glass-card p-4 rounded-xl border border-destructive/30 bg-destructive/5">
-          <p className="font-mono text-sm text-destructive" data-testid="text-corporate-error">{error}</p>
+      <details className="rounded-xl border border-white/10 bg-black/20" data-testid="disclosure-corporate-filters">
+        <summary className="cursor-pointer list-none px-4 py-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary">
+          Filter by pillar
+        </summary>
+        <div className="border-t border-white/10 px-4 py-4">
+          <FilterChipRow
+            label="Pillar"
+            testGroup="corp-pillar"
+            options={["All", ...CC_PILLARS]}
+            value={pillar}
+            onChange={setPillar}
+          />
+        </div>
+      </details>
+
+      {loading && (
+        <div className="glass-card rounded-xl border border-primary/25 bg-primary/5 p-8 text-center" data-testid="corporate-loading" aria-live="polite">
+          <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto" />
+          <p className="mt-3 font-mono text-xs uppercase tracking-widest text-primary">Loading institution capabilities…</p>
+          <p className="mt-2 font-mono text-[11px] text-muted-foreground">Retrieving the latest verified cards for this institution.</p>
+          <button
+            type="button"
+            onClick={loadListings}
+            className="mt-4 px-4 py-2 rounded-lg font-mono text-[10px] uppercase tracking-wider text-primary border border-primary/30 hover:bg-primary/10"
+            data-testid="button-retry-corporate"
+          >
+            Refresh signal
+          </button>
         </div>
       )}
-      <FilterChipRow
-        label="Pillar"
-        testGroup="corp-pillar"
-        options={["All", ...CC_PILLARS]}
-        value={pillar}
-        onChange={setPillar}
-      />
-      {!data && !error && (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      {!loading && error && (
+        <div className="glass-card rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center" role="alert">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-destructive">Corporate marketplace unavailable</p>
+          <p className="mt-2 font-mono text-sm text-destructive" data-testid="text-corporate-error">{error}</p>
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={loadListings}
+              className="px-5 py-3 rounded-lg font-mono text-xs uppercase tracking-wider bg-primary text-primary-foreground border border-primary hover:bg-primary/90"
+              data-testid="button-retry-corporate"
+            >
+              Try again
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/marketplace")}
+              className="px-4 py-3 rounded-lg font-mono text-xs uppercase tracking-wider text-muted-foreground border border-white/15 hover:text-primary"
+              data-testid="button-recover-corporate"
+            >
+              Use public marketplace
+            </button>
+          </div>
         </div>
       )}
       {data && data.listings.length === 0 && (
-        <div className="glass-card p-8 rounded-xl text-center" data-testid="text-corporate-empty">
-          <p className="font-mono text-sm text-muted-foreground">No corporate SPCs published yet for {data.institution}.</p>
+        <div className="glass-card rounded-xl border border-primary/25 bg-primary/5 p-8 text-center" data-testid="text-corporate-empty">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-primary">No card to choose yet</p>
+          <p className="mt-2 font-mono text-sm text-muted-foreground">No corporate SPCs published yet for {data.institution}.</p>
+          <p className="mt-2 font-mono text-xs text-muted-foreground">You can refresh for a new publication or continue through the public exchange.</p>
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={loadListings}
+              className="px-5 py-3 rounded-lg font-mono text-xs uppercase tracking-wider bg-primary text-primary-foreground border border-primary hover:bg-primary/90"
+              data-testid="button-retry-corporate"
+            >
+              Refresh listings
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/marketplace")}
+              className="px-4 py-3 rounded-lg font-mono text-xs uppercase tracking-wider text-muted-foreground border border-white/15 hover:text-primary"
+              data-testid="button-recover-corporate"
+            >
+              Browse public marketplace
+            </button>
+          </div>
         </div>
       )}
       {data && data.listings.length > 0 && (
+        <>
+        <div className="border border-primary/30 bg-primary/5 p-5 rounded-xl">
+          <p className="font-mono text-[10px] uppercase tracking-[.25em] text-primary">01 · Current action</p>
+          <h2 className="mt-2 text-xl font-display font-bold">Choose a capability from your institution</h2>
+          <p className="mt-1 font-mono text-xs text-muted-foreground">Open a card to inspect its verified signal and decide whether to use it.</p>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="grid-corporate-listings">
           {data.listings.map((l) => (
             <Link
@@ -1063,6 +1185,7 @@ function CorporateMarketplacePage() {
             </Link>
           ))}
         </div>
+        </>
       )}
     </div>
   );
@@ -1209,28 +1332,40 @@ function PublishPage() {
       </Link>
 
       <div>
+        <p className="font-mono text-[10px] uppercase tracking-[.25em] text-primary">01 · Current action</p>
         <h1 className="text-3xl font-display font-bold text-primary tracking-widest uppercase" data-testid="text-publish-title">
           Publish Super Prompt Card
         </h1>
         <p className="text-muted-foreground font-mono text-sm mt-2">
-          HIVE PRE-CHECK MUST PASS BEFORE LISTING GOES LIVE
+          Prepare the card, then run the HIVE pre-check. Publishing unlocks only after it passes.
         </p>
       </div>
 
-      <PricingMatrixBanner />
+      <details className="rounded-xl border border-white/10 bg-black/20" data-testid="disclosure-pricing-matrix">
+        <summary className="cursor-pointer list-none px-4 py-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary">
+          View grade-based pricing guidance
+        </summary>
+        <div className="border-t border-white/10 p-3 md:p-4">
+          <PricingMatrixBanner />
+        </div>
+      </details>
 
       {FEATURES.corporateMarketplace && (
-        <div className="glass-card p-5 rounded-xl border border-primary/20 space-y-3" data-testid="panel-publish-scope">
-          <div className="flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-primary" />
-            <h3 className="font-display font-bold text-sm text-primary tracking-wider uppercase">Visibility</h3>
-          </div>
-          <p className="font-mono text-[11px] text-muted-foreground">
-            {canPublishCorporate
-              ? <>Corporate scope restricts this SPC to members of <span className="text-white">{userInstitution}</span>. Choose Both to publish to both surfaces.</>
-              : <>Set an institution on your profile to unlock the corporate marketplace. Defaulting to public SPHINX.</>}
-          </p>
-          <div className="grid grid-cols-3 gap-2">
+        <details className="rounded-xl border border-white/10 bg-black/20" data-testid="disclosure-publish-scope">
+          <summary className="cursor-pointer list-none px-4 py-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary">
+            Choose visibility (optional)
+          </summary>
+          <div className="border-t border-white/10 p-4 space-y-3" data-testid="panel-publish-scope">
+            <div className="flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-primary" />
+              <h3 className="font-display font-bold text-sm text-primary tracking-wider uppercase">Visibility</h3>
+            </div>
+            <p className="font-mono text-[11px] text-muted-foreground">
+              {canPublishCorporate
+                ? <>Corporate scope restricts this SPC to members of <span className="text-white">{userInstitution}</span>. Choose Both to publish to both surfaces.</>
+                : <>Set an institution on your profile to unlock the corporate marketplace. Defaulting to public SPHINX.</>}
+            </p>
+            <div className="grid grid-cols-3 gap-2">
             {([
               { id: "OPEN",      label: "Public SPHINX", icon: Globe,    desc: "Visible to everyone" },
               { id: "CORPORATE", label: "Corporate Only", icon: Building2, desc: "Same institution only" },
@@ -1260,8 +1395,9 @@ function PublishPage() {
                 </button>
               );
             })}
+            </div>
           </div>
-        </div>
+        </details>
       )}
 
       <div className="glass-card p-6 rounded-xl space-y-5">
@@ -1367,25 +1503,28 @@ function PublishPage() {
           </p>
         </div>
 
-        <div className="flex gap-3">
-          <button
-            onClick={runPrecheck}
-            disabled={precheckBusy || !form.title || !form.body}
-            data-testid="button-run-precheck"
-            className="px-5 py-3 rounded-lg font-mono text-xs uppercase tracking-wider bg-blue-500/10 text-blue-400 border border-blue-500/30 hover:bg-blue-500/15 disabled:opacity-40 transition-all flex items-center gap-2"
-          >
-            {precheckBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            Run HIVE Pre-Check
-          </button>
-          <button
-            onClick={submit}
-            disabled={submitting || !precheck?.passes}
-            data-testid="button-publish-confirm"
-            className="px-5 py-3 rounded-lg font-mono text-xs uppercase tracking-wider bg-primary/10 text-primary border border-primary/30 hover:bg-primary/15 disabled:opacity-40 transition-all flex items-center gap-2"
-          >
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            Publish Listing
-          </button>
+        <div className="space-y-2">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-primary">02 · Verify before publishing</p>
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={runPrecheck}
+              disabled={precheckBusy || !form.title || !form.body}
+              data-testid="button-run-precheck"
+              className="px-5 py-3 rounded-lg font-mono text-xs uppercase tracking-wider bg-primary text-primary-foreground border border-primary hover:bg-primary/90 disabled:opacity-40 transition-all flex items-center gap-2 shadow-[0_0_20px_rgba(34,211,238,0.25)]"
+            >
+              {precheckBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              Run HIVE Pre-Check
+            </button>
+            <button
+              onClick={submit}
+              disabled={submitting || !precheck?.passes}
+              data-testid="button-publish-confirm"
+              className="px-5 py-3 rounded-lg font-mono text-xs uppercase tracking-wider bg-primary/10 text-primary border border-primary/30 hover:bg-primary/15 disabled:opacity-40 transition-all flex items-center gap-2"
+            >
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              Publish Listing
+            </button>
+          </div>
         </div>
 
         {error && (

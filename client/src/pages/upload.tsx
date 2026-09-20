@@ -127,12 +127,11 @@ export default function UploadPage() {
     <div className="w-full max-w-4xl mx-auto min-h-[80vh] flex flex-col justify-center py-8">
       <div className="mb-6">
         <h2 className="text-3xl font-display font-bold text-white mb-2 uppercase tracking-wide">
-          Intelligence Vector Input
+          Start with your resume
         </h2>
         <p className="text-muted-foreground font-sans">
-          Build one evolving ARK profile. Add your resume, self-assessment, and LinkedIn — each source
-          refines the <em>same</em> report. The more you add, the more complete and confident your
-          intelligence becomes.
+          Upload a resume to create your first reading. You can add self-assessment or LinkedIn evidence
+          later — each source refines the <em>same</em> profile.
         </p>
       </div>
 
@@ -238,44 +237,72 @@ export default function UploadPage() {
 
       {/* Mode tabs — pick which source to add/refine; all converge on one profile */}
       <div
-        className="grid grid-cols-3 gap-2 mb-6"
-        role="tablist"
-        aria-label="Assessment intake mode"
+        className="space-y-3 mb-6"
         data-testid="tabs-intake-mode"
       >
-        {MODES.map((m) => {
-          const Icon = m.icon;
-          const active = mode === m.key;
-          const done = !!statusFor(m.key)?.present;
-          return (
-            <button
-              key={m.key}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => setMode(m.key)}
-              data-testid={`tab-mode-${m.key}`}
-              className={`relative flex items-center gap-3 px-4 py-3 rounded-lg border transition-all text-left ${
-                active
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-white/10 bg-white/[0.02] text-muted-foreground hover:border-white/30 hover:text-white"
-              }`}
-            >
-              <Icon className={`w-5 h-5 flex-shrink-0 ${active ? "text-primary" : ""}`} />
-              <div className="min-w-0">
-                <p className="font-display text-sm font-semibold uppercase tracking-wider truncate">
-                  {m.label}
-                </p>
-                <p className="font-mono text-[10px] uppercase tracking-widest opacity-70 truncate">
-                  {m.sub}
-                </p>
-              </div>
-              {done && (
-                <CheckCircle2 className="w-4 h-4 text-primary absolute top-2 right-2" />
-              )}
-            </button>
-          );
-        })}
+        <div role="tablist" aria-label="Primary assessment intake mode">
+          {(() => {
+            const m = MODES[0];
+            const Icon = m.icon;
+            const active = mode === m.key;
+            const done = !!statusFor(m.key)?.present;
+            return (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setMode(m.key)}
+                data-testid={`tab-mode-${m.key}`}
+                className={`relative flex w-full items-center gap-3 rounded-lg border px-5 py-4 text-left transition-all ${
+                  active
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-white/10 bg-white/[0.02] text-muted-foreground hover:border-white/30 hover:text-white"
+                }`}
+              >
+                <Icon className={`h-5 w-5 flex-shrink-0 ${active ? "text-primary" : ""}`} />
+                <div className="min-w-0">
+                  <p className="font-display text-sm font-semibold uppercase tracking-wider truncate">{m.label}</p>
+                  <p className="font-mono text-[10px] uppercase tracking-widest opacity-70 truncate">{m.sub}</p>
+                </div>
+                {done && <CheckCircle2 className="absolute right-3 top-3 h-4 w-4 text-primary" />}
+              </button>
+            );
+          })()}
+        </div>
+        <details open={mode !== "resume"} className="rounded-lg border border-white/10 bg-white/[0.02]">
+          <summary className="cursor-pointer px-4 py-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-white">
+            Other ways to add evidence
+          </summary>
+          <div role="tablist" aria-label="Other assessment intake modes" className="grid gap-2 border-t border-white/10 p-2 sm:grid-cols-2">
+            {MODES.slice(1).map((m) => {
+              const Icon = m.icon;
+              const active = mode === m.key;
+              const done = !!statusFor(m.key)?.present;
+              return (
+                <button
+                  key={m.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setMode(m.key)}
+                  data-testid={`tab-mode-${m.key}`}
+                  className={`relative flex items-center gap-3 rounded-lg border px-4 py-3 text-left transition-all ${
+                    active
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-white/10 bg-white/[0.02] text-muted-foreground hover:border-white/30 hover:text-white"
+                  }`}
+                >
+                  <Icon className={`h-5 w-5 flex-shrink-0 ${active ? "text-primary" : ""}`} />
+                  <div className="min-w-0">
+                    <p className="font-display text-sm font-semibold uppercase tracking-wider truncate">{m.label}</p>
+                    <p className="font-mono text-[10px] uppercase tracking-widest opacity-70 truncate">{m.sub}</p>
+                  </div>
+                  {done && <CheckCircle2 className="absolute right-2 top-2 h-4 w-4 text-primary" />}
+                </button>
+              );
+            })}
+          </div>
+        </details>
       </div>
 
       {mode === "resume" && <ResumeUploader onComplete={handleContributed} />}

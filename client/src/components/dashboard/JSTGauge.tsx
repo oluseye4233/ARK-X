@@ -14,6 +14,8 @@ interface JSTGaugeProps {
   contextCraftLevel?: string;
   contextCraftMultiplier?: number;
   rawTotal?: number;
+  provenance?: { source: string };
+  dataAsOf?: string;
 }
 
 const COLOR_ZONES = [
@@ -42,6 +44,8 @@ export function JSTGauge({
   contextCraftLevel,
   contextCraftMultiplier,
   rawTotal,
+  provenance,
+  dataAsOf,
 }: JSTGaugeProps) {
   const [animatedScore, setAnimatedScore] = useState(0);
   const maxScore = 300;
@@ -286,6 +290,11 @@ export function JSTGauge({
           <span className="font-display font-bold text-lg text-white">{talentScore}</span>
         </div>
       </div>
+
+      <p className="mt-4 text-center text-[9px] font-mono leading-relaxed text-muted-foreground" data-testid="jst-gauge-provenance">
+        Source: {provenance?.source ?? "not supplied"} · Data as of {dataAsOf ?? "not supplied"}
+        {percentileRank !== undefined || industryAverage !== undefined ? " · Comparisons use the same dated source" : ""}
+      </p>
 
       {contextCraftLevel !== undefined && (
         <Link href="/context-craft" className="w-full block mt-4" data-testid="link-cc-status">

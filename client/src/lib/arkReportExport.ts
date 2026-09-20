@@ -7,11 +7,14 @@ export function reportFileStamp(name?: string | null) {
   return `ARK_Report_${n}_${new Date().toISOString().slice(0, 10)}`;
 }
 
-/* Filename stamp for the companion Career Adviser Report document. */
-export function adviserFileStamp(name?: string | null) {
+/* Filename stamp for the companion ARK Guide document. */
+export function guideFileStamp(name?: string | null) {
   const n = (name || "ARK").replace(/[^a-z0-9]+/gi, "_");
-  return `ARK_Career_Adviser_${n}_${new Date().toISOString().slice(0, 10)}`;
+  return `ARK_Guide_${n}_${new Date().toISOString().slice(0, 10)}`;
 }
+
+/* Backwards-compatible alias for callers outside the report page. */
+export const adviserFileStamp = guideFileStamp;
 
 async function waitForImages(el: HTMLElement) {
   const imgs = Array.from(el.querySelectorAll("img"));

@@ -45,6 +45,8 @@ export type ArkSnapshot = {
   arkIdString: string | null;
   lhcsStatus: "green" | "amber" | "red";
   recent: ArkEvent[];
+  provenance?: { source: string };
+  dataAsOf?: string;
 };
 
 export type ArkIdentityFull = {
@@ -56,6 +58,8 @@ export type ArkIdentityFull = {
   typology: string | null;
   arkIdString: string | null;
   resumeReplacementPct: number;
+  provenance?: { source: string };
+  dataAsOf?: string;
 };
 
 export type ArkPillarsBlock = {

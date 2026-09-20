@@ -13,7 +13,7 @@ import {
 } from "@shared/schema";
 
 const PROMPT_VERSION = "spc-analysis-v1";
-const PRO_TIERS: SubscriptionPlan[] = ["INDIVIDUAL_PRO", "SCHOOL_STUDENT", "ENTERPRISE"];
+const PRO_TIERS: SubscriptionPlan[] = ["INDIVIDUAL_PRO", "ARCHITECT", "SCHOOL_STUDENT", "ENTERPRISE"];
 
 export class SpcAnalysisProTierRequiredError extends Error {
   status = 402;

@@ -33,6 +33,7 @@ import { TransferabilityRadar } from "@/components/pathways/TransferabilityRadar
 import { UpskillingTimeline } from "@/components/pathways/UpskillingTimeline";
 import { ARK_SCORE_DELTAS, CONTEXT_CRAFT_LEVELS, FLYWHEEL_CAPS, SPC_HIVE_MIN_TO_PUBLISH, SPC_FEEDBACK_BONUS_BY_STARS, LHCS_WEIGHTS } from "@shared/schema";
 import { BOOK_TITLE, BOOK_TOTAL_NODES, JOURNEY_STAGES, JOURNEY_NODES } from "@shared/bookCompanion";
+import { PlanWalkthroughs } from "@/components/tour/PlanWalkthroughs";
 import { Star } from "lucide-react";
 
 // ─── DEMO DATA ────────────────────────────────────────────────────────────
@@ -57,7 +58,6 @@ const JST = {
   rawTotal: _RAW_TOTAL,
   contextCraftLevel: _CC_LEVEL,
   contextCraftMultiplier: _CC_MULT,
-  percentileRank: 91,
   previousScore: 282,
   industryAverage: 168,
 };
@@ -275,12 +275,18 @@ const StepJst = () => {
           rawTotal={JST.rawTotal}
           contextCraftLevel={JST.contextCraftLevel}
           contextCraftMultiplier={JST.contextCraftMultiplier}
-          percentileRank={JST.percentileRank}
           previousScore={JST.previousScore}
-          industryAverage={JST.industryAverage}
+          provenance={{ source: "ARK Onecraft curated scoring model" }}
+          dataAsOf="2026-09-06"
         />
         <div className="space-y-4">
-          <JSTRadar jobsScore={JST.jobs} skillsScore={JST.skills} talentScore={JST.talent} />
+          <JSTRadar
+            jobsScore={JST.jobs}
+            skillsScore={JST.skills}
+            talentScore={JST.talent}
+            provenance={{ source: "ARK Onecraft curated scoring model" }}
+            dataAsOf="2026-09-06"
+          />
           <VulnerabilityMeter level={3} />
         </div>
       </div>
@@ -625,7 +631,7 @@ const STEPS: Step[] = [
     route: "/dashboard",
     routeLabel: "Open Intelligence Hub",
     narrative:
-      "Every resume is parsed into three weighted sub-scores — Jobs (30%), Skills (40%), Talent (30%) — then multiplied by your Context Craft handicap. The 0–300 result lands you in one of five zones, from Critical to Flourishing, with industry percentile and AI-vulnerability level computed at the same time.",
+      "Every resume is parsed into three weighted sub-scores — Jobs (30%), Skills (40%), Talent (30%) — then multiplied by your Context Craft handicap. The 0–300 result lands you in one of five zones, from Critical to Flourishing. This tour is illustrative. Account score source: ARK Onecraft curated scoring model; data as of 6 September 2026; not a live labour-market feed.",
     takeaways: [
       "Single number, defensible math — no black-box AI rating",
       "Context Craft certification acts as a multiplier (0.5× → 1.5×)",
@@ -719,6 +725,23 @@ const STEPS: Step[] = [
       "The Ledger captures an immutable baseline and a final delta",
     ],
     render: StepBook,
+  },
+  {
+    id: "plans",
+    num: 7,
+    icon: Crown,
+    title: "Plan Walkthroughs",
+    subtitle: "Every subscription type — explained step by step",
+    route: "/signup",
+    routeLabel: "Create your account",
+    narrative:
+      "Five ways in, one platform. Walk through exactly what happens on each tier — from the free single-upload analysis to the F1000 Explorer seat, the full Pro flywheel, the $9 student cohort, and enterprise-wide Workforce Intelligence. Each step pairs a live screenshot or animated preview with what you actually do and what you get.",
+    takeaways: [
+      "Free and Explorer cost $0 forever — no card, no trial timer",
+      "F1000 members lock a permanent price cap (Pro at $10/mo)",
+      "Every paid tier keeps your scores and history when you switch",
+    ],
+    render: () => <PlanWalkthroughs embedded />,
   },
 ];
 

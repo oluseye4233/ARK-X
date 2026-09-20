@@ -25,6 +25,21 @@ import {
 export type JstSubscores = { jobs: number; skills: number; talent: number };
 export type CcmiPillarVector = Record<CcmiPillarKey, number>;
 
+export const MARKET_SCORE_DATA_AS_OF = "2026-09-06";
+export const MARKET_SCORE_PROVENANCE = {
+  source: "ARK Onecraft curated scoring model",
+  methodology: "Static, code-defined keyword, weighting, and automation-risk heuristics; not a live labour-market data feed.",
+  version: "ark-jst-curated-2026-09-06",
+  updateCadence: "Updated when the scoring model is reviewed and released.",
+} as const;
+
+export function marketScoreMetadata() {
+  return {
+    provenance: MARKET_SCORE_PROVENANCE,
+    dataAsOf: MARKET_SCORE_DATA_AS_OF,
+  };
+}
+
 const clamp01 = (v: number) => Math.max(0, Math.min(100, Math.round(v)));
 const clampRange = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.round(v)));
 
@@ -157,6 +172,8 @@ export type ArkScoreSnapshot = {
   typology: TypologyKey | null;
   arkIdString: string | null;
   resumeReplacementPct: number;
+  provenance: typeof MARKET_SCORE_PROVENANCE;
+  dataAsOf: string;
 };
 
 /**
@@ -201,5 +218,6 @@ export function buildSnapshot(opts: {
     typology,
     arkIdString,
     resumeReplacementPct: clampRange(opts.resumeReplacementPct ?? 0, 0, 100),
+    ...marketScoreMetadata(),
   };
 }

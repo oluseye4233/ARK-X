@@ -74,7 +74,7 @@ function lightWord(score: number): string {
   return "red (just getting started)";
 }
 
-/* Build the full Career Adviser guide from the live ARK data. Accepts the same
+/* Build the full Career Adviser guide from the current ARK account data. Accepts the same
    loosely-typed shapes the ARK Report consumes so the two never drift. */
 export function buildAdviserReport(identity: any, lhcs: any, assessment: any): AdviserReport {
   const a = assessment || {};
@@ -118,13 +118,13 @@ export function buildAdviserReport(identity: any, lhcs: any, assessment: any): A
       valueLabel: ark !== null ? `${ark} / 600` : "Building — needs JST + CCMI",
       band: tier?.key,
       whatItIs:
-        "Your single headline number for career strength, from 0 to 600. It adds two things together: what the job market values about you today (your JST Index) and how skillfully you can direct AI (your CCMI). A higher number means you are more future-proof.",
+        "Your single headline number for career strength, from 0 to 600. It adds two things together: ARK's dated, curated estimate of your Jobs, Skills and Talent (your JST Index) and how skillfully you can direct AI (your CCMI). It is not a live labour-market valuation.",
       yourResult:
         ark !== null
-          ? `You scored ${ark} out of 600, which sits in the "${tier?.key}" band. In plain terms, this is the sum of your market value (${jst}) and your AI-direction skill (${ccmi}). It is the one number to watch over time — if it climbs, you are getting more valuable and more resilient.`
+          ? `You scored ${ark} out of 600, which sits in the "${tier?.key}" band. In plain terms, this is the sum of your curated JST estimate (${jst}) and your AI-direction skill (${ccmi}). It is the one number to watch over time as your evidence and platform activity change.`
           : `Your ARK Score isn't fully formed yet. It is built from your JST Index (${jst}) plus your CCMI (${ccmi}). Complete a CV upload and play a few CCGE rounds and this headline number will appear.`,
       nextStep:
-        "Treat ARK as your scoreboard. The two ways to raise it are below: grow your market value (JST) and grow your AI-direction skill (CCMI). Small, steady gains in either one move this number up.",
+        "Treat ARK as your scoreboard. The two ways to raise it are below: strengthen the evidence feeding JST and grow your AI-direction skill (CCMI). Small, steady gains in either one move this number up.",
     });
   }
 
@@ -140,7 +140,7 @@ export function buildAdviserReport(identity: any, lhcs: any, assessment: any): A
       metric: "JST Index",
       valueLabel: `${jst} / 300`,
       whatItIs:
-        "What the job market will pay for you today, from 0 to 300. It blends three things — Jobs (how sought-after your roles are), Skills (the depth of what you can actually do) and Talent (your underlying aptitude). Skills count the most.",
+        "A 0-to-300 estimate from ARK's curated scoring rules. It blends three things — Jobs (role signals found in your evidence), Skills (the depth of what you can demonstrate) and Talent (leadership, communication and innovation signals). Skills count the most. It is not a live salary or demand feed.",
       yourResult:
         `Your JST is ${jst} out of 300, built from Jobs ${jobs}, Skills ${skills} and Talent ${talent} (each scored 0-100). Your strongest area is "${lead[0].l}" and your lowest is "${lead[2].l}". Lifting the lowest one is usually the fastest way to raise the whole index.`,
       nextStep:

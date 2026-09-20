@@ -53,11 +53,25 @@ export function useAuth() {
     [qc]
   );
 
+  const refreshUser = useCallback(async () => {
+    await qc.invalidateQueries({ queryKey: ME_KEY });
+    return qc.fetchQuery<AuthUser | null>({
+      queryKey: ME_KEY,
+      queryFn: async () => {
+        const res = await fetch("/api/auth/me", { credentials: "include" });
+        if (res.status === 401) return null;
+        if (!res.ok) throw new Error("Failed to load session");
+        return res.json();
+      },
+    });
+  }, [qc]);
+
   return {
     user: user ?? null,
     login,
     logout,
     updateUser,
+    refreshUser,
     isLoading,
     isAuthenticated: !!user,
   };

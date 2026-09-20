@@ -147,22 +147,27 @@ export default function ArkHistoryPage() {
             Every recalc, capped delta, and flywheel trigger over the last {days} days.
           </p>
         </div>
-        <div className="flex gap-2">
-          {[30, 90, 180, 365].map((d) => (
-            <button
-              key={d}
-              onClick={() => setDays(d)}
-              data-testid={`button-window-${d}`}
-              className={`px-3 py-1.5 font-mono text-xs uppercase tracking-widest border ${
-                days === d
-                  ? "bg-primary/20 border-primary text-primary"
-                  : "border-white/10 text-muted-foreground hover:border-white/30"
-              }`}
-            >
-              {d}d
-            </button>
-          ))}
-        </div>
+         <details className="relative">
+           <summary className="list-none cursor-pointer px-3 py-1.5 font-mono text-xs uppercase tracking-widest border border-white/10 text-muted-foreground hover:border-white/30">
+             Window: {days}d
+           </summary>
+           <div className="absolute right-0 z-10 mt-2 flex gap-2 rounded-lg border border-white/10 bg-background/95 p-2 shadow-xl backdrop-blur">
+             {[30, 90, 180, 365].map((d) => (
+               <button
+                 key={d}
+                 onClick={() => setDays(d)}
+                 data-testid={`button-window-${d}`}
+                 className={`px-3 py-1.5 font-mono text-xs uppercase tracking-widest border ${
+                   days === d
+                     ? "bg-primary/20 border-primary text-primary"
+                     : "border-white/10 text-muted-foreground hover:border-white/30"
+                 }`}
+               >
+                 {d}d
+               </button>
+             ))}
+           </div>
+         </details>
       </div>
 
       {/* Coaching panel — same "Why this score / What unlocks the next tier" surface as the dashboard. */}
@@ -202,56 +207,73 @@ export default function ArkHistoryPage() {
               Top tier reached — maintain with a weekly CCGE drill.
             </p>
           )}
+          <Link
+            href="/play"
+            className="inline-flex items-center gap-1 mt-3 px-3 py-1.5 rounded border border-secondary/40 bg-secondary/10 hover:border-secondary hover:bg-secondary/20 transition-all font-mono text-[10px] uppercase tracking-widest text-secondary"
+            data-testid="link-history-next-tier-action"
+          >
+            Start CCGE drill
+            <ArrowRight className="h-3 w-3" />
+          </Link>
         </div>
-        <div
-          className="glass-card p-4 rounded-xl border border-rose-400/20"
-          data-testid="card-history-weakest-tip"
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <Lightbulb className="h-4 w-4 text-rose-300" />
-            <p className="font-mono text-[10px] uppercase tracking-widest text-rose-300">
-              Why this score
-            </p>
-          </div>
-          {weakest ? (
-            <>
-              <p className="font-display font-bold text-sm text-white">
-                {weakest.key} · {weakest.label}{" "}
-                <span className="text-muted-foreground font-mono text-xs">
-                  ({weakest.score}/100)
-                </span>
-              </p>
-              <p
-                className="font-mono text-xs text-white/80 mt-1 leading-relaxed"
-                data-testid="text-history-weakest-tip"
-              >
-                {weakest.tip}
-              </p>
-              <Link
-                href="/play"
-                className="inline-flex items-center gap-1 mt-2 px-2 py-1 rounded border border-rose-400/40 hover:border-rose-300 hover:bg-rose-400/10 transition-all font-mono text-[10px] uppercase tracking-widest text-rose-200"
-                data-testid="link-history-practice-pillar"
-              >
-                Practice in CCGE
-                <ArrowRight className="h-3 w-3" />
-              </Link>
-            </>
-          ) : (
-            <p className="font-mono text-xs text-muted-foreground">
-              Finish a CCGE session to unlock pillar coaching.
-            </p>
-          )}
-        </div>
+         <details className="rounded-xl border border-rose-400/20">
+           <summary className="cursor-pointer list-none px-4 py-3 font-mono text-[10px] uppercase tracking-widest text-rose-300">
+             Why this score
+           </summary>
+           <div
+             className="glass-card p-4 rounded-xl border-t border-rose-400/20"
+             data-testid="card-history-weakest-tip"
+           >
+             <div className="flex items-center gap-2 mb-2">
+               <Lightbulb className="h-4 w-4 text-rose-300" />
+               <p className="font-mono text-[10px] uppercase tracking-widest text-rose-300">
+                 Weakest pillar
+               </p>
+             </div>
+             {weakest ? (
+               <>
+                 <p className="font-display font-bold text-sm text-white">
+                   {weakest.key} · {weakest.label}{" "}
+                   <span className="text-muted-foreground font-mono text-xs">
+                     ({weakest.score}/100)
+                   </span>
+                 </p>
+                 <p
+                   className="font-mono text-xs text-white/80 mt-1 leading-relaxed"
+                   data-testid="text-history-weakest-tip"
+                 >
+                   {weakest.tip}
+                 </p>
+                 <Link
+                   href="/play"
+                   className="inline-flex items-center gap-1 mt-2 px-2 py-1 rounded border border-rose-400/40 hover:border-rose-300 hover:bg-rose-400/10 transition-all font-mono text-[10px] uppercase tracking-widest text-rose-200"
+                   data-testid="link-history-practice-pillar"
+                 >
+                   Practice in CCGE
+                   <ArrowRight className="h-3 w-3" />
+                 </Link>
+               </>
+             ) : (
+               <p className="font-mono text-xs text-muted-foreground">
+                 Finish a CCGE session to unlock pillar coaching.
+               </p>
+             )}
+           </div>
+         </details>
       </div>
 
-      {/* PDD ARK-MVP-005 stat row — Highest / Month Δ / Best Pillar Lift / Days Active */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+       {/* PDD ARK-MVP-005 stat row — Highest / Month Δ / Best Pillar Lift / Days Active */}
+       <details className="rounded-xl border border-white/10">
+         <summary className="cursor-pointer list-none px-4 py-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+           Timeline details and event log
+         </summary>
+         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-3 pt-0">
         <div className="glass-card p-4 rounded-xl border border-primary/20" data-testid="stat-highest">
           <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
             Highest ARK
           </p>
           <p className="text-2xl font-display font-bold text-primary mt-1 tabular-nums">{highest}</p>
-        </div>
+         </div>
         <div className="glass-card p-4 rounded-xl border border-secondary/20" data-testid="stat-month-delta">
           <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
             This Month Δ
@@ -295,6 +317,7 @@ export default function ArkHistoryPage() {
           <p className="text-2xl font-display font-bold text-white mt-1 tabular-nums">{daysActive}</p>
         </div>
       </div>
+       </details>
 
       <div className="glass-card p-6 rounded-xl" data-testid="card-history-chart">
         <div className="flex items-center gap-3 mb-4">
@@ -366,7 +389,11 @@ export default function ArkHistoryPage() {
         )}
       </div>
 
-      <div className="glass-card p-6 rounded-xl" data-testid="card-history-list">
+        <details className="rounded-xl border border-white/10">
+          <summary className="cursor-pointer list-none px-4 py-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            Event log
+          </summary>
+        <div className="glass-card p-6 rounded-xl m-3 mt-0" data-testid="card-history-list">
         <h3 className="font-display font-bold text-sm text-primary uppercase tracking-widest mb-4">
           Event Log
         </h3>
@@ -408,6 +435,7 @@ export default function ArkHistoryPage() {
           </div>
         )}
       </div>
+      </details>
     </div>
   );
 }

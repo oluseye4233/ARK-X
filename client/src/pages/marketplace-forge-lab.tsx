@@ -112,11 +112,12 @@ export function ForgeLabPage() {
       </Link>
 
       <div>
+        <p className="font-mono text-[10px] uppercase tracking-[.25em] text-primary">01 · Current action</p>
         <h1 className="text-3xl font-display font-bold text-primary tracking-widest uppercase" data-testid="text-forge-title">
           Matrix Forge Lab
         </h1>
         <p className="text-muted-foreground font-mono text-sm mt-2">
-          UPLOAD A .DOCX PROMPT · STREAM HIVE PRE-CHECK · HAND OFF TO PUBLISH
+          Upload one .docx prompt, run the HIVE pre-check, then hand off to publish.
         </p>
       </div>
 
@@ -196,12 +197,14 @@ export function ForgeLabPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-3">
+        <div className="space-y-2">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-primary">02 · Verify the prompt</p>
+          <div className="flex flex-wrap gap-3">
           <button
             onClick={run}
             disabled={busy || !file || !meta.title || !meta.description}
             data-testid="button-run-forge"
-            className="px-5 py-3 rounded-lg font-mono text-xs uppercase tracking-wider bg-blue-500/10 text-blue-400 border border-blue-500/30 hover:bg-blue-500/15 disabled:opacity-40 transition-all flex items-center gap-2"
+            className="px-5 py-3 rounded-lg font-mono text-xs uppercase tracking-wider bg-primary text-primary-foreground border border-primary hover:bg-primary/90 disabled:opacity-40 transition-all flex items-center gap-2 shadow-[0_0_20px_rgba(34,211,238,0.25)]"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             Run Forge Lab
@@ -215,6 +218,7 @@ export function ForgeLabPage() {
               <CheckCircle2 className="h-4 w-4" /> Send to Publish
             </button>
           )}
+          </div>
         </div>
 
         {error && (
@@ -223,20 +227,25 @@ export function ForgeLabPage() {
           </div>
         )}
 
-        {/* Terminal log */}
-        <div
-          ref={logRef}
-          data-testid="text-forge-log"
-          className="bg-black/70 border border-white/10 rounded-md p-4 font-mono text-[11px] leading-relaxed h-72 overflow-y-auto"
-        >
-          {log.length === 0 ? (
-            <div className="text-muted-foreground/50">// forge-lab idle. upload a .docx and hit Run.</div>
-          ) : (
-            log.map((l) => (
-              <div key={l.id} className={LEVEL_COLOR[l.level]} data-testid={`log-line-${l.id}`}>{l.text}</div>
-            ))
-          )}
-        </div>
+        {/* Terminal log: useful working detail, kept below the primary action. */}
+        <details open={log.length > 0} className="rounded-lg border border-white/10 bg-black/20">
+          <summary className="cursor-pointer list-none px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary">
+            Processing log
+          </summary>
+          <div
+            ref={logRef}
+            data-testid="text-forge-log"
+            className="bg-black/70 border-t border-white/10 rounded-b-md p-4 font-mono text-[11px] leading-relaxed h-72 overflow-y-auto"
+          >
+            {log.length === 0 ? (
+              <div className="text-muted-foreground/50">// forge-lab idle. upload a .docx and hit Run.</div>
+            ) : (
+              log.map((l) => (
+                <div key={l.id} className={LEVEL_COLOR[l.level]} data-testid={`log-line-${l.id}`}>{l.text}</div>
+              ))
+            )}
+          </div>
+        </details>
 
         {result && (
           <div className="text-[11px] font-mono text-muted-foreground border-t border-white/5 pt-3" data-testid="text-forge-summary">

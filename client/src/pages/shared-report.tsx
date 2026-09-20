@@ -8,7 +8,7 @@ import { ATANDA } from "@/lib/arkReportTheme";
 import atandaLogo from "@assets/WEB_LEARNING_SYSTEMS_(1920_x_1280_px)_(2)_1779729580194.png";
 
 /* Public, no-login ARK Report view (route /r/:token). Renders the same branded
-   ARK Report + Career Adviser sheets the owner sees, resolved live from the
+   ARK Report + ARK Guide sheets the owner sees, resolved live from the
    share token. The visible sheets double as the print surface (see the
    @media print rules in index.css) so "Download PDF" yields a true vector PDF
    carrying both documents. Rendered OUTSIDE the app chrome. */
@@ -46,7 +46,7 @@ export default function SharedReportPage() {
           This report link is no longer available
         </h1>
         <p style={{ fontSize: 14, color: ATANDA.sub, maxWidth: 420, lineHeight: 1.5 }}>
-          The link may have been revoked by its owner, or it may be incorrect. Ask them to share a fresh link.
+          The link may have expired, been revoked by its owner, or be incorrect. Ask them to share a fresh link.
         </p>
       </div>
     );
@@ -71,7 +71,7 @@ export default function SharedReportPage() {
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <img src={atandaLogo} alt="ATANDA" style={{ width: 34, height: 34, objectFit: "contain" }} />
           <span style={{ fontFamily: "monospace", fontSize: 12, textTransform: "uppercase", letterSpacing: 2, color: ATANDA.ink, fontWeight: 700 }}>
-            ARK Report
+            ARK Report + ARK Guide
           </span>
         </div>
         <button
@@ -100,7 +100,7 @@ export default function SharedReportPage() {
       </div>
 
       <div style={{ maxWidth: 880, margin: "0 auto", padding: "24px 16px 64px" }}>
-        {/* Visible sheets = the print surface (both ARK Report + Career Adviser). */}
+        {/* Visible sheets = the print surface (both ARK Report + ARK Guide). */}
         <div className="ark-print-surface" style={{ display: "grid", gap: 24 }}>
           <div className="ark-print-page" style={{ overflowX: "auto" }}>
             <ArkReportSheet name={data.name} role={data.role} identity={data.identity} lhcs={data.lhcs} assessment={data.assessment} />

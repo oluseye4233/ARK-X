@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useState } from "react";
-import atandaLogo from "@assets/WEB_LEARNING_SYSTEMS_(1920_x_1280_px)_(2)_1779729580194.png";
+import atandaLogo from "@assets/1_1789324450432.png";
 import {
   BarChart3,
   Upload,
@@ -21,8 +21,7 @@ import {
   Shield,
   FileText,
   Network,
-  Sparkles,
-  ShieldCheck,
+  Compass,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { OnboardingTour } from "@/components/OnboardingTour";
@@ -36,6 +35,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useCallback } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { FEATURES } from "@shared/featureFlags";
+import { MerlinCopilot } from "@/components/merlin/MerlinCopilot";
+import { JourneyShell } from "@/components/layout/JourneyShell";
 
 const ALL_ADMIN_LINKS: { item: NavItem; flag: keyof typeof FEATURES | null }[] = [
   { item: { name: "CCGE Importer", href: "/admin/ccge-import", icon: Shield, hint: "Bulk-import compendium cards" }, flag: "adminCcgeImport" },
@@ -73,8 +74,8 @@ const ALL_NAV_GROUPS: FlaggedNavGroup[] = [
       { name: "Upload CV", href: "/upload", icon: Upload, hint: "Run a new assessment", flag: null },
       { name: "Intelligence Hub", href: "/dashboard", icon: BarChart3, hint: "Your scores & insights", flag: null },
       { name: "ARK Resume", href: "/ark-resume", icon: FileText, hint: "ATS-optimized verified resume", flag: "arkResume" },
-      { name: "Living Resume Designer", href: "/living-resume-designer", icon: Sparkles, hint: "Build a shareable, offline resume artifact", flag: "livingResumeDesigner" },
       { name: "Book Companion", href: "/book", icon: BookOpen, hint: "Context Craft reading journey", flag: "bookCompanion" },
+      { name: "MERLIN", href: "/merlin", icon: Compass, hint: "Completion assurance guide", flag: null },
     ],
   },
   {
@@ -86,7 +87,6 @@ const ALL_NAV_GROUPS: FlaggedNavGroup[] = [
       { name: "Roundtable", href: "/marketplace/roundtable", icon: Activity, hint: "Top-12 SPC leaderboard", flag: "sphinxAdvanced" },
       { name: "Synergy Lab", href: "/marketplace/synergy", icon: HelpCircle, hint: "Test card combinations", flag: "sphinxAdvanced" },
       { name: "Forge Lab", href: "/marketplace/forge-lab", icon: Upload, hint: "Upload .docx → HIVE pre-check", flag: "forgeLabDocx" },
-      { name: "Atomic Gauntlet", href: "/gauntlet", icon: ShieldCheck, hint: "AI-judged quality review for your apps", flag: "gauntlet" },
       { name: "Career Mobility", href: "/pathways", icon: Map, hint: "Pivot opportunities", flag: null },
       { name: "Training Providers", href: "/training", icon: GraduationCap, hint: "JST-matched certifications", flag: "trainingProviders" },
     ],
@@ -95,6 +95,7 @@ const ALL_NAV_GROUPS: FlaggedNavGroup[] = [
     label: "Match",
     items: [
       { name: "Talent Exchange", href: "/matchmaking", icon: Network, hint: "Verified job & team matching", flag: "matchmaking" },
+      { name: "GUIN MAX", href: "/guin-match", icon: Network, hint: "Consented mentor discovery", flag: "guinMax" },
     ],
   },
   {
@@ -118,6 +119,12 @@ const ALL_SECONDARY_LINKS: FlaggedNavItem[] = [
 ];
 
 const SECONDARY_LINKS: NavItem[] = ALL_SECONDARY_LINKS.filter(i => i.flag === null || FEATURES[i.flag]);
+const COCKPIT_LINKS: NavItem[] = [
+  { name: "Home", href: "/", icon: HomeIcon, hint: "Return to the start" },
+  { name: "Upload", href: "/upload", icon: Upload, hint: "Add a document" },
+  { name: "Intelligence", href: "/dashboard", icon: BarChart3, hint: "Open your current intelligence" },
+  { name: "MERLIN", href: "/merlin", icon: Compass, hint: "Get guidance on the next action" },
+];
 
 function isActiveHref(location: string, href: string): boolean {
   return location === href || (href !== "/" && location.startsWith(href + "/"));
@@ -138,17 +145,48 @@ function SidebarBody({ location, openTour, onNavigate }: {
         data-testid="link-logo-home"
         className="p-6 flex items-center gap-3 hover:opacity-80 transition-opacity"
       >
-        <Activity className="h-8 w-8 text-primary animate-pulse" />
-        <div>
-          <h1 className="text-xl font-display font-bold text-primary tracking-widest leading-none">ARK</h1>
-          <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-mono">Synthesized Intel</p>
-        </div>
+        <img src={atandaLogo} alt="ATANDA" className="h-14 w-auto max-w-[150px] object-contain object-left" />
       </Link>
 
       <nav className="px-4 py-4 flex-1 overflow-y-auto" aria-label="Primary">
-        {NAV_GROUPS.map((group) => (
+        <p className="px-2 mb-2 text-[10px] font-mono font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+          Drive
+        </p>
+        <ul className="space-y-1.5 mb-5">
+          {COCKPIT_LINKS.map((item) => {
+            const isActive = isActiveHref(location, item.href);
+            return (
+              <li key={item.name}>
+                <Link
+                  href={item.href}
+                  onClick={onNavigate}
+                  title={item.hint}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2.5 rounded-md transition-all duration-200 group font-mono text-sm uppercase tracking-wide border",
+                    isActive
+                      ? "bg-primary/10 text-primary border-primary/30 shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+                      : "text-muted-foreground hover:bg-white/5 hover:text-foreground border-transparent"
+                  )}
+                >
+                  <item.icon className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">{item.name}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+
+        <details className="group/tools border-t border-sidebar-border pt-4">
+          <summary className="cursor-pointer list-none rounded-md px-3 py-2 text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-sidebar-foreground/70 hover:bg-white/5 hover:text-sidebar-foreground focus-visible:outline-none">
+            <span className="inline-flex items-center gap-2">
+              <span className="transition-transform group-open/tools:rotate-90" aria-hidden="true">›</span>
+              All tools
+            </span>
+          </summary>
+          <div className="mt-4">
+          {NAV_GROUPS.map((group) => (
           <div key={group.label} className="mb-5">
-            <p className="px-2 mb-2 text-[10px] font-mono uppercase tracking-[0.2em] text-muted-foreground/70">
+            <p className="px-2 mb-2 text-[10px] font-mono font-semibold uppercase tracking-[0.2em] text-muted-foreground">
               {group.label}
             </p>
             <ul className="space-y-1.5">
@@ -183,7 +221,7 @@ function SidebarBody({ location, openTour, onNavigate }: {
 
         {isAdmin && (
           <div className="mb-5 border-t border-white/5 pt-4">
-            <p className="px-2 mb-2 text-[10px] font-mono uppercase tracking-[0.2em] text-amber-400/70">
+              <p className="px-2 mb-2 text-[10px] font-mono font-semibold uppercase tracking-[0.2em] text-amber-300">
               Admin
             </p>
             <ul className="space-y-1.5">
@@ -217,7 +255,7 @@ function SidebarBody({ location, openTour, onNavigate }: {
         )}
 
         <div className="mb-5 border-t border-white/5 pt-4">
-          <p className="px-2 mb-2 text-[10px] font-mono uppercase tracking-[0.2em] text-muted-foreground/70">
+          <p className="px-2 mb-2 text-[10px] font-mono font-semibold uppercase tracking-[0.2em] text-muted-foreground">
             Account
           </p>
           <ul className="space-y-1.5">
@@ -248,6 +286,8 @@ function SidebarBody({ location, openTour, onNavigate }: {
             })}
           </ul>
         </div>
+          </div>
+        </details>
       </nav>
 
       <div className="p-4 border-t border-primary/20 bg-background/80 backdrop-blur-sm space-y-3">
@@ -268,7 +308,7 @@ function SidebarBody({ location, openTour, onNavigate }: {
           </span>
         </div>
         <div className="flex flex-col items-center gap-2 pt-3 border-t border-white/5">
-          <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60 font-mono">Powered By</span>
+          <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground font-mono">Powered By</span>
           <img
             src={atandaLogo}
             alt="Atanda"
@@ -365,10 +405,10 @@ export function AppLayout({ children }: AppLayoutProps) {
         <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-destructive/5 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/3 pointer-events-none" />
 
         <div className="relative z-10 p-4 sm:p-6 md:p-10 h-full">
-          {children}
+          <JourneyShell>{children}</JourneyShell>
         </div>
         <footer className="relative z-10 border-t border-primary/10 px-4 sm:px-6 md:px-10 py-4 mt-auto">
-          <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] font-mono uppercase tracking-widest text-muted-foreground/70">
+          <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] font-mono font-semibold uppercase tracking-widest text-muted-foreground">
             <span>© 2026 ARK Platform</span>
             <div className="flex items-center gap-4">
               <button
@@ -384,6 +424,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
           </div>
         </footer>
+        <MerlinCopilot />
       </main>
 
       <OnboardingTour open={isOpen} onClose={close} />

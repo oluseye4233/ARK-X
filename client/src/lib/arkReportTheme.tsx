@@ -1,5 +1,5 @@
 /* Shared ATANDA brand theme primitives for the export-ready ARK documents
-   (the ARK Report sheet and the Career Adviser Guide). Kept in one place so
+   (the ARK Report sheet and the ARK Guide). Kept in one place so
    both documents render with identical palette + bar styling and so neither
    page has to import presentation helpers from the other (avoids a cycle). */
 

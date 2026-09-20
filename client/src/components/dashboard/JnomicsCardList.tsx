@@ -48,6 +48,8 @@ interface JobRoleGuide {
   onet: { code: string; title: string; note: string }[];
   sfia: { level: number; name: string; control: string }[];
   wef: { outlook: "ASCENDING" | "DECLINING" | "STABLE"; summary: string; signals: string[] };
+  dataAsOf: string;
+  provenance: { source: string; methodology: string };
 }
 
 const MAX_DOC_BYTES = 650_000; // keep base64 payload under the 1MB body limit
@@ -181,7 +183,7 @@ export function JnomicsCardList({ matchedCardIds }: JnomicsCardListProps) {
             Junglenomics CODEC Primitives
           </h3>
           <p className="text-[11px] font-mono text-muted-foreground mt-1">
-            Skills mapped to global standards · O*NET · SFIA v8 · WEF Future of Jobs
+            ARK-curated standard references · reviewed 6 September 2026 · not validated against current O*NET, SFIA or WEF releases
           </p>
         </div>
 
@@ -610,9 +612,9 @@ function VerificationModal({
                 </div>
                 <p className="text-[11px] font-sans text-white/70 leading-relaxed">
                   Name the job role you're writing for (e.g. <span className="text-white/90">Project Manager</span>) to pull a
-                  standards guide — <span className="text-blue-300">O*NET</span> occupations,
-                  the <span className="text-emerald-300">SFIA</span> level of control, and
-                  the <span className="text-amber-300">WEF</span> demand outlook — to steer your seven-pillar prompts.
+                  AI-generated reference guide with suggested <span className="text-blue-300">O*NET</span> occupations,
+                  <span className="text-emerald-300"> SFIA</span> levels, and an illustrative role outlook.
+                  It does not query current O*NET, SFIA, WEF, or labour-market datasets.
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
                   <input
@@ -640,7 +642,7 @@ function VerificationModal({
                 {guide && (
                   <div className="flex flex-col gap-3 mt-1" data-testid="job-role-guide-result">
                     <div data-testid="guide-onet">
-                      <span className="text-[10px] font-mono uppercase tracking-wider text-blue-300">O*NET occupations</span>
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-blue-300">AI-suggested O*NET references</span>
                       {guide.onet.length > 0 ? (
                         <ul className="mt-1 flex flex-col gap-1">
                           {guide.onet.map((o, i) => (
@@ -655,7 +657,7 @@ function VerificationModal({
                     </div>
 
                     <div data-testid="guide-sfia">
-                      <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-300">SFIA level of control</span>
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-300">AI-suggested SFIA levels</span>
                       {guide.sfia.length > 0 ? (
                         <ul className="mt-1 flex flex-col gap-1">
                           {guide.sfia.map((s, i) => (
@@ -670,7 +672,7 @@ function VerificationModal({
 
                     <div data-testid="guide-wef">
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono uppercase tracking-wider text-amber-300">WEF outlook</span>
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-amber-300">Illustrative AI role outlook</span>
                         <span className={`text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border ${WEF_OUTLOOK_TONE[guide.wef.outlook]?.cls ?? WEF_OUTLOOK_TONE.STABLE.cls}`} data-testid="status-wef-outlook">
                           {WEF_OUTLOOK_TONE[guide.wef.outlook]?.label ?? guide.wef.outlook}
                         </span>
@@ -684,7 +686,9 @@ function VerificationModal({
                         </div>
                       )}
                     </div>
-                    <p className="text-[10px] font-sans text-white/40 italic">Reference only — AI-generated guidance, not part of your score.</p>
+                    <p className="text-[10px] font-sans text-white/40 italic" data-testid="job-role-guide-provenance">
+                      Source: {guide.provenance.source} · Data as of {guide.dataAsOf}. {guide.provenance.methodology} Reference only; not part of your score.
+                    </p>
                   </div>
                 )}
               </div>

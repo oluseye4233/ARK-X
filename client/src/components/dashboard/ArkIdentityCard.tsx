@@ -12,6 +12,8 @@ export type ArkIdentity = {
   typology: string | null;
   arkIdString: string | null;
   resumeReplacementPct: number;
+  provenance?: { source: string };
+  dataAsOf?: string;
 };
 
 const TIER_COLOR: Record<ArkTierKey, string> = {
@@ -56,6 +58,9 @@ export function ArkIdentityCard({ identity }: { identity: ArkIdentity }) {
             </p>
             <p className={`text-xs font-mono uppercase tracking-widest mt-1 ${textClass}`}>
               {tier} · VMST {identity.vmstLevel}
+            </p>
+            <p className="mt-2 max-w-sm text-[9px] font-mono leading-relaxed text-muted-foreground" data-testid="ark-identity-provenance">
+              Source: {identity.provenance?.source ?? "not supplied"} · Data as of {identity.dataAsOf ?? "not supplied"}
             </p>
             {next.nextTier ? (
               <div

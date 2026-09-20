@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { useSubscription } from "@/lib/useSubscription";
 import UpgradeGate from "@/components/UpgradeGate";
 import { FlippableCard } from "@/components/ui/flippable-card";
+import { Link } from "wouter";
 
 function feasibilityNarrative(score: number): string {
   if (score >= 80) return "Strong fit — most core skills already transfer.";
@@ -51,6 +52,9 @@ export default function PathwaysPage() {
     return (
       <div className="w-full max-w-6xl mx-auto min-h-[60vh] flex flex-col items-center justify-center">
         <p className="font-mono text-sm text-muted-foreground uppercase">No assessment data found. Upload a resume first.</p>
+        <Link href="/upload" className="mt-4 inline-flex items-center rounded-lg bg-primary px-5 py-3 text-xs font-mono font-bold uppercase tracking-wider text-background hover:bg-primary/90">
+          Upload resume
+        </Link>
       </div>
     );
   }
@@ -71,6 +75,17 @@ export default function PathwaysPage() {
         <p className="text-muted-foreground font-mono text-sm mt-1">
           Predictive modeling for career pivots and dynamic upskilling.
         </p>
+      </div>
+
+      <div className="glass-card rounded-xl border border-primary/30 bg-primary/5 p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4" data-testid="pathway-primary-action">
+        <div>
+          <p className="text-[10px] font-mono uppercase tracking-widest text-primary">Your next move</p>
+          <h3 className="font-display font-bold text-white text-lg mt-1">Choose one pathway to work on</h3>
+          <p className="text-sm text-muted-foreground mt-1">Start with the strongest fit, then use the analysis below to plan the gap.</p>
+        </div>
+        <Link href="/training" className="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-3 text-sm font-mono font-bold uppercase tracking-wider text-background hover:bg-primary/90">
+          Explore training
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -146,19 +161,31 @@ export default function PathwaysPage() {
           </div>
         </div>
 
-        <div>
-          <UpskillingTimeline items={assessment.upskillingPlans || []} />
-        </div>
+        <details className="group">
+          <summary className="cursor-pointer list-none rounded-xl border border-white/10 bg-white/[0.03] px-5 py-4 font-mono text-xs uppercase tracking-widest text-muted-foreground hover:text-primary">
+            <span className="group-open:text-primary">Open upskilling plan</span>
+          </summary>
+          <div className="mt-4">
+            <UpskillingTimeline items={assessment.upskillingPlans || []} />
+          </div>
+        </details>
 
       </div>
 
-      <SkillGapMatrix
-        pivotOpportunities={assessment.pivotOpportunities || []}
-        transferabilityVectors={(assessment.transferabilityVectors || []).map((v: any) => ({
-          subject: v.subject,
-          score: v.score,
-        }))}
-      />
+      <details className="group">
+        <summary className="cursor-pointer list-none rounded-xl border border-white/10 bg-white/[0.03] px-5 py-4 font-mono text-xs uppercase tracking-widest text-muted-foreground hover:text-primary">
+          <span className="group-open:text-primary">Open skill-gap matrix</span>
+        </summary>
+        <div className="mt-4">
+          <SkillGapMatrix
+            pivotOpportunities={assessment.pivotOpportunities || []}
+            transferabilityVectors={(assessment.transferabilityVectors || []).map((v: any) => ({
+              subject: v.subject,
+              score: v.score,
+            }))}
+          />
+        </div>
+      </details>
     </div>
   );
 }

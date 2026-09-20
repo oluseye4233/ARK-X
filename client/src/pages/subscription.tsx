@@ -5,12 +5,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/useAuth";
 import { api } from "@/lib/api";
-import { SUBSCRIPTION_PLANS, F1000_PROMO, type SubscriptionPlan } from "@shared/schema";
+import { SUBSCRIPTION_PLANS, F1000_PROMO, type BillingInterval, type SubscriptionPlan } from "@shared/schema";
 import {
   Crown,
   GraduationCap,
   User,
   Building2,
+  Hammer,
   Check,
   Zap,
   ArrowRight,
@@ -27,17 +28,45 @@ const PLAN_ICONS: Record<string, typeof User> = {
   INDIVIDUAL_PRO: Crown,
   SCHOOL_STUDENT: GraduationCap,
   ENTERPRISE: Building2,
+  ARCHITECT: Hammer,
 };
 
+type PlanSwitchPreview = {
+  plan: SubscriptionPlan;
+  fromPlan: SubscriptionPlan;
+  prorationAmountCents: number;
+  currency: string;
+  nextBillingAt: string;
+  expiresAt: string;
+  previewToken: string;
+};
+
+export function getCancellationMessage({
+  effectiveAt,
+  alreadyScheduled,
+}: {
+  effectiveAt: string;
+  alreadyScheduled?: boolean;
+}): string {
+  const endDateMessage = `Subscription will end on ${new Date(effectiveAt).toLocaleDateString()}.`;
+  return alreadyScheduled
+    ? `Cancellation was already scheduled. ${endDateMessage}`
+    : endDateMessage;
+}
+
 export default function SubscriptionPage() {
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, refreshUser } = useAuth();
   const [, setLocation] = useLocation();
   const [currentPlan, setCurrentPlan] = useState<SubscriptionPlan>("INDIVIDUAL_FREE");
   const [isUpdating, setIsUpdating] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [switchNotice, setSwitchNotice] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
   const [institution, setInstitution] = useState("");
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>("month");
+  const [switchPreview, setSwitchPreview] = useState<PlanSwitchPreview | null>(null);
+  const [previewRefreshNotice, setPreviewRefreshNotice] = useState(false);
 
   const f1000Query = useQuery<{ member: boolean }>({
     queryKey: ["/api/f1000/me"],
@@ -45,6 +74,19 @@ export default function SubscriptionPage() {
     enabled: FEATURES.f1000Promo && !!user,
     refetchOnWindowFocus: false,
   });
+  const billingQuery = useQuery<{
+    plan: SubscriptionPlan;
+    status: string;
+    paidCheckoutAvailable: boolean;
+    mode: "demo" | "live";
+    stripeSubscriptionId: string | null;
+  }>({
+    queryKey: ["/api/billing/me"],
+    queryFn: () => api.getBillingMe(),
+    enabled: !!user,
+    refetchOnWindowFocus: false,
+  });
+  const paidCheckoutAvailable = billingQuery.data?.paidCheckoutAvailable === true;
   const isF1000 = !!f1000Query.data?.member;
   const promoPriceFor = (key: SubscriptionPlan): number | null =>
     isF1000 && F1000_PROMO.priceUsd[key] != null ? F1000_PROMO.priceUsd[key] : null;
@@ -65,28 +107,87 @@ export default function SubscriptionPage() {
   const handleSubscribe = async (plan: SubscriptionPlan) => {
     if (!user) return;
     setErrorMsg(null);
-    if (plan === "ENTERPRISE") {
-      setErrorMsg("Enterprise plans are configured by sales — please contact us.");
-      return;
-    }
     setIsUpdating(true);
     try {
+      const isSwitch = !!billingQuery.data?.stripeSubscriptionId &&
+        SUBSCRIPTION_PLANS[currentPlan].price > 0 &&
+        SUBSCRIPTION_PLANS[plan].price > 0;
+      if (isSwitch) {
+        const preview = await api.previewSubscriptionSwitch(
+          plan,
+          plan === "SCHOOL_STUDENT" ? institution : undefined,
+          billingInterval,
+        );
+        setSwitchPreview(preview);
+        setPreviewRefreshNotice(false);
+        return;
+      }
       const session = await api.startCheckout(
         plan,
         plan === "SCHOOL_STUDENT" ? institution : undefined,
+        billingInterval,
       );
       if (!session.requiresPayment) {
         await api.completeCheckout(session.sessionId, true);
-        setCurrentPlan(plan);
-        updateUser({ subscriptionPlan: plan, subscriptionStatus: "active" });
-        setShowSuccess(true);
+        const billing = await api.getBillingMe();
+        setCurrentPlan(billing.plan);
+        updateUser({ subscriptionPlan: billing.plan, subscriptionStatus: billing.status });
+        await refreshUser();
+        setSuccessMessage("Subscription updated successfully. Your new plan features are now active.");
         setSelectedPlan(null);
-        setTimeout(() => setShowSuccess(false), 3000);
+        setTimeout(() => setSuccessMessage(null), 3000);
       } else {
-        setLocation(session.redirectUrl);
+        window.location.assign(session.redirectUrl);
       }
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to start checkout.");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const confirmPlanSwitch = async () => {
+    if (!switchPreview) return;
+    setErrorMsg(null);
+    setIsUpdating(true);
+    try {
+        const result = await api.switchSubscription(switchPreview.previewToken);
+        const proration = new Intl.NumberFormat(undefined, {
+          style: "currency", currency: result.currency || "USD",
+        }).format(Math.abs(result.prorationAmountCents) / 100);
+        setCurrentPlan(result.plan);
+        updateUser({ subscriptionPlan: result.plan, subscriptionStatus: "active" });
+        await refreshUser();
+        setSelectedPlan(null);
+        setSwitchPreview(null);
+        setPreviewRefreshNotice(false);
+        setSuccessMessage("Subscription updated successfully. Your new plan features are now active.");
+        setSwitchNotice(
+          `Plan changed immediately. Stripe added ${result.prorationAmountCents >= 0 ? `a ${proration} prorated charge` : `a ${proration} prorated credit`} to your next invoice. ` +
+          `Your next regular billing date is ${new Date(result.nextBillingAt).toLocaleDateString()}.`,
+        );
+        setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err: any) {
+      if (
+        err.code === "PREVIEW_EXPIRED" ||
+        err.code === "PREVIEW_STALE" ||
+        err.code === "SUBSCRIPTION_VERSION_CONFLICT"
+      ) {
+        try {
+          const refreshed = await api.previewSubscriptionSwitch(
+            switchPreview.plan,
+            switchPreview.plan === "SCHOOL_STUDENT" ? institution : undefined,
+            billingInterval,
+          );
+          setSwitchPreview(refreshed);
+          setPreviewRefreshNotice(true);
+        } catch (refreshError: any) {
+          setSwitchPreview(null);
+          setErrorMsg(refreshError.message || "Failed to refresh the price preview.");
+        }
+      } else {
+        setErrorMsg(err.message || "Failed to change plans.");
+      }
     } finally {
       setIsUpdating(false);
     }
@@ -97,12 +198,12 @@ export default function SubscriptionPage() {
     if (!confirm("Cancel your subscription? You'll keep access until the end of the current period.")) return;
     setIsUpdating(true);
     setErrorMsg(null);
+    setSuccessMessage(null);
     try {
       const r = await api.cancelSubscription();
       updateUser({ subscriptionStatus: "canceling" });
-      setShowSuccess(true);
-      setErrorMsg(`Subscription will end on ${new Date(r.effectiveAt).toLocaleDateString()}.`);
-      setTimeout(() => setShowSuccess(false), 3000);
+      setSuccessMessage(getCancellationMessage(r));
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
       setErrorMsg(err.message || "Cancel failed.");
     } finally {
@@ -110,7 +211,8 @@ export default function SubscriptionPage() {
     }
   };
 
-  const plans = Object.entries(SUBSCRIPTION_PLANS) as [SubscriptionPlan, typeof SUBSCRIPTION_PLANS[SubscriptionPlan]][];
+  const plans = (Object.entries(SUBSCRIPTION_PLANS) as [SubscriptionPlan, typeof SUBSCRIPTION_PLANS[SubscriptionPlan]][])
+    .filter(([key]) => key !== "INDIVIDUAL_EXPLORER");
   const currentPlanData = SUBSCRIPTION_PLANS[currentPlan];
 
   return (
@@ -120,26 +222,60 @@ export default function SubscriptionPage() {
           Subscription Plans
         </h1>
         <p className="text-muted-foreground font-mono text-sm mt-2">
-          SELECT YOUR ACCESS TIER // Individual & School Plans Available
+          SELECT YOUR ACCESS TIER // Secure checkout by Stripe
         </p>
       </div>
 
-      <AnimatePresence>
-        {showSuccess && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="glass-card p-4 rounded-xl border border-secondary/30 bg-secondary/5 flex items-center gap-3"
-            data-testid="alert-subscription-updated"
-          >
-            <CheckCircle2 className="h-5 w-5 text-secondary flex-shrink-0" />
-            <span className="font-mono text-sm text-secondary">
-              Subscription updated successfully. Your new plan features are now active.
-            </span>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {!paidCheckoutAvailable && (
+        <div className="glass-card p-4 rounded-xl border border-amber-400/30 bg-amber-400/5 flex items-start gap-3" data-testid="alert-paid-checkout-demo">
+          <AlertTriangle className="h-5 w-5 text-amber-300 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-mono text-sm text-amber-200 uppercase tracking-wide">Paid checkout unavailable</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Stripe is temporarily unavailable. Paid checkout is disabled and no paid access can be activated.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!errorMsg && (
+        <AnimatePresence>
+          {successMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              role="status"
+              className="glass-card p-4 rounded-xl border border-secondary/30 bg-secondary/5 flex items-center gap-3"
+              data-testid="alert-subscription-updated"
+            >
+              <CheckCircle2 className="h-5 w-5 text-secondary flex-shrink-0" />
+              <span className="font-mono text-sm text-secondary">
+                {successMessage}
+              </span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      )}
+
+      <div className="flex justify-center">
+        <div className="inline-flex rounded-lg border border-white/10 bg-black/30 p-1" data-testid="billing-interval-toggle">
+          {(["month", "year"] as const).map((interval) => (
+            <button
+              key={interval}
+              type="button"
+              onClick={() => setBillingInterval(interval)}
+              className={`rounded-md px-5 py-2 font-mono text-xs uppercase tracking-widest transition-colors ${
+                billingInterval === interval ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-white"
+              }`}
+              aria-pressed={billingInterval === interval}
+              data-testid={`button-billing-${interval}`}
+            >
+              {interval === "month" ? "Monthly" : "Annual · Save 17%"}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="glass-card p-6 rounded-xl" data-testid="card-current-plan">
         <div className="flex items-center gap-4">
@@ -189,19 +325,31 @@ export default function SubscriptionPage() {
       </div>
 
       <AnimatePresence>
-        {errorMsg && (
+        {switchNotice && (
           <motion.div
+            key="plan-switch-notice"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="glass-card p-4 rounded-xl border border-destructive/30 bg-destructive/5 flex items-center gap-3"
-            data-testid="alert-billing-error"
+            role="status"
+            className="glass-card p-4 rounded-xl border border-secondary/30 bg-secondary/5 flex items-center gap-3"
+            data-testid="alert-plan-switch-details"
           >
-            <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0" />
-            <span className="font-mono text-sm text-destructive">{errorMsg}</span>
+            <CheckCircle2 className="h-5 w-5 text-secondary flex-shrink-0" />
+            <span className="font-mono text-sm text-secondary">{switchNotice}</span>
           </motion.div>
         )}
       </AnimatePresence>
+      {errorMsg && (
+        <div
+          role="alert"
+          className="glass-card p-4 rounded-xl border border-destructive/30 bg-destructive/5 flex items-center gap-3"
+          data-testid="alert-billing-error"
+        >
+          <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0" />
+          <span className="font-mono text-sm text-destructive">{errorMsg}</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         {plans.map(([key, planData], index) => {
@@ -209,7 +357,8 @@ export default function SubscriptionPage() {
           const Icon = PLAN_ICONS[key] || User;
           const isPopular = key === "INDIVIDUAL_PRO";
           const isSchool = key === "SCHOOL_STUDENT";
-          const isEnterprise = key === "ENTERPRISE";
+           const isEnterprise = key === "ENTERPRISE";
+          const isUnavailablePaidPlan = planData.price > 0 && !paidCheckoutAvailable;
 
           return (
             <motion.div
@@ -262,13 +411,15 @@ export default function SubscriptionPage() {
                       <div className="space-y-1">
                         <div className="flex items-baseline gap-1 flex-wrap">
                           <span className="text-3xl font-display font-black text-white">
-                            ${promo ?? planData.price}
+                            ${billingInterval === "year"
+                              ? (promo != null ? promo * 10 : planData.annualPrice)
+                              : (promo ?? planData.price)}
                           </span>
-                          <span className="text-sm text-muted-foreground font-mono">/{planData.period}</span>
+                          <span className="text-sm text-muted-foreground font-mono">/{billingInterval === "year" ? "year" : planData.period}</span>
                           {promo != null && (
                             <>
                               <span className="ml-2 text-sm text-muted-foreground/60 font-mono line-through" data-testid={`text-original-price-${key.toLowerCase()}`}>
-                                ${planData.price}
+                                ${billingInterval === "year" ? planData.annualPrice : planData.price}
                               </span>
                               <span className="ml-1 text-[10px] font-mono uppercase tracking-widest text-primary" data-testid={`badge-f1000-price-${key.toLowerCase()}`}>
                                 F1000
@@ -304,7 +455,7 @@ export default function SubscriptionPage() {
                         handleSubscribe(key);
                       }
                     }}
-                    disabled={isUpdating}
+                    disabled={isUpdating || isUnavailablePaidPlan}
                     className="w-full py-3 rounded-lg font-mono text-sm uppercase tracking-wide transition-all duration-300 flex items-center justify-center gap-2 hover:scale-[1.02]"
                     style={{
                       color: planData.color,
@@ -318,24 +469,20 @@ export default function SubscriptionPage() {
                     ) : (
                       <ArrowRight className="h-4 w-4" />
                     )}
-                    {isUpdating ? "Processing..." : isSchool ? "Select Plan" : "Subscribe"}
+                    {isUpdating ? "Processing..." : isUnavailablePaidPlan ? "Paid Checkout Unavailable" : isSchool ? "Select Plan" : SUBSCRIPTION_PLANS[currentPlan].price > 0 ? "Switch Plan" : "Subscribe"}
                   </button>
                 )}
 
                 {isEnterprise && !isCurrent && (
                   <button
-                    className="w-full py-3 rounded-lg font-mono text-sm uppercase tracking-wide transition-all duration-300 flex items-center justify-center gap-2 opacity-60 cursor-default"
-                    style={{
-                      color: planData.color,
-                      backgroundColor: `${planData.color}10`,
-                      border: `1px solid ${planData.color}20`,
-                    }}
+                    onClick={() => setErrorMsg("Institution plans require verified organization provisioning. Contact sales to continue.")}
+                    className="w-full py-3 rounded-lg font-mono text-sm uppercase tracking-wide border border-white/20 text-white"
                     data-testid="button-contact-sales"
                   >
-                    <Building2 className="h-4 w-4" />
                     Contact Sales
                   </button>
                 )}
+
 
                 {isCurrent && (
                   <div
@@ -374,7 +521,7 @@ export default function SubscriptionPage() {
                       />
                       <button
                         onClick={() => handleSubscribe(key)}
-                        disabled={isUpdating || !institution.trim()}
+                         disabled={isUpdating || !institution.trim() || isUnavailablePaidPlan}
                         className="w-full py-3 rounded-lg font-mono text-sm uppercase tracking-wide transition-all duration-300 flex items-center justify-center gap-2 hover:scale-[1.02] disabled:opacity-40"
                         style={{
                           color: planData.color,
@@ -388,7 +535,7 @@ export default function SubscriptionPage() {
                         ) : (
                           <GraduationCap className="h-4 w-4" />
                         )}
-                        {isUpdating ? "Processing..." : "Activate Student Plan"}
+                         {isUpdating ? "Processing..." : isUnavailablePaidPlan ? "Paid Checkout Unavailable" : "Activate Student Plan"}
                       </button>
                     </div>
                   </motion.div>
@@ -453,6 +600,71 @@ export default function SubscriptionPage() {
       </div>
 
       <AnimatePresence>
+        {switchPreview && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4"
+            data-testid="dialog-plan-switch-preview"
+          >
+            <div className="glass-card rounded-xl border border-primary/30 p-6 max-w-md w-full space-y-5">
+              <div>
+                <h2 className="font-display font-bold text-xl text-white">Confirm plan change</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Review Stripe’s exact adjustment before changing to {SUBSCRIPTION_PLANS[switchPreview.plan].label}.
+                </p>
+              </div>
+              {previewRefreshNotice && (
+                <div className="rounded-lg border border-amber-400/30 bg-amber-400/5 p-3 text-sm text-amber-200" data-testid="alert-preview-refreshed">
+                  The previous preview expired or became stale. Stripe refreshed the amount; please review it again.
+                </div>
+              )}
+              <div className="rounded-lg bg-black/30 border border-white/10 p-4 space-y-3">
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Prorated adjustment</span>
+                  <strong className={switchPreview.prorationAmountCents < 0 ? "text-secondary" : "text-white"} data-testid="text-proration-adjustment">
+                    {switchPreview.prorationAmountCents < 0 ? "Credit " : "Charge "}
+                    {new Intl.NumberFormat(undefined, {
+                      style: "currency",
+                      currency: switchPreview.currency || "USD",
+                    }).format(Math.abs(switchPreview.prorationAmountCents) / 100)}
+                  </strong>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Next renewal</span>
+                  <strong className="text-white" data-testid="text-next-renewal">
+                    {new Date(switchPreview.nextBillingAt).toLocaleDateString()}
+                  </strong>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                This preview is valid until {new Date(switchPreview.expiresAt).toLocaleTimeString()}.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setSwitchPreview(null);
+                    setPreviewRefreshNotice(false);
+                  }}
+                  disabled={isUpdating}
+                  className="flex-1 py-3 rounded-lg border border-white/20 text-white font-mono text-sm uppercase disabled:opacity-40"
+                  data-testid="button-cancel-plan-switch"
+                >
+                  Keep current plan
+                </button>
+                <button
+                  onClick={confirmPlanSwitch}
+                  disabled={isUpdating}
+                  className="flex-1 py-3 rounded-lg border border-primary/40 bg-primary/15 text-primary font-mono text-sm uppercase disabled:opacity-40"
+                  data-testid="button-confirm-plan-switch"
+                >
+                  {isUpdating ? "Refreshing..." : "Confirm change"}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   );

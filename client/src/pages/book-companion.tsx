@@ -248,6 +248,8 @@ export default function BookCompanionPage() {
   }, [nodes]);
 
   const progressPct = Math.round((earnedCount / BOOK_TOTAL_NODES) * 100);
+  const nextNode = nodes.find((node) => !node.earned);
+  const journeyComplete = isAuthenticated && earnedCount >= BOOK_TOTAL_NODES;
 
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-8 py-8 space-y-10">
@@ -284,10 +286,14 @@ export default function BookCompanionPage() {
 
       {/* F1000 soft-launch — the printed QR that ships in the book points here */}
       {FEATURES.f1000Promo && (
-        <div
-          className="glass-card border border-primary/40 rounded-xl p-6 flex flex-col md:flex-row md:items-center gap-6"
+        <details
+          className="glass-card border border-primary/40 rounded-xl"
           data-testid="banner-f1000-book"
         >
+          <summary className="cursor-pointer list-none p-5 text-sm font-mono uppercase tracking-widest text-primary">
+            <Sparkles className="mr-2 inline h-4 w-4" /> First 1000 reader offer
+          </summary>
+          <div className="p-6 flex flex-col md:flex-row md:items-center gap-6">
           <div className="shrink-0 mx-auto md:mx-0">
             <F1000QrCard
               url={typeof window !== "undefined" ? `${window.location.origin}/f1000` : "/f1000"}
@@ -314,7 +320,8 @@ export default function BookCompanionPage() {
               Claim your F1000 seat <ArrowUpRight className="w-3.5 h-3.5" />
             </Link>
           </div>
-        </div>
+          </div>
+        </details>
       )}
 
       {/* Logged-out banner */}
@@ -357,9 +364,26 @@ export default function BookCompanionPage() {
         </div>
       )}
 
+      {isAuthenticated && nextNode && (
+        <div className="glass-card rounded-xl border-2 border-primary/40 bg-primary/5 p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4" data-testid="book-primary-action">
+          <div>
+            <p className="text-[10px] font-mono uppercase tracking-widest text-primary">Continue your journey</p>
+            <h3 className="font-display font-bold text-white text-lg mt-1">{nextNode.chapterLabel}: {nextNode.title}</h3>
+            <p className="text-sm text-muted-foreground mt-1">Complete the next chapter quest to earn its badge.</p>
+          </div>
+          <Link href={`${nextNode.deepLink}${nextNode.deepLink.includes("?") ? "&" : "?"}book=${nextNode.id}`} className="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-3 text-sm font-mono font-bold uppercase tracking-wider text-background hover:bg-primary/90">
+            Start next chapter <ArrowUpRight className="ml-2 h-4 w-4" />
+          </Link>
+        </div>
+      )}
+
       {/* Digital Ledger */}
       {isAuthenticated && ledger && (
-        <div className="glass-card border border-primary/40 rounded-xl p-6" data-testid="panel-ledger">
+        <details open={journeyComplete || undefined} className={`glass-card rounded-xl ${journeyComplete ? "border-2 border-primary/60 bg-primary/5" : "border border-primary/40"}`} data-testid="panel-ledger">
+          <summary className="cursor-pointer list-none p-5 font-mono text-xs uppercase tracking-widest text-primary">
+            {journeyComplete ? "Close the loop: capture your final snapshot" : "Open digital ledger"}
+          </summary>
+          <div className="p-6 pt-0">
           <div className="flex items-center gap-2 mb-4">
             <Trophy className="w-5 h-5 text-primary" />
             <h3 className="font-display font-bold text-lg text-white uppercase tracking-widest">Digital Ledger</h3>
@@ -391,14 +415,15 @@ export default function BookCompanionPage() {
             <button
               onClick={captureFinal}
               disabled={capturing || !ledger.baseline}
-              className="inline-flex items-center justify-center gap-2 border border-secondary/50 text-secondary hover:bg-secondary/10 disabled:opacity-40 disabled:cursor-not-allowed font-mono text-xs uppercase tracking-widest h-10 px-4 rounded-md"
+               className={`inline-flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed font-mono text-xs uppercase tracking-widest h-10 px-4 rounded-md ${journeyComplete ? "bg-primary text-background border border-primary hover:bg-primary/90 sm:px-6 sm:py-3" : "border border-secondary/50 text-secondary hover:bg-secondary/10"}`}
               data-testid="button-capture-final"
             >
               {capturing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
               Capture Final Snapshot
             </button>
           </div>
-        </div>
+          </div>
+        </details>
       )}
 
       {loading && (

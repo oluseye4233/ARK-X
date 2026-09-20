@@ -125,6 +125,7 @@ export function CommandCentrePage() {
           >
             <Radar className="h-3.5 w-3.5" /> External Link · ATANDA Network
           </span>
+          <p className="font-mono text-[10px] uppercase tracking-[.25em] text-primary">01 · Current action</p>
 
           <h1
             className="font-display text-4xl md:text-6xl font-bold uppercase tracking-widest text-white neon-text leading-[1.05]"
@@ -138,6 +139,7 @@ export function CommandCentrePage() {
             subscriber profile across the ATANDA network via API, surfacing the full dashboard suite
             beyond the ARK platform.
           </p>
+          <p className="font-mono text-xs text-white/65">Check the connection status, then launch the Command Centre when it is ready.</p>
 
           <div className="flex flex-wrap items-center gap-3 pt-2">
             {isConnected && isSubscriber ? (
@@ -224,31 +226,41 @@ export function CommandCentrePage() {
         </div>
       </div>
 
-      {/* Feature cards */}
-      <div className="grid gap-4 md:grid-cols-3">
-        {FEATURES.map((f) => (
-          <div
-            key={f.title}
-            className="glass-card rounded-xl border border-white/10 p-5 space-y-3"
-            data-testid={`card-command-centre-feature-${f.title.toLowerCase().replace(/\s+/g, "-")}`}
-          >
-            <f.icon className="h-6 w-6 text-secondary" />
-            <h3 className="font-display text-base uppercase tracking-wider text-white">
-              {f.title}
-            </h3>
-            <p className="font-mono text-xs text-muted-foreground leading-relaxed">{f.body}</p>
-          </div>
-        ))}
-      </div>
+      {/* Feature cards are supporting context, not competing launch actions. */}
+      <details className="rounded-xl border border-white/10 bg-black/20">
+        <summary className="cursor-pointer list-none px-4 py-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary">
+          What the Command Centre connects
+        </summary>
+        <div className="grid gap-4 border-t border-white/10 p-4 md:grid-cols-3">
+          {FEATURES.map((f) => (
+            <div
+              key={f.title}
+              className="glass-card rounded-xl border border-white/10 p-5 space-y-3"
+              data-testid={`card-command-centre-feature-${f.title.toLowerCase().replace(/\s+/g, "-")}`}
+            >
+              <f.icon className="h-6 w-6 text-secondary" />
+              <h3 className="font-display text-base uppercase tracking-wider text-white">
+                {f.title}
+              </h3>
+              <p className="font-mono text-xs text-muted-foreground leading-relaxed">{f.body}</p>
+            </div>
+          ))}
+        </div>
+      </details>
 
       {/* Trust strip */}
-      <div className="glass-card rounded-xl border border-white/10 p-4 flex items-center gap-3">
-        <ShieldCheck className="h-5 w-5 text-secondary shrink-0" />
-        <p className="font-mono text-[11px] text-muted-foreground leading-relaxed">
-          You will be linked to the ATANDA Command Centre over a secure API bridge. Your ARK
-          credentials are never exposed to the browser — identity is exchanged server-side.
-        </p>
-      </div>
+      <details className="rounded-xl border border-white/10 bg-black/20">
+        <summary className="cursor-pointer list-none px-4 py-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary">
+          Security and connection details
+        </summary>
+        <div className="glass-card rounded-b-xl border-t border-white/10 p-4 flex items-center gap-3">
+          <ShieldCheck className="h-5 w-5 text-secondary shrink-0" />
+          <p className="font-mono text-[11px] text-muted-foreground leading-relaxed">
+            You will be linked to the ATANDA Command Centre over a secure API bridge. Your ARK
+            credentials are never exposed to the browser — identity is exchanged server-side.
+          </p>
+        </div>
+      </details>
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { useSubscription } from "@/lib/useSubscription";
 
 /* Dashboard / profile entry point into the ARK Report. Routes to /report — the
    single surface that views, shares (public link), and downloads the full
-   artifact (ARK Report + Career Adviser sheet via native print). */
+   artifact (ARK Report + ARK Guide via native print). */
 export function ArkReportDownloadButton({ className = "" }: { className?: string }) {
   const { user } = useAuth();
   const { canAccessReport } = useSubscription();
@@ -33,7 +33,7 @@ export function ArkReportDownloadButton({ className = "" }: { className?: string
         className={`flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xs uppercase tracking-wider transition-all hover:scale-[1.02] border border-primary/40 bg-primary/15 text-primary hover:bg-primary hover:text-primary-foreground ${className}`}
       >
         <FileText className="h-3.5 w-3.5" />
-        View &amp; Download ARK Report
+        View ARK Report &amp; Guide
       </a>
     </Link>
   );

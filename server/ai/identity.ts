@@ -113,11 +113,8 @@ export async function generateIdentityNarrative(opts: {
       prompt: userPayload,
       maxTokens: 600,
     });
-    const raw = gen.text.trim().replace(/^```json\s*|\s*```$/g, "");
-    const parsed = JSON.parse(raw) as Partial<IdentityNarrative>;
-    if (!parsed.jstParagraph || !parsed.ccmiParagraph || !parsed.arkParagraph) {
-      return fallback();
-    }
+    // Log usage immediately after generation — tokens were spent even if the
+    // response fails shape validation below.
     try {
       await logUsage({
         userId: opts.userId,
@@ -127,6 +124,11 @@ export async function generateIdentityNarrative(opts: {
         tokensOut: gen.tokensOut,
       });
     } catch {/* best-effort */}
+    const raw = gen.text.trim().replace(/^```json\s*|\s*```$/g, "");
+    const parsed = JSON.parse(raw) as Partial<IdentityNarrative>;
+    if (!parsed.jstParagraph || !parsed.ccmiParagraph || !parsed.arkParagraph) {
+      return fallback();
+    }
     return {
       jstParagraph: String(parsed.jstParagraph).slice(0, 600),
       ccmiParagraph: String(parsed.ccmiParagraph).slice(0, 600),

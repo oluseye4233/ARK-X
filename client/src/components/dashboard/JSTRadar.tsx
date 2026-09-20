@@ -13,19 +13,15 @@ interface JSTRadarProps {
   jobsScore: number;
   skillsScore: number;
   talentScore: number;
+  provenance?: { source: string };
+  dataAsOf?: string;
 }
 
-const INDUSTRY_AVERAGES = {
-  Jobs: 55,
-  Skills: 50,
-  Talent: 48,
-};
-
-export function JSTRadar({ jobsScore, skillsScore, talentScore }: JSTRadarProps) {
+export function JSTRadar({ jobsScore, skillsScore, talentScore, provenance, dataAsOf }: JSTRadarProps) {
   const data = [
-    { axis: "Jobs", user: jobsScore, benchmark: INDUSTRY_AVERAGES.Jobs, fullMark: 100 },
-    { axis: "Skills", user: skillsScore, benchmark: INDUSTRY_AVERAGES.Skills, fullMark: 100 },
-    { axis: "Talent", user: talentScore, benchmark: INDUSTRY_AVERAGES.Talent, fullMark: 100 },
+    { axis: "Jobs", user: jobsScore, fullMark: 100 },
+    { axis: "Skills", user: skillsScore, fullMark: 100 },
+    { axis: "Talent", user: talentScore, fullMark: 100 },
   ];
 
   return (
@@ -49,14 +45,6 @@ export function JSTRadar({ jobsScore, skillsScore, talentScore }: JSTRadarProps)
               domain={[0, 100]}
               tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 10 }}
               axisLine={false}
-            />
-            <Radar
-              name="Industry Avg"
-              dataKey="benchmark"
-              stroke="rgba(255,255,255,0.35)"
-              fill="rgba(255,255,255,0.05)"
-              strokeDasharray="4 4"
-              strokeWidth={1.5}
             />
             <Radar
               name="Your Score"
@@ -85,18 +73,21 @@ export function JSTRadar({ jobsScore, skillsScore, talentScore }: JSTRadarProps)
 
       <div className="mt-2 grid grid-cols-3 gap-2 text-center">
         {data.map((d) => {
-          const diff = d.user - d.benchmark;
           return (
             <div key={d.axis} className="p-2 rounded hover:bg-white/5 transition-colors" data-testid={`radar-axis-${d.axis.toLowerCase()}`}>
               <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">{d.axis}</p>
               <p className="font-display font-bold text-white text-lg">{d.user}</p>
-              <p className={`text-[10px] font-mono ${diff >= 0 ? "text-emerald-400" : "text-destructive"}`}>
-                {diff >= 0 ? "+" : ""}{diff} vs avg
-              </p>
+              <p className="text-[10px] font-mono text-muted-foreground">of 100</p>
             </div>
           );
         })}
       </div>
+      <p className="mt-4 text-center text-[10px] font-mono leading-relaxed text-muted-foreground" data-testid="jst-provenance">
+        Source: {provenance?.source ?? "ARK Onecraft curated scoring model"} · Data as of{" "}
+        {dataAsOf
+          ? new Date(`${dataAsOf}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })
+          : "not supplied"} · Not a live labour-market feed
+      </p>
     </div>
   );
 }

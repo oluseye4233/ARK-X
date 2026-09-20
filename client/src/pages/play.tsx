@@ -827,6 +827,19 @@ export default function PlayPage() {
         </div>
       </div>
 
+      {!loading && filteredScenarios[0] && (
+        <div className="glass-card rounded-xl border-2 border-primary/40 bg-primary/5 p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4" data-testid="play-primary-action">
+          <div>
+            <p className="text-[10px] font-mono uppercase tracking-widest text-primary">Recommended starting point</p>
+            <h2 className="font-display font-bold text-white text-lg mt-1">{filteredScenarios[0].title}</h2>
+            <p className="text-sm text-muted-foreground mt-1">Build one prompt, then author and score your card.</p>
+          </div>
+          <Button onClick={() => startSession(filteredScenarios[0].id)} disabled={!user} className="bg-primary text-background hover:bg-primary/90" data-testid="button-start-recommended">
+            <Gamepad2 className="mr-2 h-4 w-4" /> Start scenario
+          </Button>
+        </div>
+      )}
+
       {/* Phase J.1 — Create Your Own Scenario (CLASS C, flag-gated) */}
       {FEATURES.customScenarios && (
       <div className="glass-card rounded-xl border-2 border-fuchsia-500/40 p-5" data-testid="custom-scenario-panel">
@@ -980,7 +993,11 @@ export default function PlayPage() {
       </div>
       )}
 
-      <div className="flex flex-wrap gap-2 items-center">
+      <details className="group">
+      <summary className="cursor-pointer list-none text-xs font-mono uppercase tracking-widest text-muted-foreground hover:text-primary">
+        <span className="group-open:text-primary">Browse all scenarios and filters</span>
+      </summary>
+      <div className="flex flex-wrap gap-2 items-center mt-3">
         <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground mr-2">Filter Tier:</span>
         {["All", "Bronze", "Silver", "Gold", "Platinum"].map((t) => (
           <Button
@@ -995,21 +1012,7 @@ export default function PlayPage() {
         ))}
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center py-16 text-muted-foreground">
-          <Loader2 className="h-6 w-6 animate-spin mr-2" />
-          Loading scenarios...
-        </div>
-      ) : error ? (
-        <div className="glass-card p-6 rounded-xl border border-destructive/40 text-destructive">
-          <AlertCircle className="h-5 w-5 inline mr-2" />
-          {error}
-        </div>
-      ) : filteredScenarios.length === 0 ? (
-        <div className="glass-card p-8 rounded-xl text-center text-muted-foreground">
-          No scenarios for this tier yet.
-        </div>
-      ) : (
+      {!loading && !error && filteredScenarios.length > 0 && (
         <div className="grid md:grid-cols-2 gap-4">
           {filteredScenarios.map((s) => (
             <FlippableCard
@@ -1102,6 +1105,32 @@ export default function PlayPage() {
               }
             />
           ))}
+        </div>
+      )}
+
+      </details>
+
+      {loading && (
+        <div className="flex items-center justify-center py-16 text-muted-foreground">
+          <Loader2 className="h-6 w-6 animate-spin mr-2" />
+          Loading scenarios...
+        </div>
+      )}
+      {error && (
+        <div className="glass-card p-6 rounded-xl border border-destructive/40 text-destructive">
+          <AlertCircle className="h-5 w-5 inline mr-2" />
+          {error}
+          <Button variant="outline" size="sm" onClick={loadAll} className="ml-3" data-testid="button-retry-scenarios">
+            Retry
+          </Button>
+        </div>
+      )}
+      {!loading && !error && filteredScenarios.length === 0 && (
+        <div className="glass-card p-8 rounded-xl text-center text-muted-foreground">
+          No scenarios for this tier yet.
+          <Button variant="outline" size="sm" onClick={() => setTierFilter("All")} className="ml-3" data-testid="button-reset-scenario-filter">
+            Show all scenarios
+          </Button>
         </div>
       )}
 

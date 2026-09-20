@@ -148,16 +148,21 @@ export default function ProfilePage() {
             ACCOUNT CONFIGURATION // {user.username}
           </p>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <ArkReportDownloadButton />
-          {FEATURES.guinPublic && (
-            <Link href={`/u/${user.username}`} data-testid="link-view-public-profile">
-              <a className="px-3 py-1.5 rounded-lg font-mono text-[11px] uppercase tracking-wider border border-purple-300/30 bg-purple-300/10 text-purple-200 hover:bg-purple-300/20 transition-colors">
-                View Public Profile →
-              </a>
-            </Link>
-          )}
-        </div>
+         <details className="relative">
+           <summary className="list-none cursor-pointer px-3 py-1.5 rounded-lg font-mono text-[11px] uppercase tracking-wider border border-white/10 text-muted-foreground hover:border-primary/40 hover:text-white transition-colors">
+             Profile tools
+           </summary>
+           <div className="absolute right-0 z-10 mt-2 flex min-w-max flex-col gap-2 rounded-lg border border-white/10 bg-background/95 p-2 shadow-xl backdrop-blur">
+             <ArkReportDownloadButton />
+             {FEATURES.guinPublic && (
+               <Link href={`/u/${user.username}`} data-testid="link-view-public-profile">
+                 <a className="px-3 py-1.5 rounded-lg font-mono text-[11px] uppercase tracking-wider border border-purple-300/30 bg-purple-300/10 text-purple-200 hover:bg-purple-300/20 transition-colors">
+                   View Public Profile →
+                 </a>
+               </Link>
+             )}
+           </div>
+         </details>
       </div>
 
       {saveError && (
@@ -182,10 +187,11 @@ export default function ProfilePage() {
           <div className="glass-card p-6 rounded-xl" data-testid="card-profile-details">
             <div className="flex items-center justify-between mb-6">
               <h2 className="font-display font-bold text-lg text-white uppercase tracking-wider">Profile Details</h2>
-              <button
+               <button
                 onClick={() => editing ? handleSave() : setEditing(true)}
                 data-testid="button-edit-profile"
-                className="flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xs uppercase tracking-wider transition-all hover:scale-[1.02]"
+                 aria-label={editing ? "Save profile changes" : "Edit profile"}
+                 className="flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xs uppercase tracking-wider transition-all hover:scale-[1.02] shadow-lg shadow-primary/10"
                 style={{
                   color: editing ? "#44AA44" : "hsl(var(--primary))",
                   backgroundColor: editing ? "rgba(68,170,68,0.1)" : "hsl(var(--primary) / 0.1)",
@@ -244,7 +250,7 @@ export default function ProfilePage() {
               </div>
               <p className="font-display font-bold text-lg text-white">{plan.label}</p>
               <p className="text-sm text-muted-foreground mt-1">
-                {plan.price === 0 ? (plan.key === "ENTERPRISE" ? "Custom" : "Free") : `$${plan.price}/${plan.period}`}
+                {plan.price === 0 ? "Free" : `$${plan.price}/${plan.period}`}
               </p>
               <div className="mt-3 px-2 py-1 rounded text-[10px] font-mono font-bold uppercase inline-block" style={{ color: plan.color, backgroundColor: `${plan.color}15`, border: `1px solid ${plan.color}30` }}>
                 ACTIVE
@@ -274,8 +280,13 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {/* ── AI Engine — LLM-resilient model selector ── */}
-          <div className="glass-card p-5 rounded-xl border border-transparent" data-testid="card-ai-engine">
+           <details className="rounded-xl border border-white/10" data-testid="profile-secondary-tools">
+             <summary className="cursor-pointer list-none px-4 py-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+               More identity tools
+             </summary>
+             <div className="space-y-6 p-3 pt-0">
+           {/* ── AI Engine — LLM-resilient model selector ── */}
+           <div className="glass-card p-5 rounded-xl border border-transparent" data-testid="card-ai-engine">
             <div className="flex items-center gap-3 mb-3">
               <Cpu className="h-5 w-5 text-primary" />
               <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">AI Engine</span>
@@ -360,6 +371,8 @@ export default function ProfilePage() {
               </div>
             </div>
           </Link>
+             </div>
+           </details>
         </div>
       </div>
 

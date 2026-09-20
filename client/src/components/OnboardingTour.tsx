@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import {
   Activity,
@@ -34,10 +34,18 @@ interface Step {
   icon: LucideIcon;
   eyebrow: string;
   title: string;
-  body: string;
+  body: React.ReactNode;
   bullets: string[];
   ctaLabel?: string;
   ctaHref?: string;
+}
+
+export function OnboardingScoreDisclosure() {
+  return (
+    <span data-testid="onboarding-score-provenance">
+      JST is a Jobs–Skills–Talent estimate from the ARK Onecraft curated scoring model, using static code-defined rules. Data as of 6 September 2026; not a live labour-market feed. CCMI measures career capital. Together they form your ARK band — a 0–600 readiness signal.
+    </span>
+  );
 }
 
 const STEPS: Step[] = [
@@ -58,9 +66,9 @@ const STEPS: Step[] = [
     icon: Activity,
     eyebrow: "Your ARK identity",
     title: "JST + CCMI = your ARK score",
-    body: "Every action you take updates your identity in real time. JST measures market position; CCMI measures career capital. Together they form your ARK band — a 0–600 readiness signal.",
+    body: <OnboardingScoreDisclosure />,
     bullets: [
-      "JST Index — Jobs · Skills · Talent (live market signal)",
+      "JST Index — Jobs · Skills · Talent (ARK Onecraft curated scoring model; data as of 6 September 2026)",
       "CCMI Pillars — seven dimensions of long-term capital",
       "LHCS lights — green / amber / red readiness composite",
     ],
@@ -75,7 +83,7 @@ const STEPS: Step[] = [
     body: "We extract your skills, role history, and risk modifiers in seconds, then score you against an AI-vulnerability model trained on automation milestones.",
     bullets: [
       "PDF or DOCX — parsed locally on the server",
-      "Generates JST score, vulnerability tier, and FORGE card matches",
+      "Generates a JST score (ARK Onecraft curated scoring model; data as of 6 September 2026), vulnerability tier, and FORGE card matches",
       "Refresh anytime to recompute your identity",
     ],
     ctaLabel: "Upload resume",
@@ -86,7 +94,7 @@ const STEPS: Step[] = [
     icon: ClipboardCheck,
     eyebrow: "Step 2 — calibrate",
     title: "Take the Context Craft assessment",
-    body: "Eight short questions place you on the Architect / Orchestrator / Conductor archetype map and unlock a multiplier on your JST score.",
+    body: "Eight short questions place you on the Architect / Orchestrator / Conductor archetype map and unlock a multiplier on your JST score. Score source: ARK Onecraft curated scoring model; data as of 6 September 2026.",
     bullets: [
       "Roughly 3 minutes to complete",
       "Repeatable — your highest level becomes your cert tier",
@@ -102,7 +110,7 @@ const STEPS: Step[] = [
     title: "Map your career mobility",
     body: "The 12-vector transferability radar shows where your existing skills already qualify you for adjacent roles — and an upskilling timeline shows what closes the remaining gaps.",
     bullets: [
-      "Pivot opportunities ranked by fit and market demand",
+      "Pivot opportunities ranked by fit from ARK's curated pathway rules",
       "Skill-gap matrix with concrete learning resources",
       "Timeline view across 30 / 60 / 90-day horizons",
     ],

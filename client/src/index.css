@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -33,9 +34,9 @@
   --color-sidebar-border: hsl(var(--sidebar-border));
   --color-sidebar-ring: hsl(var(--sidebar-ring));
 
-  --font-sans: 'Rajdhani', sans-serif;
-  --font-display: 'Orbitron', sans-serif;
-  --font-mono: 'Space Grotesk', monospace;
+  --font-sans: 'DM Sans', sans-serif;
+  --font-display: 'DM Sans', sans-serif;
+  --font-mono: 'Space Mono', monospace;
   
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
@@ -44,42 +45,36 @@
 
 @layer base {
   :root {
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
-    --card: 222 47% 11%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222 47% 11%;
-    --popover-foreground: 210 40% 98%;
-    
-    /* Cyberpunk accents */
-    --primary: 188 86% 53%; /* Cyan */
-    --primary-foreground: 222 47% 11%;
-    --secondary: 152 69% 31%; /* Emerald */
-    --secondary-foreground: 210 40% 98%;
-    
-    --muted: 217 32% 17%;
-    /* a11y: bumped lightness from 65.1% → 74% for WCAG AA on dark bg */
-    --muted-foreground: 215 22% 74%;
-    --accent: 217 32% 17%;
-    --accent-foreground: 210 40% 98%;
-    
-    --destructive: 346 87% 43%; /* Crimson/Magenta */
-    --destructive-foreground: 210 40% 98%;
-    
-    --border: 217 32% 17%;
-    --input: 217 32% 17%;
-    --ring: 188 86% 53%; /* Cyan ring */
+    --background: 0 0% 0%;
+    --foreground: 0 0% 96%;
+    --card: 220 18% 7%;
+    --card-foreground: 0 0% 96%;
+    --popover: 220 18% 7%;
+    --popover-foreground: 0 0% 96%;
+    --primary: 192 100% 48%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 47 96% 63%;
+    --secondary-foreground: 0 0% 0%;
+    --muted: 220 12% 13%;
+    --muted-foreground: 220 10% 72%;
+    --accent: 286 72% 58%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 2 80% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 10% 25%;
+    --input: 220 10% 25%;
+    --ring: 192 100% 48%;
     
     --radius: 0.5rem;
     
-    --sidebar: 222 47% 11%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 188 86% 53%;
-    --sidebar-primary-foreground: 222 47% 11%;
-    --sidebar-accent: 217 32% 17%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 217 32% 17%;
-    --sidebar-ring: 188 86% 53%;
+    --sidebar: 0 0% 0%;
+    --sidebar-foreground: 0 0% 96%;
+    --sidebar-primary: 47 96% 63%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 220 18% 12%;
+    --sidebar-accent-foreground: 0 0% 96%;
+    --sidebar-border: 220 10% 25%;
+    --sidebar-ring: 47 96% 63%;
   }
 }
 
@@ -89,13 +84,53 @@
   }
   body {
     @apply bg-background text-foreground font-sans;
-    background-image: 
-      linear-gradient(to right, rgba(255,255,255,0.02) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(255,255,255,0.02) 1px, transparent 1px);
-    background-size: 50px 50px;
+    background-image: radial-gradient(circle at 15% 10%, hsl(47 96% 63% / .08), transparent 26rem), linear-gradient(135deg, hsl(192 100% 48% / .04), transparent 50%);
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-display tracking-wider;
+  }
+}
+
+@layer components {
+  .journey-shell { max-width: 1180px; margin: 0 auto; }
+  .journey-progress { position: relative; height: 42px; padding: 0 4px; }
+  .journey-progress::before { content: ""; position: absolute; top: 18px; left: 4px; right: 4px; height: 2px; background: hsl(var(--border)); }
+  .journey-progress-fill { position: absolute; top: 18px; left: 4px; height: 2px; background: linear-gradient(90deg, hsl(47 96% 63%), hsl(201 72% 38%), hsl(286 69% 43%)); transition: width 420ms ease; }
+  .journey-stops { position: relative; display: flex; justify-content: space-between; }
+  .journey-stop { display: grid; place-items: center; width: 34px; height: 36px; background: hsl(var(--background)); color: hsl(var(--muted-foreground)); font: 700 9px var(--font-mono); letter-spacing: -.04em; }
+  .journey-stop::before { content: ""; width: 9px; height: 9px; border: 2px solid hsl(var(--border)); border-radius: 50%; grid-row: 1; transition: background .2s ease, border-color .2s ease; }
+  .journey-stop span { grid-row: 2; margin-top: -1px; }
+  .journey-stop.is-complete::before { background: hsl(var(--primary)); border-color: hsl(var(--primary)); }
+  .journey-stop.is-current::before { background: hsl(var(--secondary)); border-color: hsl(var(--foreground)); box-shadow: 0 0 0 4px hsl(var(--secondary) / .24); }
+  .journey-header, .journey-footer { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; border-bottom: 1px solid hsl(var(--border)); padding: 1rem 0; }
+  .journey-breadcrumb { display: flex; align-items: center; gap: .7rem; font-size: .8rem; }
+  .journey-kicker, .journey-context-label { color: hsl(var(--muted-foreground)); font: 700 10px var(--font-mono); text-transform: uppercase; letter-spacing: .14em; }
+  .journey-divider { color: hsl(var(--accent)); }
+  .journey-actions { display: flex; gap: .5rem; }
+  .journey-tool, .journey-nav, .journey-help { display: inline-flex; align-items: center; gap: .4rem; border: 1px solid hsl(var(--border)); border-radius: 999px; padding: .5rem .75rem; font-size: .75rem; font-weight: 700; transition: transform .18s ease, background .18s ease, border-color .18s ease; }
+  .journey-tool:hover, .journey-nav:hover, .journey-help:hover { transform: translateY(-1px); border-color: hsl(var(--primary)); background: hsl(var(--primary) / .07); }
+  .journey-context { display: grid; grid-template-columns: auto minmax(0, .8fr) minmax(0, 1.4fr) minmax(0, .8fr); align-items: stretch; gap: .8rem; margin: 1.1rem 0 1.5rem; padding: .85rem 1rem; border: 1px solid hsl(var(--border)); border-left: 4px solid hsl(var(--secondary)); background: hsl(var(--card)); box-shadow: 0 8px 22px hsl(0 0% 0% / .4); }
+  .journey-context-light { width: 10px; height: 10px; flex: 0 0 auto; background: hsl(var(--secondary)); border-radius: 50%; box-shadow: 0 0 0 5px hsl(var(--secondary) / .18); }
+  .journey-context-step { display: flex; flex-direction: column; gap: .25rem; padding: .15rem .8rem; border-left: 1px solid hsl(var(--border)); font-size: .8rem; }
+  .journey-context-step.is-current { color: hsl(var(--primary)); }
+  .journey-context p { margin: 0; color: hsl(var(--muted-foreground)); font-size: .78rem; line-height: 1.45; }
+  .journey-content { min-height: 18rem; }
+  .journey-footer { border-top: 1px solid hsl(var(--border)); border-bottom: 0; margin-top: 2rem; }
+  .journey-next { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); border-color: hsl(var(--primary)); }
+  .journey-help { border: 0; color: hsl(var(--muted-foreground)); margin-left: auto; }
+  :focus-visible { outline: 3px solid hsl(var(--secondary)); outline-offset: 3px; }
+  @media (max-width: 640px) {
+    .journey-progress { margin-inline: -.5rem; }
+    .journey-stop { font-size: 8px; width: 28px; }
+    .journey-header { align-items: flex-start; }
+    .journey-actions { width: 100%; }
+    .journey-tool { flex: 1; justify-content: center; }
+    .journey-tool span { display: none; }
+    .journey-context { grid-template-columns: auto 1fr; align-items: flex-start; }
+    .journey-context-step { grid-column: 2; }
+    .journey-footer { align-items: stretch; }
+    .journey-footer > * { flex: 1; justify-content: center; }
+    .journey-help { flex-basis: 100%; margin-left: 0; }
   }
 }
 
@@ -245,6 +280,73 @@
   .animate-flash {
     animation: flash 1.1s ease-in-out infinite;
   }
+
+  /* Home: editorial color blocks replace the previous ambient-video treatment. */
+  .ark-home {
+    background: hsl(var(--background));
+    /* Atanda identity palette: ink, blue, yellow, red, teal, green, purple, coral. */
+    --background: 216 64% 12%;
+    --foreground: 216 43% 97%;
+    --card: 216 48% 18%;
+    --card-foreground: 216 43% 97%;
+    --primary: 190 100% 38%;
+    --primary-foreground: 216 64% 12%;
+    --secondary: 153 64% 52%;
+    --secondary-foreground: 216 64% 12%;
+    --muted: 213 35% 22%;
+    --muted-foreground: 213 30% 86%;
+    --destructive: 3 80% 43%;
+    --destructive-foreground: 216 43% 97%;
+    --border: 215 29% 29%;
+    --input: 215 29% 29%;
+    --ring: 190 100% 38%;
+    --brand-blue: 204 74% 41%;
+    --brand-yellow: 47 88% 57%;
+    --brand-red: 3 80% 50%;
+    --brand-teal: 190 100% 38%;
+    --brand-green: 153 62% 44%;
+    --brand-purple: 282 45% 47%;
+    --brand-coral: 10 100% 65%;
+  }
+  .ark-brand-spectrum {
+    height: 0.5rem;
+    background: linear-gradient(
+      90deg,
+      hsl(var(--brand-yellow)) 0 16.66%,
+      hsl(var(--brand-blue)) 16.66% 33.33%,
+      hsl(var(--brand-red)) 33.33% 50%,
+      hsl(var(--brand-teal)) 50% 66.66%,
+      hsl(var(--brand-coral)) 66.66% 83.33%,
+      hsl(var(--brand-purple)) 83.33% 100%
+    );
+  }
+  .ark-brand-yellow {
+    background: hsl(var(--brand-yellow));
+    color: hsl(var(--background));
+  }
+  .ark-brand-blue {
+    background: hsl(var(--brand-blue));
+    color: hsl(var(--foreground));
+  }
+  .ark-home a:focus-visible,
+  .ark-home button:focus-visible {
+    outline: 3px solid hsl(var(--primary));
+    outline-offset: 4px;
+  }
+  .ark-home-reveal {
+    animation: ark-home-rise 600ms cubic-bezier(.2,.75,.25,1) both;
+  }
+  .ark-home-reveal-delay {
+    animation: ark-home-rise 600ms 100ms cubic-bezier(.2,.75,.25,1) both;
+  }
+  @keyframes ark-home-rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ark-home-reveal,
+    .ark-home-reveal-delay { animation: none; }
+  }
 }
 
 /* ── ARK Report print artifact ───────────────────────────────
@@ -270,4 +372,16 @@
      break naturally if it exceeds one A4 page. */
   .ark-print-page + .ark-print-page { break-before: page; }
   .ark-print-surface img { max-width: 100%; }
+}
+
+/* MERLIN — a quiet navigational layer, expressed with ARK's geometric signal language. */
+@layer utilities {
+  .merlin-grid {
+    background-image: linear-gradient(hsl(var(--primary) / .08) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--primary) / .08) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  .merlin-panel { box-shadow: -18px 0 48px hsl(222 52% 6% / .55); }
+  .merlin-rise { animation: merlin-rise .42s cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes merlin-rise { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: translateY(0) } }
+  @media (prefers-reduced-motion: reduce) { .merlin-rise { animation: none } }
 }
